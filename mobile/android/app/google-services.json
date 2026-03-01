@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "777378009998",
+    "project_id": "websites-technology",
+    "storage_bucket": "websites-technology.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:777378009998:android:970eaa65ba02628e9c0adf",
+        "android_client_info": {
+          "package_name": "com.hibob.geminiagent"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "777378009998-pficfo2o9j572jnsdf6lth1uctv9jkaj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCrbfdxHPnkGynbjdKQimS-swo0UnqUq-o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "777378009998-e17cttqtce3m35lrdhrpvv25jalifq23.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
