@@ -1,16 +1,16 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'core/providers/firebase_providers.dart';
+import 'features/auth/screens/login_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
 import 'features/chat/screens/chat_screen.dart';
+import 'features/conversations/screens/conversations_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Inicializar Firebase (requiere google-services.json en Android
-  // y GoogleService-Info.plist en iOS - ver FASE_0_PLAN.md Paso 7)
   await Firebase.initializeApp();
-
   runApp(const ProviderScope(child: GeminiAgentApp()));
 }
 
@@ -24,12 +24,33 @@ class GeminiAgentApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8), // Google Blue
+          seedColor: const Color(0xFF1A73E8),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
       ),
-      home: const _HomeShell(),
+      home: const _AuthGate(),
+    );
+  }
+}
+
+class _AuthGate extends ConsumerWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final firebase = ref.watch(firebaseServiceProvider);
+    return StreamBuilder<User?>(
+      stream: firebase.authStateChanges,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snapshot.data == null) return const LoginScreen();
+        return const _HomeShell();
+      },
     );
   }
 }
@@ -44,7 +65,11 @@ class _HomeShell extends StatefulWidget {
 class _HomeShellState extends State<_HomeShell> {
   int _currentIndex = 0;
 
-  static const _screens = [ChatScreen(), CameraScreen()];
+  static const _screens = [
+    ChatScreen(),
+    CameraScreen(),
+    ConversationsScreen(),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -63,6 +88,11 @@ class _HomeShellState extends State<_HomeShell> {
             icon: Icon(Icons.camera_alt_outlined),
             selectedIcon: Icon(Icons.camera_alt_rounded),
             label: 'Cámara',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history_rounded),
+            label: 'Historial',
           ),
         ],
       ),

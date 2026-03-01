@@ -6,29 +6,28 @@ import '../../../core/providers/api_providers.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
 
-final _conversationIdProvider = Provider<String>((_) => const Uuid().v4());
-
-final _messagesProvider =
-    StateNotifierProvider<_MessagesNotifier, List<Message>>(
-  (ref) => _MessagesNotifier(),
-);
-
-class _MessagesNotifier extends StateNotifier<List<Message>> {
-  _MessagesNotifier() : super([]);
-
-  void add(Message message) => state = [...state, message];
-}
-
+// Cada instancia de ChatScreen puede recibir un conversationId existente.
+// Si es null, se genera uno nuevo.
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  final String? conversationId;
+
+  const ChatScreen({super.key, this.conversationId});
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
+  late final String _conversationId;
+  final _messages = <Message>[];
   final _scrollController = ScrollController();
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _conversationId = widget.conversationId ?? const Uuid().v4();
+  }
 
   @override
   void dispose() {
@@ -36,44 +35,101 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  // ─── Streaming de texto ─────────────────────────────────────────────────
+
   Future<void> _send(String text) async {
-    final conversationId = ref.read(_conversationIdProvider);
     final api = ref.read(apiServiceProvider);
-    final notifier = ref.read(_messagesProvider.notifier);
 
-    notifier.add(Message(
-      id: const Uuid().v4(),
-      role: MessageRole.user,
-      text: text,
-      timestamp: DateTime.now(),
-    ));
-
+    _addMessage(MessageRole.user, text);
     setState(() => _isLoading = true);
     _scrollToBottom();
 
-    try {
-      final response = await api.chat(
-        conversationId: conversationId,
-        text: text,
-      );
+    final modelMsgId = const Uuid().v4();
+    _addMessageWithId(modelMsgId, MessageRole.model, '');
 
-      notifier.add(Message(
-        id: const Uuid().v4(),
-        role: MessageRole.model,
-        text: response.text,
-        timestamp: DateTime.now(),
-      ));
+    try {
+      await for (final chunk in api.chatStream(
+        conversationId: _conversationId,
+        text: text,
+      )) {
+        _appendToMessage(modelMsgId, chunk);
+        _scrollToBottom();
+      }
     } catch (e) {
-      notifier.add(Message(
-        id: const Uuid().v4(),
-        role: MessageRole.model,
-        text: 'Error al conectar con el agente: $e',
-        timestamp: DateTime.now(),
-      ));
+      _setMessageText(modelMsgId, 'Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
-      _scrollToBottom();
     }
+  }
+
+  // ─── Voz ────────────────────────────────────────────────────────────────
+
+  Future<void> _handleVoice(String filePath) async {
+    final api = ref.read(apiServiceProvider);
+
+    setState(() => _isLoading = true);
+    try {
+      final result = await api.sendVoice(
+        conversationId: _conversationId,
+        audioFilePath: filePath,
+      );
+
+      final transcribed = result['transcribedText'] as String? ?? '';
+      final response = result['responseText'] as String? ?? '';
+
+      if (transcribed.isNotEmpty) _addMessage(MessageRole.user, transcribed);
+      if (response.isNotEmpty) _addMessage(MessageRole.model, response);
+      _scrollToBottom();
+    } catch (e) {
+      _addMessage(MessageRole.model, 'Error al procesar audio: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ─── Helpers de estado ───────────────────────────────────────────────────
+
+  void _addMessage(MessageRole role, String text) {
+    _addMessageWithId(const Uuid().v4(), role, text);
+  }
+
+  void _addMessageWithId(String id, MessageRole role, String text) {
+    setState(() {
+      _messages.add(Message(
+        id: id,
+        role: role,
+        text: text,
+        timestamp: DateTime.now(),
+      ));
+    });
+  }
+
+  void _appendToMessage(String id, String chunk) {
+    setState(() {
+      final idx = _messages.indexWhere((m) => m.id == id);
+      if (idx == -1) return;
+      final m = _messages[idx];
+      _messages[idx] = Message(
+        id: m.id,
+        role: m.role,
+        text: m.text + chunk,
+        timestamp: m.timestamp,
+      );
+    });
+  }
+
+  void _setMessageText(String id, String text) {
+    setState(() {
+      final idx = _messages.indexWhere((m) => m.id == id);
+      if (idx == -1) return;
+      final m = _messages[idx];
+      _messages[idx] = Message(
+        id: m.id,
+        role: m.role,
+        text: text,
+        timestamp: m.timestamp,
+      );
+    });
   }
 
   void _scrollToBottom() {
@@ -90,8 +146,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = ref.watch(_messagesProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gemini Live Agent'),
@@ -100,7 +154,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       body: Column(
         children: [
           Expanded(
-            child: messages.isEmpty
+            child: _messages.isEmpty
                 ? const Center(
                     child: Text(
                       'Empieza una conversación\ncon el agente',
@@ -110,11 +164,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    itemCount: messages.length,
-                    itemBuilder: (_, i) => MessageBubble(message: messages[i]),
+                    itemCount: _messages.length,
+                    itemBuilder: (_, i) =>
+                        MessageBubble(message: _messages[i]),
                   ),
           ),
-          InputBar(isLoading: _isLoading, onSend: _send),
+          InputBar(
+            isLoading: _isLoading,
+            onSend: _send,
+            onVoice: _handleVoice,
+          ),
         ],
       ),
     );
