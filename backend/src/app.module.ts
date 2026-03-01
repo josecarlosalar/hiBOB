@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { HealthModule } from './modules/health/health.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
+import { LiveModule } from './modules/live/live.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ConversationModule } from './modules/conversation/conversation.module';
     HealthModule,
     AiModule,
     ConversationModule,
+    LiveModule,
   ],
   controllers: [AppController],
   providers: [AppService],
