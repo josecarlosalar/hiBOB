@@ -12,7 +12,9 @@ export class ConversationController {
   }
 
   @Get(':conversationId/messages')
-  getMessages(@Param('conversationId') conversationId: string) {
+  async getMessages(
+    @Param('conversationId') conversationId: string,
+  ): Promise<unknown[]> {
     return this.conversationService.getMessages(conversationId);
   }
 }
