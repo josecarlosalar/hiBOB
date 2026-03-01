@@ -46,49 +46,54 @@ export class AiService implements OnModuleInit {
 
     if (imageBase64List?.length) {
       for (const base64 of imageBase64List) {
-        parts.push({
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: base64,
-          },
-        });
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
       }
     }
 
-    const request = {
-      contents: [
-        ...(history ?? []),
-        { role: 'user' as const, parts },
-      ],
-    };
+    const response = await this.model.generateContent({
+      contents: [...(history ?? []), { role: 'user' as const, parts }],
+    });
 
-    const response = await this.model.generateContent(request);
-    const candidate = response.response.candidates?.[0];
-    return candidate?.content?.parts?.[0]?.text ?? '';
+    return response.response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 
   async generateContentStream(
     prompt: string,
     onChunk: (text: string) => void,
     imageBase64List?: string[],
+    history?: Content[],
   ): Promise<void> {
     const parts: Part[] = [{ text: prompt }];
 
     if (imageBase64List?.length) {
       for (const base64 of imageBase64List) {
-        parts.push({
-          inlineData: { mimeType: 'image/jpeg', data: base64 },
-        });
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
       }
     }
 
     const streamResult = await this.model.generateContentStream({
-      contents: [{ role: 'user', parts }],
+      contents: [...(history ?? []), { role: 'user' as const, parts }],
     });
 
     for await (const chunk of streamResult.stream) {
       const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
       if (text) onChunk(text);
     }
+  }
+
+  async processAudio(audioBase64: string, mimeType: string): Promise<string> {
+    const response = await this.model.generateContent({
+      contents: [{
+        role: 'user' as const,
+        parts: [
+          {
+            text: 'Transcribe el audio exactamente. Devuelve solo el texto transcrito, sin prefijos ni explicaciones.',
+          },
+          { inlineData: { mimeType, data: audioBase64 } },
+        ],
+      }],
+    });
+
+    return response.response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   }
 }
