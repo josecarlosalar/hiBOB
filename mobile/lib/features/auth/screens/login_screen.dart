@@ -10,21 +10,56 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _loading = false;
+  bool _isRegister = false;
+  bool _obscurePassword = true;
 
-  Future<void> _continueAnonymously() async {
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      await ref.read(firebaseServiceProvider).signInAnonymously();
-    } catch (e) {
+      final service = ref.read(firebaseServiceProvider);
+      if (_isRegister) {
+        await service.registerWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+      } else {
+        await service.signInWithEmail(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+      }
+    } on Exception catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al iniciar sesión: $e')),
+          SnackBar(content: Text(_friendlyError(e.toString()))),
         );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _friendlyError(String raw) {
+    if (raw.contains('user-not-found')) return 'Usuario no encontrado.';
+    if (raw.contains('wrong-password') || raw.contains('invalid-credential')) {
+      return 'Contraseña incorrecta.';
+    }
+    if (raw.contains('email-already-in-use')) return 'El email ya está en uso.';
+    if (raw.contains('weak-password')) return 'La contraseña es demasiado débil.';
+    if (raw.contains('invalid-email')) return 'El email no es válido.';
+    return 'Error: $raw';
   }
 
   @override
@@ -33,12 +68,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const SizedBox(height: 64),
               Icon(Icons.smart_toy_rounded, size: 72, color: colors.primary),
               const SizedBox(height: 24),
               Text(
@@ -58,17 +94,64 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ?.copyWith(color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 48),
-              FilledButton.icon(
-                onPressed: _loading ? null : _continueAnonymously,
-                icon: _loading
+              Form(
+                key: _formKey,
+                child: Column(
+                  children: [
+                    TextFormField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                        prefixIcon: Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (v) =>
+                          v == null || !v.contains('@') ? 'Email no válido' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'Contraseña',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: const OutlineInputBorder(),
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined),
+                          onPressed: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
+                        ),
+                      ),
+                      validator: (v) => v == null || v.length < 6
+                          ? 'Mínimo 6 caracteres'
+                          : null,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: _loading ? null : _submit,
+                child: _loading
                     ? const SizedBox(
-                        width: 18,
                         height: 18,
+                        width: 18,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.person_rounded),
-                label: Text(_loading ? 'Entrando…' : 'Continuar sin cuenta'),
+                    : Text(_isRegister ? 'Crear cuenta' : 'Iniciar sesión'),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _loading
+                    ? null
+                    : () => setState(() => _isRegister = !_isRegister),
+                child: Text(_isRegister
+                    ? '¿Ya tienes cuenta? Inicia sesión'
+                    : '¿No tienes cuenta? Regístrate'),
               ),
             ],
           ),
