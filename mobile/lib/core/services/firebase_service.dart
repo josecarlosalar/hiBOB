@@ -10,6 +10,12 @@ class FirebaseService {
 
   Future<UserCredential> signInAnonymously() => _auth.signInAnonymously();
 
+  Future<UserCredential> signInWithEmail(String email, String password) =>
+      _auth.signInWithEmailAndPassword(email: email, password: password);
+
+  Future<UserCredential> registerWithEmail(String email, String password) =>
+      _auth.createUserWithEmailAndPassword(email: email, password: password);
+
   Future<void> signOut() => _auth.signOut();
 
   /// Devuelve un ID token válido para llamadas autenticadas al backend
