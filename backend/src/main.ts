@@ -7,8 +7,11 @@ import { globalValidationPipe } from './common/pipes/validation.pipe';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  const isProd = process.env.NODE_ENV === 'production';
   app.enableCors({
-    origin: '*', // Restringir en producción
+    origin: isProd
+      ? (process.env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean)
+      : '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
