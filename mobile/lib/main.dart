@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'features/camera/screens/camera_screen.dart';
+import 'features/chat/screens/chat_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -9,12 +11,7 @@ void main() async {
   // y GoogleService-Info.plist en iOS - ver FASE_0_PLAN.md Paso 7)
   await Firebase.initializeApp();
 
-  runApp(
-    // ProviderScope es el widget raíz de Riverpod
-    const ProviderScope(
-      child: GeminiAgentApp(),
-    ),
-  );
+  runApp(const ProviderScope(child: GeminiAgentApp()));
 }
 
 class GeminiAgentApp extends StatelessWidget {
@@ -32,15 +29,42 @@ class GeminiAgentApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      // Navegación completa se añade en Fase 2 (go_router)
-      home: const Scaffold(
-        body: Center(
-          child: Text(
-            'Gemini Live Agent\nFase 0 - Setup Completo',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 24),
+      home: const _HomeShell(),
+    );
+  }
+}
+
+class _HomeShell extends StatefulWidget {
+  const _HomeShell();
+
+  @override
+  State<_HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<_HomeShell> {
+  int _currentIndex = 0;
+
+  static const _screens = [ChatScreen(), CameraScreen()];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(index: _currentIndex, children: _screens),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _currentIndex,
+        onDestinationSelected: (i) => setState(() => _currentIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.chat_bubble_outline_rounded),
+            selectedIcon: Icon(Icons.chat_bubble_rounded),
+            label: 'Chat',
           ),
-        ),
+          NavigationDestination(
+            icon: Icon(Icons.camera_alt_outlined),
+            selectedIcon: Icon(Icons.camera_alt_rounded),
+            label: 'Cámara',
+          ),
+        ],
       ),
     );
   }
