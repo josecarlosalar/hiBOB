@@ -17,10 +17,36 @@ class InputBar extends StatefulWidget {
   State<InputBar> createState() => _InputBarState();
 }
 
-class _InputBarState extends State<InputBar> {
+class _InputBarState extends State<InputBar>
+    with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
   final _audioService = AudioService();
   bool _isRecording = false;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..addStatusListener((s) {
+        if (s == AnimationStatus.completed) _pulseCtrl.reverse();
+        if (s == AnimationStatus.dismissed && _isRecording) _pulseCtrl.forward();
+      });
+    _pulseAnim = Tween<double>(begin: 1.0, end: 1.35).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    _controller.dispose();
+    _audioService.dispose();
+    super.dispose();
+  }
 
   void _submit() {
     final text = _controller.text.trim();
@@ -34,6 +60,8 @@ class _InputBarState extends State<InputBar> {
 
     if (_isRecording) {
       final path = await _audioService.stopRecording();
+      _pulseCtrl.stop();
+      _pulseCtrl.reset();
       setState(() => _isRecording = false);
       if (path != null) widget.onVoice?.call(path);
     } else {
@@ -41,23 +69,15 @@ class _InputBarState extends State<InputBar> {
       if (!hasPermission) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Permiso de micrófono denegado'),
-            ),
+            const SnackBar(content: Text('Permiso de micrófono denegado')),
           );
         }
         return;
       }
       await _audioService.startRecording();
       setState(() => _isRecording = true);
+      _pulseCtrl.forward();
     }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    _audioService.dispose();
-    super.dispose();
   }
 
   @override
@@ -74,9 +94,13 @@ class _InputBarState extends State<InputBar> {
                 controller: _controller,
                 textCapitalization: TextCapitalization.sentences,
                 onSubmitted: (_) => _submit(),
-                enabled: !_isRecording,
+                enabled: !_isRecording && !widget.isLoading,
                 decoration: InputDecoration(
-                  hintText: _isRecording ? 'Grabando…' : 'Escribe un mensaje…',
+                  hintText: _isRecording
+                      ? 'Grabando…'
+                      : widget.isLoading
+                          ? 'El agente está respondiendo…'
+                          : 'Escribe un mensaje…',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(24),
                     borderSide: BorderSide.none,
@@ -88,19 +112,22 @@ class _InputBarState extends State<InputBar> {
               ),
             ),
             const SizedBox(width: 6),
-            // Botón micrófono
-            IconButton(
-              onPressed: widget.isLoading ? null : _toggleRecording,
-              icon: Icon(
-                _isRecording
-                    ? Icons.stop_circle_rounded
-                    : Icons.mic_rounded,
+            // Botón micrófono con animación pulsante al grabar
+            ScaleTransition(
+              scale: _pulseAnim,
+              child: IconButton(
+                onPressed: widget.isLoading ? null : _toggleRecording,
+                icon: Icon(
+                  _isRecording
+                      ? Icons.stop_circle_rounded
+                      : Icons.mic_rounded,
+                ),
+                color: _isRecording ? colors.error : null,
+                tooltip: _isRecording ? 'Detener grabación' : 'Grabar voz',
               ),
-              color: _isRecording ? colors.error : null,
-              tooltip: _isRecording ? 'Detener grabación' : 'Grabar voz',
             ),
             const SizedBox(width: 2),
-            // Botón enviar
+            // Botón enviar / indicador de carga
             widget.isLoading
                 ? const SizedBox(
                     width: 40,
