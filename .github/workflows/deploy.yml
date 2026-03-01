@@ -9,9 +9,9 @@ on:
 
 env:
   GCP_PROJECT_ID: websites-technology
-  GCP_REGION: us-central1
+  GCP_REGION: europe-west1
   SERVICE_NAME: hibob-backend
-  IMAGE: us-central1-docker.pkg.dev/websites-technology/hibob/backend
+  IMAGE: europe-west1-docker.pkg.dev/websites-technology/hibob/backend
 
 jobs:
   deploy:
@@ -32,7 +32,7 @@ jobs:
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
       - name: Configurar Docker para Artifact Registry
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker europe-west1-docker.pkg.dev --quiet
 
       - name: Build y push imagen Docker
         run: |
