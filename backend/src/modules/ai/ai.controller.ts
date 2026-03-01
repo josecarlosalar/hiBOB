@@ -1,5 +1,5 @@
 import { Body, Controller, Post, Res } from '@nestjs/common';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { AiService } from './ai.service';
 import { GenerateContentDto } from './dto/generate-content.dto';
 
