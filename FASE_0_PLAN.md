@@ -422,7 +422,7 @@ ls mobile/ios/Runner/GoogleService-Info.plist
 ```
 [x] Prerrequisito: Instalar gcloud CLI + gcloud auth login          ← COMPLETADO (manual)
 [x] PASO 1: Verificar proyecto GCP websites-technology activo       ← COMPLETADO
-[ ] PASO 2: Habilitar 5 APIs (aiplatform, run, firestore, firebase, iam) ← PENDIENTE (manual)
+[x] PASO 2: Habilitar 5 APIs (aiplatform, run, firestore, firebase, iam) ← COMPLETADO
 [x] PASO 3: Crear SA gemini-agent-sa + asignar 3 roles              ← COMPLETADO
 [x] PASO 4: Crear estructura de carpetas del monorepo               ← COMPLETADO
 [x] PASO 5: Descargar key JSON a backend/credentials/ + ADC         ← COMPLETADO
