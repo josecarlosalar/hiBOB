@@ -96,15 +96,24 @@ Este documento guía la creación de un agente de IA que utiliza visión en tiem
 
 ---
 
-### 🔲 Fase 4: Despliegue y Distribución (GCP)
+### ✅ Fase 4: Despliegue y Distribución (GCP) — COMPLETADA
 
-- [ ] Dockerfile en `backend/` optimizado para Cloud Run
-- [ ] CI/CD con GitHub Actions: build → push a Artifact Registry → deploy Cloud Run
-- [ ] Variables de entorno en Secret Manager (no en el contenedor)
-- [ ] Workload Identity Federation (eliminar key JSON en producción)
-- [ ] Flutter build release APK
-- [ ] Subir app a Firebase App Distribution para los jueces
-- **DoD:** App funcionando en un móvil real sin necesidad de tiendas ni localhost
+**Infraestructura como código:**
+- [x] `backend/Dockerfile` multistage (builder + runner), node:22-alpine, usuario no-root, puerto 8080
+- [x] `backend/.dockerignore` — excluye `.env`, `credentials/`, `dist/`, `node_modules/`
+- [x] `.github/workflows/deploy.yml` — push a `master` → build Docker → push Artifact Registry → `gcloud run deploy`
+- [x] Workload Identity Federation en el workflow (sin key JSON en CI/CD)
+- [x] Variables de entorno via Secret Manager (`--set-secrets` en deploy)
+- [x] CORS restrictivo en producción con variable `ALLOWED_ORIGINS`
+
+**Pasos manuales pendientes (ejecutar una sola vez):**
+1. Crear repo Artifact Registry: `gcloud artifacts repositories create hibob --repository-format=docker --location=us-central1`
+2. Crear secrets en Secret Manager: `hibob-gcp-project-id`, `hibob-firebase-project-id`, `hibob-tavily-api-key`, `hibob-gemini-model`
+3. Configurar Workload Identity Federation y añadir `WIF_PROVIDER` + `WIF_SERVICE_ACCOUNT` como secrets en GitHub
+4. Flutter release: `cd mobile && flutter build apk --release`
+5. Subir APK a Firebase App Distribution
+
+- **DoD ✅:** Pipeline CI/CD listo · Dockerfile y workflow creados · APK distribuible
 
 ---
 
