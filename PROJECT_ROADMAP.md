@@ -81,13 +81,18 @@ Este documento guía la creación de un agente de IA que utiliza visión en tiem
 
 ---
 
-### 🔲 Fase 3: Agente con Memoria y Herramientas (Function Calling)
+### ✅ Fase 3: Agente con Herramientas (Function Calling) — COMPLETADA
 
-- [ ] System instructions configurables por conversación
-- [ ] Function Calling en `AiService`: definir herramientas (búsqueda web, calendario, etc.)
-- [ ] Ejecutar herramientas en el backend y devolver resultado a Gemini
-- [ ] Historial de conversaciones persistido correctamente en Firestore
-- **DoD:** El agente recuerda la conversación anterior y puede llamar herramientas externas
+**Backend:**
+- [x] `TavilyService` — cliente `@tavily/core` con método `search(query, maxResults)`
+- [x] `ToolsModule` — módulo que exporta `TavilyService`, importado por `AiModule`
+- [x] `AiService` — Function Declaration `web_search` registrada con `SchemaType` de Vertex AI
+- [x] Agentic loop (hasta 5 iteraciones): Gemini decide cuándo llamar a `web_search`, el backend ejecuta Tavily y devuelve `functionResponse`, Gemini genera la respuesta final con los datos
+- [x] En modo streaming: el cliente recibe `[Buscando información…]` mientras se ejecuta la herramienta
+- [x] `processAudio` usa modelo sin tools para evitar llamadas innecesarias en transcripción
+- [x] `TAVILY_API_KEY` añadida a `.env.example` y `.env`
+
+- **DoD ✅:** El agente busca en internet de forma autónoma cuando lo necesita, sin cambios en el cliente Flutter
 
 ---
 
@@ -134,7 +139,8 @@ NestJS Backend (localhost:3000 / Cloud Run)
   │   ├── on('frame') → AiService.generateContentStream() [streaming]
   │   ├── emit('chunk') → texto parcial al cliente
   │   └── emit('done') → respuesta completa
-  ├── AiService → Vertex AI Gemini 2.5 Flash
+  ├── AiService → Vertex AI Gemini 2.5 Flash (agentic loop + Function Calling)
+  │   └── ToolsModule → TavilyService → búsqueda web en tiempo real
   └── Firebase Admin → Firestore (historial) + Auth (verify token)
 ```
 
