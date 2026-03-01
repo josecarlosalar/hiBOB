@@ -1,0 +1,44 @@
+# ========================
+# SECRETS - NUNCA COMMITEAR
+# ========================
+backend/credentials/
+**/*-sa-key.json
+.env
+.env.local
+.env.production
+**/.env
+
+# ========================
+# NestJS / Node
+# ========================
+backend/node_modules/
+backend/dist/
+backend/coverage/
+backend/.nyc_output/
+
+# ========================
+# Flutter / Dart
+# ========================
+mobile/.dart_tool/
+mobile/build/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/ios/.symlinks/
+mobile/ios/Pods/
+mobile/ios/Flutter/flutter_export_environment.sh
+mobile/*.iml
+mobile/.idea/
+
+# ========================
+# IDEs y OS
+# ========================
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
