@@ -58,13 +58,26 @@ Este documento guía la creación de un agente de IA que utiliza visión en tiem
 
 ---
 
-### 🔲 Fase 2: Streaming de Cámara Continuo
+### ✅ Fase 2: Streaming de Cámara Continuo — COMPLETADA
 
-- [ ] Flutter: captura periódica de frames (cada N segundos) mientras el agente escucha
-- [ ] Flutter: integrar audio en tiempo real con el stream de cámara
-- [ ] Backend: endpoint WebSocket o SSE bidireccional para sesión de visión continua
-- [ ] Gemini Live API: evaluar `BidiGenerateContent` para latencia mínima
-- **DoD:** El agente "ve" lo que apunta la cámara de forma continua y responde en voz
+**Backend:**
+- [x] `LiveGateway` — WebSocket gateway en namespace `/live` con socket.io
+- [x] `FirebaseAuthGuard` en handshake WebSocket (verifica Bearer token al conectar)
+- [x] Evento `frame` recibe `{conversationId, frameBase64, prompt?}` y llama a `AiService`
+- [x] Emite chunks en tiempo real via `client.emit('chunk', {text})`
+- [x] Emite respuesta completa via `client.emit('done', {text, conversationId})`
+- [x] `LiveModule` registrado en `AppModule`
+
+**Flutter:**
+- [x] `LiveSessionService` — cliente socket.io conectando a `/live` con auth token
+- [x] Streams: `onChunk`, `onDone`, `onStateChange` (disconnected/connecting/connected/error)
+- [x] `TtsService` — wrapper `flutter_tts` en español, toggle on/off
+- [x] `CameraScreen` — modo en directo: captura frame cada 3 s via `Timer.periodic`
+- [x] Badge de estado "En directo / Conectando…" sobre la preview de cámara
+- [x] Auto-reproducción TTS de las respuestas del agente
+- [x] Toggle voz en AppBar
+
+- **DoD ✅:** El agente "ve" lo que apunta la cámara de forma continua y responde en voz
 
 ---
 
@@ -106,16 +119,21 @@ Este documento guía la creación de un agente de IA que utiliza visión en tiem
 Flutter App
   ├── _AuthGate → Firebase Auth (anónimo)
   ├── ChatScreen → POST /conversation/chat/stream (SSE)
-  ├── CameraScreen → POST /conversation/chat (foto + texto)
+  ├── CameraScreen (foto) → POST /conversation/chat (foto + texto)
+  ├── CameraScreen (live) → WS /live (frames cada 3s) → chunks + TTS
   └── ConversationsScreen → GET /conversation
 
 NestJS Backend (localhost:3000 / Cloud Run)
-  ├── FirebaseAuthGuard → verifica Bearer token
+  ├── FirebaseAuthGuard → verifica Bearer token (HTTP y WS handshake)
   ├── ConversationController
   │   ├── POST /chat → ConversationService.chat()
   │   ├── POST /chat/stream → ConversationService.chatStream() [SSE]
   │   ├── POST /voice → ConversationService.processVoice()
   │   └── GET / → ConversationService.listConversations()
+  ├── LiveGateway (WebSocket /live)
+  │   ├── on('frame') → AiService.generateContentStream() [streaming]
+  │   ├── emit('chunk') → texto parcial al cliente
+  │   └── emit('done') → respuesta completa
   ├── AiService → Vertex AI Gemini 2.5 Flash
   └── Firebase Admin → Firestore (historial) + Auth (verify token)
 ```
