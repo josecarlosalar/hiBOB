@@ -1,0 +1,62 @@
+name: Deploy Backend a Cloud Run
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+env:
+  GCP_PROJECT_ID: websites-technology
+  GCP_REGION: us-central1
+  SERVICE_NAME: hibob-backend
+  IMAGE: us-central1-docker.pkg.dev/websites-technology/hibob/backend
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # necesario para Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Autenticar en GCP (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Configurar Docker para Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Build y push imagen Docker
+        run: |
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest ./backend
+          docker push $IMAGE:${{ github.sha }}
+          docker push $IMAGE:latest
+
+      - name: Deploy a Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image $IMAGE:${{ github.sha }} \
+            --region $GCP_REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --set-secrets="GCP_PROJECT_ID=hibob-gcp-project-id:latest,FIREBASE_PROJECT_ID=hibob-firebase-project-id:latest,TAVILY_API_KEY=hibob-tavily-api-key:latest,GEMINI_MODEL=hibob-gemini-model:latest" \
+            --service-account gemini-agent-sa@websites-technology.iam.gserviceaccount.com
+
+      - name: Mostrar URL del servicio
+        run: |
+          gcloud run services describe $SERVICE_NAME \
+            --region $GCP_REGION \
+            --format 'value(status.url)'

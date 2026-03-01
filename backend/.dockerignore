@@ -1,0 +1,9 @@
+.env
+.env.*
+credentials/
+dist/
+node_modules/
+coverage/
+.git/
+*.md
+test/
