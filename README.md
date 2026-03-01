@@ -20,8 +20,6 @@ Agente de IA multimodal con visión y voz en tiempo real, construido con:
 
 ## Arranque rápido
 
-Ver [FASE_0_PLAN.md](./FASE_0_PLAN.md) para las instrucciones completas de configuración de GCP, Firebase, backend y mobile.
-
 ### Backend (NestJS)
 
 ```bash
