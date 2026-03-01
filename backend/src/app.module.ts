@@ -1,5 +1,7 @@
 import { Module, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import * as admin from 'firebase-admin';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -14,13 +16,15 @@ import { LiveModule } from './modules/live/live.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // Rate limiting: 60 peticiones por minuto por IP
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     HealthModule,
     AiModule,
     ConversationModule,
     LiveModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name);

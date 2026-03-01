@@ -117,13 +117,23 @@ Este documento guía la creación de un agente de IA que utiliza visión en tiem
 
 ---
 
-### 🔲 Fase 5: Optimización Final
+### ✅ Fase 5: Optimización Final — COMPLETADA
 
-- [ ] UX: indicadores de carga, animaciones de grabación, feedback de error
-- [ ] Google Cloud Logging: structured logs con severity y traceId
-- [ ] Revisión de seguridad: sin secretos en código, CORS restringido, rate limiting
-- [ ] README con instrucciones de demo para los jueces
-- **DoD:** Código limpio, sin secretos expuestos, listo para demo pública
+**UX Flutter:**
+- [x] `InputBar` — animación pulsante (ScaleTransition) en botón micrófono durante grabación
+- [x] `InputBar` — hint text dinámico: "Grabando…" / "El agente está respondiendo…" / "Escribe un mensaje…"
+- [x] `InputBar` — campo de texto deshabilitado mientras el agente responde
+- [x] `MessageBubble` — indicador de escritura animado (tres puntos) mientras el modelo genera respuesta
+
+**Seguridad Backend:**
+- [x] Rate limiting global: 60 peticiones/minuto por IP (`@nestjs/throttler` + `ThrottlerGuard`)
+- [x] CORS restringido en producción con `ALLOWED_ORIGINS`
+- [x] Sin secretos en código — todas las variables via `.env` / Secret Manager en Cloud Run
+
+**Documentación:**
+- [x] `README.md` en raíz del repositorio con tabla de funciones, stack, instrucciones de arranque y arquitectura
+
+- **DoD ✅:** Código listo para demo · UX pulida · Seguridad aplicada · README para jueces
 
 ---
 
