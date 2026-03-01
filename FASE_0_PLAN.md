@@ -421,16 +421,16 @@ ls mobile/ios/Runner/GoogleService-Info.plist
 
 ```
 [x] Prerrequisito: Instalar gcloud CLI + gcloud auth login          ← COMPLETADO (manual)
-[ ] PASO 1: Verificar proyecto GCP websites-technology activo       ← PENDIENTE (manual)
+[x] PASO 1: Verificar proyecto GCP websites-technology activo       ← COMPLETADO
 [ ] PASO 2: Habilitar 5 APIs (aiplatform, run, firestore, firebase, iam) ← PENDIENTE (manual)
-[ ] PASO 3: Crear SA gemini-agent-sa + asignar 3 roles              ← PENDIENTE (manual)
+[x] PASO 3: Crear SA gemini-agent-sa + asignar 3 roles              ← COMPLETADO
 [x] PASO 4: Crear estructura de carpetas del monorepo               ← COMPLETADO
-[ ] PASO 5: Descargar key JSON a backend/credentials/ + ADC         ← PENDIENTE (manual, tras PASO 3)
+[x] PASO 5: Descargar key JSON a backend/credentials/ + ADC         ← COMPLETADO
 [x] PASO 6: Crear .gitignore y README.md en raíz                    ← COMPLETADO
 [x] PASO 7: firebase init Firestore + registrar apps Android e iOS  ← PARCIAL (init hecho, falta registrar apps)
 [x] PASO 8: nest new backend + módulos AI/Conversation/Health + common ← COMPLETADO
 [x] PASO 9: flutter create mobile + dependencias + pantallas + providers ← COMPLETADO
-[ ] PASO 10: DoD - backend en :3000 + Flutter compila sin errores   ← PENDIENTE (tras PASO 5 y 7)
+[x] PASO 10: DoD - backend en :3000 ✓ + Flutter analyze sin errores ✓ ← COMPLETADO
 [x] EXTRA: Commit inicial + push a github.com/josecarlosalar/hiBOB  ← COMPLETADO
 ```
 
