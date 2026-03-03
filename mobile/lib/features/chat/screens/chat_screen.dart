@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/models/message.dart';
 import '../../../core/providers/api_providers.dart';
+import '../../../core/providers/firebase_providers.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
 
@@ -150,6 +151,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: const Text('Gemini Live Agent'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Cerrar sesión',
+            onPressed: () => ref.read(firebaseServiceProvider).signOut(),
+          ),
+        ],
       ),
       body: Column(
         children: [
