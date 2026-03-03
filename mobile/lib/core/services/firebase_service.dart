@@ -20,6 +20,6 @@ class FirebaseService {
 
   /// Devuelve un ID token válido para llamadas autenticadas al backend
   Future<String?> getIdToken() async {
-    return _auth.currentUser?.getIdToken();
+    return _auth.currentUser?.getIdToken(true);
   }
 }
