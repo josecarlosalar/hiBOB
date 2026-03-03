@@ -100,7 +100,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
 
   void _startFrameTimer() {
     _frameTimer?.cancel();
-    _frameTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
+    _frameTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
       if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized || !_liveConnected) return;
       try {
         final file = await _cameraCtrl!.takePicture();

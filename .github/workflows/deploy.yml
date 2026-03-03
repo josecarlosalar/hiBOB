@@ -6,6 +6,7 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/deploy.yml'
+  workflow_dispatch:
 
 env:
   GCP_PROJECT_ID: websites-technology
