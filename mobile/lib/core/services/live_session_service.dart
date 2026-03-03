@@ -6,7 +6,7 @@ enum LiveSessionState { disconnected, connecting, connected, error }
 class LiveSessionService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://hibob-backend-hvfztbpjka-ew.a.run.app',
+    defaultValue: 'https://hibob-backend-777378009998.europe-west1.run.app',
   );
 
   io.Socket? _socket;

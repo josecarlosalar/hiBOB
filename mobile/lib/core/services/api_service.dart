@@ -8,7 +8,7 @@ import 'firebase_service.dart';
 class ApiService {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://hibob-backend-hvfztbpjka-ew.a.run.app',
+    defaultValue: 'https://hibob-backend-777378009998.europe-west1.run.app',
   );
 
   final http.Client _client;

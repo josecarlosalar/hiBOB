@@ -125,7 +125,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
 
   @override
   void dispose() {
-    _stopLive();
+    _frameTimer?.cancel();
+    _frameTimer = null;
+    for (final sub in _subs) { sub.cancel(); }
+    _subs.clear();
+    _liveSession.disconnect();
     _liveSession.dispose();
     _cameraCtrl?.dispose();
     _tts.dispose();
