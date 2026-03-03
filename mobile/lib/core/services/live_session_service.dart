@@ -14,12 +14,13 @@ class LiveSessionService {
 
   final _chunkController = StreamController<String>.broadcast();
   final _doneController = StreamController<String>.broadcast();
-  final _stateController =
-      StreamController<LiveSessionState>.broadcast();
+  final _stateController = StreamController<LiveSessionState>.broadcast();
+  final _transcriptionController = StreamController<String>.broadcast();
 
   Stream<String> get onChunk => _chunkController.stream;
   Stream<String> get onDone => _doneController.stream;
   Stream<LiveSessionState> get onStateChange => _stateController.stream;
+  Stream<String> get onTranscription => _transcriptionController.stream;
   LiveSessionState get state => _state;
 
   Future<void> connect(String idToken) async {
@@ -46,9 +47,31 @@ class LiveSessionService {
         final text = (data as Map<String, dynamic>)['text'] as String? ?? '';
         _doneController.add(text);
       })
+      ..on('transcription', (data) {
+        final text = (data as Map<String, dynamic>)['text'] as String? ?? '';
+        if (text.isNotEmpty) _transcriptionController.add(text);
+      })
       ..connect();
   }
 
+  /// Envía un frame de vídeo con audio del usuario para modo conversacional.
+  void sendVoiceFrame({
+    required String conversationId,
+    required String frameBase64,
+    required String audioBase64,
+    String mimeType = 'audio/m4a',
+  }) {
+    if (_state != LiveSessionState.connected) return;
+
+    _socket?.emit('voice_frame', {
+      'conversationId': conversationId,
+      'frameBase64': frameBase64,
+      'audioBase64': audioBase64,
+      'mimeType': mimeType,
+    });
+  }
+
+  /// Envía un frame de vídeo sin audio (modo exploración proactiva).
   void sendFrame({
     required String conversationId,
     required String frameBase64,
@@ -80,5 +103,6 @@ class LiveSessionService {
     _chunkController.close();
     _doneController.close();
     _stateController.close();
+    _transcriptionController.close();
   }
 }
