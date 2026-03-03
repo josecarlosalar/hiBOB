@@ -5,7 +5,10 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { globalValidationPipe } from './common/pipes/validation.pipe';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: true,
+  });
+  app.use(require('express').json({ limit: '20mb' }));
 
   const isProd = process.env.NODE_ENV === 'production';
   app.enableCors({
