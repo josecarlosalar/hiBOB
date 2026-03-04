@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/models/message.dart';
 import '../../../core/providers/api_providers.dart';
 import '../../../core/providers/firebase_providers.dart';
+import '../../../core/services/tts_service.dart';
 import '../widgets/input_bar.dart';
 import '../widgets/message_bubble.dart';
 
@@ -22,6 +23,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   late final String _conversationId;
   final _messages = <Message>[];
   final _scrollController = ScrollController();
+  final _ttsService = TtsService();
   bool _isLoading = false;
 
   @override
@@ -32,6 +34,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    _ttsService.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -47,15 +50,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final modelMsgId = const Uuid().v4();
     _addMessageWithId(modelMsgId, MessageRole.model, '');
+    String fullResponse = '';
 
     try {
       await for (final chunk in api.chatStream(
         conversationId: _conversationId,
         text: text,
       )) {
+        fullResponse += chunk;
         _appendToMessage(modelMsgId, chunk);
         _scrollToBottom();
       }
+      await _ttsService.speak(fullResponse);
     } catch (e) {
       _setMessageText(modelMsgId, 'Error: $e');
     } finally {
@@ -79,7 +85,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final response = result['responseText'] as String? ?? '';
 
       if (transcribed.isNotEmpty) _addMessage(MessageRole.user, transcribed);
-      if (response.isNotEmpty) _addMessage(MessageRole.model, response);
+      if (response.isNotEmpty) {
+        _addMessage(MessageRole.model, response);
+        await _ttsService.speak(response);
+      }
       _scrollToBottom();
     } catch (e) {
       _addMessage(MessageRole.model, 'Error al procesar audio: $e');
@@ -152,6 +161,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         title: const Text('Gemini Live Agent'),
         centerTitle: true,
         actions: [
+          StatefulBuilder(
+            builder: (_, setState) => IconButton(
+              icon: Icon(
+                _ttsService.isEnabled ? Icons.volume_up : Icons.volume_off,
+              ),
+              tooltip: _ttsService.isEnabled ? 'Silenciar voz' : 'Activar voz',
+              onPressed: () => setState(() => _ttsService.toggle()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesión',

@@ -1,14 +1,13 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  VertexAI,
-  GenerativeModel,
+  GoogleGenAI,
   Content,
   Part,
   Tool,
   FunctionDeclaration,
-  SchemaType,
-} from '@google-cloud/vertexai';
+  Type,
+} from '@google/genai';
 import { TavilyService } from '../tools/tavily.service';
 
 // ─── Definición de herramientas disponibles ──────────────────────────────────
@@ -18,10 +17,10 @@ const WEB_SEARCH_FUNCTION: FunctionDeclaration = {
   description:
     'Busca información actualizada en internet. Úsala cuando necesites datos recientes, noticias, precios, o cualquier información que puedas no tener en tu conocimiento.',
   parameters: {
-    type: SchemaType.OBJECT,
+    type: Type.OBJECT,
     properties: {
       query: {
-        type: SchemaType.STRING,
+        type: Type.STRING,
         description: 'La consulta de búsqueda en lenguaje natural',
       },
     },
@@ -36,8 +35,10 @@ const AGENT_TOOLS: Tool[] = [{ functionDeclarations: [WEB_SEARCH_FUNCTION] }];
 @Injectable()
 export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
-  private vertexAI: VertexAI;
-  private model: GenerativeModel;
+  private ai: GoogleGenAI;
+  private modelName: string;
+  private maxOutputTokens: number;
+  private temperature: number;
 
   constructor(
     private readonly configService: ConfigService,
@@ -47,24 +48,17 @@ export class AiService implements OnModuleInit {
   onModuleInit() {
     const project = this.configService.get<string>('GCP_PROJECT_ID');
     const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
-    const modelName = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
+    this.modelName = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
+    this.maxOutputTokens = parseInt(
+      this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '8192'),
+    );
+    this.temperature = parseFloat(
+      this.configService.get<string>('GEMINI_TEMPERATURE', '1.0'),
+    );
 
-    this.vertexAI = new VertexAI({ project, location });
+    this.ai = new GoogleGenAI({ vertexai: true, project, location });
 
-    this.model = this.vertexAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: {
-        maxOutputTokens: parseInt(
-          this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '8192'),
-        ),
-        temperature: parseFloat(
-          this.configService.get<string>('GEMINI_TEMPERATURE', '1.0'),
-        ),
-      },
-      tools: AGENT_TOOLS,
-    });
-
-    this.logger.log(`Vertex AI inicializado: proyecto=${project}, modelo=${modelName}`);
+    this.logger.log(`Google GenAI inicializado: proyecto=${project}, modelo=${this.modelName}`);
   }
 
   // ─── Llamada a herramienta ─────────────────────────────────────────────────
@@ -105,14 +99,23 @@ export class AiService implements OnModuleInit {
 
     // Agentic loop: hasta 5 iteraciones de tool use
     for (let i = 0; i < 5; i++) {
-      const response = await this.model.generateContent({ contents });
-      const candidate = response.response.candidates?.[0];
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents,
+        config: {
+          maxOutputTokens: this.maxOutputTokens,
+          temperature: this.temperature,
+          tools: AGENT_TOOLS,
+        },
+      });
+
+      const candidate = response.candidates?.[0];
       const responseParts = candidate?.content?.parts ?? [];
 
       // Si hay function calls, ejecutarlas y continuar
       const functionCalls = responseParts.filter((p) => p.functionCall);
       if (!functionCalls.length) {
-        return responseParts.find((p) => p.text)?.text ?? '';
+        return response.text ?? '';
       }
 
       // Añadir respuesta del modelo al historial
@@ -122,11 +125,12 @@ export class AiService implements OnModuleInit {
       const toolResultParts: Part[] = await Promise.all(
         functionCalls.map(async (p) => {
           const { name, args } = p.functionCall!;
-          this.logger.log(`Function call: ${name}(${JSON.stringify(args)})`);
-          const result = await this.executeTool(name, args as Record<string, unknown>);
+          const toolName = name ?? 'unknown';
+          this.logger.log(`Function call: ${toolName}(${JSON.stringify(args)})`);
+          const result = await this.executeTool(toolName, args as Record<string, unknown>);
           return {
             functionResponse: {
-              name,
+              name: toolName,
               response: { content: result },
             },
           } as Part;
@@ -159,20 +163,34 @@ export class AiService implements OnModuleInit {
       { role: 'user' as const, parts },
     ];
 
+    const callConfig = {
+      maxOutputTokens: this.maxOutputTokens,
+      temperature: this.temperature,
+      tools: AGENT_TOOLS,
+    };
+
     // Agentic loop con streaming en la respuesta final
     for (let i = 0; i < 5; i++) {
       // Primero hacemos llamada no-stream para detectar function calls
-      const response = await this.model.generateContent({ contents });
-      const candidate = response.response.candidates?.[0];
-      const responseParts = candidate?.content?.parts ?? [];
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents,
+        config: callConfig,
+      });
 
+      const candidate = response.candidates?.[0];
+      const responseParts = candidate?.content?.parts ?? [];
       const functionCalls = responseParts.filter((p) => p.functionCall);
 
       if (!functionCalls.length) {
         // Sin tool calls: hacer streaming de la respuesta final
-        const streamResult = await this.model.generateContentStream({ contents });
-        for await (const chunk of streamResult.stream) {
-          const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        const streamResult = await this.ai.models.generateContentStream({
+          model: this.modelName,
+          contents,
+          config: callConfig,
+        });
+        for await (const chunk of streamResult) {
+          const text = chunk.text ?? '';
           if (text) onChunk(text);
         }
         return;
@@ -186,11 +204,12 @@ export class AiService implements OnModuleInit {
       const toolResultParts: Part[] = await Promise.all(
         functionCalls.map(async (p) => {
           const { name, args } = p.functionCall!;
-          this.logger.log(`Function call: ${name}(${JSON.stringify(args)})`);
-          const result = await this.executeTool(name, args as Record<string, unknown>);
+          const toolName = name ?? 'unknown';
+          this.logger.log(`Function call: ${toolName}(${JSON.stringify(args)})`);
+          const result = await this.executeTool(toolName, args as Record<string, unknown>);
           return {
             functionResponse: {
-              name,
+              name: toolName,
               response: { content: result },
             },
           } as Part;
@@ -204,12 +223,8 @@ export class AiService implements OnModuleInit {
   // ─── processAudio ──────────────────────────────────────────────────────────
 
   async processAudio(audioBase64: string, mimeType: string): Promise<string> {
-    // Audio transcription sin tools para evitar llamadas innecesarias
-    const modelNoTools = this.vertexAI.getGenerativeModel({
-      model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
-    });
-
-    const response = await modelNoTools.generateContent({
+    const response = await this.ai.models.generateContent({
+      model: this.modelName,
       contents: [{
         role: 'user' as const,
         parts: [
@@ -221,6 +236,6 @@ export class AiService implements OnModuleInit {
       }],
     });
 
-    return response.response.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    return response.text ?? '';
   }
 }
