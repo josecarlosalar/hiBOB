@@ -10,7 +10,7 @@ import {
 } from '@google/genai';
 import { TavilyService } from '../tools/tavily.service';
 import { LocationService } from '../tools/location.service';
-import * as WebSocket from 'ws';
+import WebSocket from 'ws';
 import { GoogleAuth } from 'google-auth-library';
 import { EventEmitter } from 'events';
 
