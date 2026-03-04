@@ -222,6 +222,24 @@ export class GeminiLiveSession extends EventEmitter {
     this.ws.send(JSON.stringify(msg));
   }
 
+  sendText(text: string) {
+    if (this.ws.readyState !== WebSocket.OPEN) return;
+    const msg = {
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text }] }],
+        turnComplete: false,
+      },
+    };
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
+  signalTurnComplete() {
+    if (this.ws.readyState !== WebSocket.OPEN) return;
+    const msg = { clientContent: { turnComplete: true } };
+    this.ws.send(JSON.stringify(msg));
+  }
+
   sendToolResponse(toolResponses: any[]) {
     if (this.ws.readyState !== WebSocket.OPEN) return;
     const msg = { toolResponse: { functionResponses: toolResponses } };
