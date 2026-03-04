@@ -7,10 +7,10 @@ import {
   Tool,
   FunctionDeclaration,
   Type,
+  Modality,
 } from '@google/genai';
 import { TavilyService } from '../tools/tavily.service';
 import { LocationService } from '../tools/location.service';
-import WebSocket from 'ws';
 import { GoogleAuth } from 'google-auth-library';
 import { EventEmitter } from 'events';
 
@@ -120,134 +120,108 @@ export interface LiveSessionOptions {
   systemInstruction?: string;
 }
 
+/**
+ * Sesión Live con Gemini usando el SDK oficial @google/genai.
+ * Usa g.live.connect() que gestiona internamente el protocolo WebSocket.
+ */
 export class GeminiLiveSession extends EventEmitter {
-  private ws: WebSocket;
+  private session: any; // LiveSession del SDK
   private readonly logger = new Logger(GeminiLiveSession.name);
+  private closed = false;
 
   constructor(
-    private readonly url: string,
-    private readonly token: string,
-    private readonly modelPath: string,
+    private readonly ai: GoogleGenAI,
+    private readonly modelId: string,
     private readonly options: LiveSessionOptions = {},
   ) {
     super();
   }
 
-  connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(this.url, {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-
-      this.ws.on('open', () => {
-        this.logger.log('Conexión con Gemini Live API establecida');
-        this.sendSetup();
-        resolve();
-      });
-
-      this.ws.on('message', (data) => {
-        const message = JSON.parse(data.toString());
-        this.handleMessage(message);
-      });
-
-      this.ws.on('error', (err) => {
-        this.logger.error(`Error en Gemini Live API: ${err.message}`);
-        this.emit('error', err);
-        reject(err);
-      });
-
-      this.ws.on('close', (code, reason) => {
-        this.logger.warn(`Conexión con Gemini Live API cerrada: code=${code} reason=${reason?.toString()}`);
-        this.emit('close');
-      });
-    });
-  }
-
-  private sendSetup() {
-    const setupMsg = {
-      setup: {
-        model: this.modelPath,
-        generation_config: {
-          response_modalities: ['AUDIO', 'TEXT'],
-        },
-        tools: AGENT_TOOLS,
-        system_instruction: {
-          role: 'system',
+  async connect(): Promise<void> {
+    this.session = await this.ai.live.connect({
+      model: this.modelId,
+      config: {
+        responseModalities: [Modality.AUDIO, Modality.TEXT],
+        systemInstruction: {
           parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, un asistente amable para personas con discapacidad visual. Responde de forma concisa y natural.' }],
         },
+        tools: AGENT_TOOLS,
       },
-    };
-    this.ws.send(JSON.stringify(setupMsg));
+      callbacks: {
+        onopen: () => {
+          this.logger.log('Gemini Live SDK: sesión abierta');
+        },
+        onmessage: (msg: any) => {
+          this._handleSdkMessage(msg);
+        },
+        onerror: (err: ErrorEvent) => {
+          this.logger.error(`Gemini Live SDK error: ${err.message}`);
+          this.emit('error', new Error(err.message));
+        },
+        onclose: (evt: CloseEvent) => {
+          this.logger.warn(`Gemini Live SDK: cerrado code=${evt.code} reason=${evt.reason}`);
+          if (!this.closed) this.emit('close');
+        },
+      },
+    });
+    this.logger.log('GeminiLiveSession conectada via SDK');
   }
 
-  private handleMessage(msg: any) {
+  private _handleSdkMessage(msg: any) {
+    // serverContent: texto y audio de respuesta
     if (msg.serverContent) {
       const { modelTurn, turnComplete, interrupted } = msg.serverContent;
-
-      if (modelTurn) {
-        if (modelTurn.parts) {
-          for (const part of modelTurn.parts) {
-            if (part.text) this.emit('text', part.text);
-            if (part.inlineData) this.emit('audio', part.inlineData.data);
-          }
+      if (modelTurn?.parts) {
+        for (const part of modelTurn.parts) {
+          if (part.text) this.emit('text', part.text);
+          if (part.inlineData?.data) this.emit('audio', part.inlineData.data);
         }
       }
-
       if (turnComplete) this.emit('done');
       if (interrupted) this.emit('interruption');
     }
-
+    // toolCall: llamadas a herramientas del agente
     if (msg.toolCall) {
       this.emit('tool_call', msg.toolCall);
     }
   }
 
   sendAudio(base64Audio: string) {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    const msg = {
-      realtimeInput: {
-        mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Audio }],
-      },
-    };
-    this.ws.send(JSON.stringify(msg));
+    if (!this.session || this.closed) return;
+    this.session.sendRealtimeInput({
+      media: { mimeType: 'audio/pcm;rate=16000', data: base64Audio },
+    });
   }
 
   sendImage(base64Image: string) {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    const msg = {
-      realtimeInput: {
-        mediaChunks: [{ mimeType: 'image/jpeg', data: base64Image }],
-      },
-    };
-    this.ws.send(JSON.stringify(msg));
+    if (!this.session || this.closed) return;
+    this.session.sendRealtimeInput({
+      media: { mimeType: 'image/jpeg', data: base64Image },
+    });
   }
 
   sendText(text: string) {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    const msg = {
-      clientContent: {
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: false,
-      },
-    };
-    this.ws.send(JSON.stringify(msg));
+    if (!this.session || this.closed) return;
+    this.session.sendClientContent({
+      turns: [{ role: 'user', parts: [{ text }] }],
+      turnComplete: false,
+    });
   }
 
   /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
   signalTurnComplete() {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    const msg = { clientContent: { turnComplete: true } };
-    this.ws.send(JSON.stringify(msg));
+    if (!this.session || this.closed) return;
+    this.session.sendClientContent({ turnComplete: true });
   }
 
   sendToolResponse(toolResponses: any[]) {
-    if (this.ws.readyState !== WebSocket.OPEN) return;
-    const msg = { toolResponse: { functionResponses: toolResponses } };
-    this.ws.send(JSON.stringify(msg));
+    if (!this.session || this.closed) return;
+    this.session.sendToolResponse({ functionResponses: toolResponses });
   }
 
   close() {
-    this.ws?.close();
+    this.closed = true;
+    this.session?.close();
   }
 }
 
@@ -291,22 +265,15 @@ export class AiService implements OnModuleInit {
   // ─── Live Session ──────────────────────────────────────────────────────────
 
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
-    const project = this.configService.get<string>('GCP_PROJECT_ID');
-    // La Live API de Gemini en Vertex AI solo está disponible en us-central1
-    const liveLocation = 'us-central1';
-    const modelId = 'gemini-2.0-flash'; // Modelo GA de Vertex AI
+    // Usar el SDK @google/genai con AI Studio API key para la Live API.
+    // Esto cumple el requisito del hackathon de usar el SDK oficial de Google GenAI.
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    if (!apiKey) throw new Error('GEMINI_API_KEY no configurada');
 
-    // El proyecto y location van solo en el modelPath del setup, no como query params
-    const url = `wss://${liveLocation}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
+    const liveAi = new GoogleGenAI({ apiKey });
+    const modelId = 'gemini-2.0-flash-live-preview-04-09';
 
-    const client = await this.auth.getClient();
-    const tokenResponse = await client.getAccessToken();
-    const token = tokenResponse.token;
-
-    if (!token) throw new Error('No se pudo obtener el token de acceso de GCP');
-
-    const modelPath = `projects/${project}/locations/${liveLocation}/publishers/google/models/${modelId}`;
-    const session = new GeminiLiveSession(url, token, modelPath, options);
+    const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
     return session;
   }
