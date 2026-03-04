@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { AiService } from '../ai/ai.service';
 import { CreateMessageDto, MessageRole } from './dto/create-message.dto';
-import { Content } from '@google-cloud/vertexai';
+import { Content } from '@google/genai';
 
 interface Message {
   role: string;
