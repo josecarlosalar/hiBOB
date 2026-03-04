@@ -163,6 +163,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onTranscription.listen((text) {
         if (!mounted) return;
+        _processingTimeout?.cancel();
+        _startProcessingTimeout(); // Reset timeout on activity
         setState(() {
           _transcription = text;
           _geminiText = '';
@@ -194,6 +196,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onCommand.listen((cmd) {
         if (!mounted) return;
         _handleHardwareCommand(cmd);
+      }),
+      _liveSession.onError.listen((msg) {
+        if (!mounted) return;
+        _processingTimeout?.cancel();
+        _showMessage('Asistente: $msg');
+        _startListening();
       }),
     ]);
 
@@ -406,9 +414,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _startProcessingTimeout() {
     _processingTimeout?.cancel();
-    _processingTimeout = Timer(const Duration(seconds: 15), () {
+    _processingTimeout = Timer(const Duration(seconds: 30), () {
       if (_state == AssistantState.processing) {
         debugPrint('Timeout de procesamiento alcanzado');
+        _showMessage('El asistente está tardando demasiado...');
         _startListening();
       }
     });
