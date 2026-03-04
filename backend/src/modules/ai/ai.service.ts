@@ -168,20 +168,34 @@ export class GeminiLiveSession extends EventEmitter {
   }
 
   private _handleSdkMessage(msg: any) {
+    this.logger.debug(`Gemini SDK Message: ${JSON.stringify(msg)}`);
     // serverContent: texto y audio de respuesta
     if (msg.serverContent) {
       const { modelTurn, turnComplete, interrupted } = msg.serverContent;
       if (modelTurn?.parts) {
         for (const part of modelTurn.parts) {
-          if (part.text) this.emit('text', part.text);
-          if (part.inlineData?.data) this.emit('audio', part.inlineData.data);
+          if (part.text) {
+            this.logger.log(`Gemini Text Part: ${part.text}`);
+            this.emit('text', part.text);
+          }
+          if (part.inlineData?.data) {
+            this.logger.log(`Gemini Audio Part: ${part.inlineData.data.length} bytes`);
+            this.emit('audio', part.inlineData.data);
+          }
         }
       }
-      if (turnComplete) this.emit('done');
-      if (interrupted) this.emit('interruption');
+      if (turnComplete) {
+        this.logger.log('Gemini Turn Complete');
+        this.emit('done');
+      }
+      if (interrupted) {
+        this.logger.warn('Gemini Interrupted');
+        this.emit('interruption');
+      }
     }
     // toolCall: llamadas a herramientas del agente
     if (msg.toolCall) {
+      this.logger.log(`Gemini Tool Call: ${JSON.stringify(msg.toolCall)}`);
       this.emit('tool_call', msg.toolCall);
     }
   }
