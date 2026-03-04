@@ -127,41 +127,46 @@ export class GeminiLiveSession extends EventEmitter {
   constructor(
     private readonly url: string,
     private readonly token: string,
+    private readonly modelPath: string,
     private readonly options: LiveSessionOptions = {},
   ) {
     super();
   }
 
-  async connect() {
-    this.ws = new WebSocket(this.url, {
-      headers: { Authorization: `Bearer ${this.token}` },
-    });
+  connect(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.ws = new WebSocket(this.url, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
 
-    this.ws.on('open', () => {
-      this.logger.log('Conexión con Gemini Live API establecida');
-      this.sendSetup();
-    });
+      this.ws.on('open', () => {
+        this.logger.log('Conexión con Gemini Live API establecida');
+        this.sendSetup();
+        resolve();
+      });
 
-    this.ws.on('message', (data) => {
-      const message = JSON.parse(data.toString());
-      this.handleMessage(message);
-    });
+      this.ws.on('message', (data) => {
+        const message = JSON.parse(data.toString());
+        this.handleMessage(message);
+      });
 
-    this.ws.on('error', (err) => {
-      this.logger.error(`Error en Gemini Live API: ${err.message}`);
-      this.emit('error', err);
-    });
+      this.ws.on('error', (err) => {
+        this.logger.error(`Error en Gemini Live API: ${err.message}`);
+        this.emit('error', err);
+        reject(err);
+      });
 
-    this.ws.on('close', () => {
-      this.logger.log('Conexión con Gemini Live API cerrada');
-      this.emit('close');
+      this.ws.on('close', () => {
+        this.logger.log('Conexión con Gemini Live API cerrada');
+        this.emit('close');
+      });
     });
   }
 
   private sendSetup() {
     const setupMsg = {
       setup: {
-        model: 'models/gemini-2.0-flash-exp', // Modelo que soporta Live API
+        model: this.modelPath,
         generation_config: {
           response_modalities: ['AUDIO', 'TEXT'],
         },
@@ -177,11 +182,11 @@ export class GeminiLiveSession extends EventEmitter {
 
   private handleMessage(msg: any) {
     if (msg.serverContent) {
-      const { modelDraft, turnComplete, interupt } = msg.serverContent;
+      const { modelTurn, turnComplete, interrupted } = msg.serverContent;
 
-      if (modelDraft) {
-        if (modelDraft.parts) {
-          for (const part of modelDraft.parts) {
+      if (modelTurn) {
+        if (modelTurn.parts) {
+          for (const part of modelTurn.parts) {
             if (part.text) this.emit('text', part.text);
             if (part.inlineData) this.emit('audio', part.inlineData.data);
           }
@@ -189,7 +194,7 @@ export class GeminiLiveSession extends EventEmitter {
       }
 
       if (turnComplete) this.emit('done');
-      if (interupt) this.emit('interruption');
+      if (interrupted) this.emit('interruption');
     }
 
     if (msg.toolCall) {
@@ -272,7 +277,7 @@ export class AiService implements OnModuleInit {
     const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
     const modelId = 'gemini-2.0-flash-exp'; // Forzado para Live API
 
-    const url = `wss://${location}-aiplatform.googleapis.com/v1beta1/projects/${project}/locations/${location}/publishers/google/models/${modelId}:streamGenerateContent`;
+    const url = `wss://${location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent?project=${project}&location=${location}`;
 
     const client = await this.auth.getClient();
     const tokenResponse = await client.getAccessToken();
@@ -280,7 +285,8 @@ export class AiService implements OnModuleInit {
 
     if (!token) throw new Error('No se pudo obtener el token de acceso de GCP');
 
-    const session = new GeminiLiveSession(url, token, options);
+    const modelPath = `projects/${project}/locations/${location}/publishers/google/models/${modelId}`;
+    const session = new GeminiLiveSession(url, token, modelPath, options);
     await session.connect();
     return session;
   }

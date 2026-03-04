@@ -89,7 +89,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.on('error', (err) => client.emit('error', { message: err.message }));
 
     } catch (err) {
-      this.logger.warn(`Error de conexión para cliente ${client.id}: ${err.message}`);
+      this.logger.error(`Error al conectar con Gemini Live API para cliente ${client.id}: ${err.message}`, err.stack);
+      client.emit('error', { message: 'No se pudo conectar con el asistente de IA' });
       client.disconnect();
     }
   }
