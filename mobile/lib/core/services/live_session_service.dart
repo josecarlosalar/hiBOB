@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
 
 enum LiveSessionState { disconnected, connecting, connected, error }
@@ -32,19 +33,36 @@ class LiveSessionService {
   Future<void> connect(String idToken) async {
     _setState(LiveSessionState.connecting);
 
+    // Intentamos varias formas de auth para máxima compatibilidad con el backend
+    final authData = {'token': idToken};
+    debugPrint('Connecting to WebSocket with auth: $authData');
+
     _socket = io.io(
       '$_baseUrl/live',
       io.OptionBuilder()
           .setTransports(['websocket'])
-          .setAuth({'token': idToken})
+          .setAuth(authData)
+          .setExtraHeaders({
+            'Authorization': 'Bearer $idToken',
+            'authorization': 'Bearer $idToken',
+          })
           .disableAutoConnect()
           .build(),
     );
 
     _socket!
-      ..onConnect((_) => _setState(LiveSessionState.connected))
-      ..onDisconnect((_) => _setState(LiveSessionState.disconnected))
-      ..onConnectError((_) => _setState(LiveSessionState.error))
+      ..onConnect((_) {
+        debugPrint('WebSocket connected');
+        _setState(LiveSessionState.connected);
+      })
+      ..onDisconnect((reason) {
+        debugPrint('WebSocket disconnected: $reason');
+        _setState(LiveSessionState.disconnected);
+      })
+      ..onConnectError((err) {
+        debugPrint('WebSocket connect error: $err');
+        _setState(LiveSessionState.error);
+      })
       ..on('chunk', (data) {
         final text = (data as Map<String, dynamic>)['text'] as String? ?? '';
         if (text.isNotEmpty) _chunkController.add(text);
