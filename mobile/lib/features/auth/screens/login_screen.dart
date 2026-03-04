@@ -75,23 +75,46 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 64),
-              Icon(Icons.smart_toy_rounded, size: 72, color: colors.primary),
-              const SizedBox(height: 24),
+              // Logo hiBOB
+              Center(
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.primary.withValues(alpha: 0.2),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 32),
               Text(
-                'Gemini Live Agent',
+                'hiBOB AI',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
                     ),
               ),
               const SizedBox(height: 8),
               Text(
-                'Agente multimodal con visión y voz',
+                'Tu Asistente Visual Inteligente',
                 textAlign: TextAlign.center,
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium
-                    ?.copyWith(color: colors.onSurfaceVariant),
+                    ?.copyWith(color: colors.onSurfaceVariant, letterSpacing: 0.5),
               ),
               const SizedBox(height: 48),
               Form(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/providers/firebase_providers.dart';
+import 'features/intro/screens/splash_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
 import 'features/chat/screens/chat_screen.dart';
@@ -20,16 +21,24 @@ class GeminiAgentApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gemini Live Agent',
+      title: 'hiBOB AI',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A73E8),
+          seedColor: const Color(0xFF673AB7), // Deep Purple
+          primary: const Color(0xFF673AB7),
+          secondary: const Color(0xFF00B0FF), // Light Blue / Cyan
+          surface: const Color(0xFF121212),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        fontFamily: 'Roboto', 
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1),
+          bodyLarge: TextStyle(fontSize: 16),
+        ),
       ),
-      home: const _AuthGate(),
+      home: const SplashScreen(nextScreen: _AuthGate()),
     );
   }
 }

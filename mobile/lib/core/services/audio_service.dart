@@ -16,13 +16,13 @@ class AudioService {
 
   Future<void> startRecording() async {
     final dir = await getTemporaryDirectory();
-    _currentPath = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    _currentPath = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.pcm';
 
     await _recorder.start(
       const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        bitRate: 128000,
-        sampleRate: 44100,
+        encoder: AudioEncoder.pcm16bits,
+        numChannels: 1,
+        sampleRate: 16000,
       ),
       path: _currentPath!,
     );

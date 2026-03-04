@@ -16,11 +16,17 @@ class LiveSessionService {
   final _doneController = StreamController<String>.broadcast();
   final _stateController = StreamController<LiveSessionState>.broadcast();
   final _transcriptionController = StreamController<String>.broadcast();
+  final _audioChunkController = StreamController<String>.broadcast();
+  final _interruptionController = StreamController<void>.broadcast();
+  final _commandController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<String> get onChunk => _chunkController.stream;
   Stream<String> get onDone => _doneController.stream;
   Stream<LiveSessionState> get onStateChange => _stateController.stream;
   Stream<String> get onTranscription => _transcriptionController.stream;
+  Stream<String> get onAudioChunk => _audioChunkController.stream;
+  Stream<void> get onInterruption => _interruptionController.stream;
+  Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
   LiveSessionState get state => _state;
 
   Future<void> connect(String idToken) async {
@@ -50,6 +56,16 @@ class LiveSessionService {
       ..on('transcription', (data) {
         final text = (data as Map<String, dynamic>)['text'] as String? ?? '';
         if (text.isNotEmpty) _transcriptionController.add(text);
+      })
+      ..on('audio_chunk', (data) {
+        final audio = (data as Map<String, dynamic>)['data'] as String? ?? '';
+        if (audio.isNotEmpty) _audioChunkController.add(audio);
+      })
+      ..on('interruption', (_) {
+        _interruptionController.add(null);
+      })
+      ..on('command', (data) {
+        _commandController.add(Map<String, dynamic>.from(data as Map));
       })
       ..connect();
   }
@@ -104,5 +120,8 @@ class LiveSessionService {
     _doneController.close();
     _stateController.close();
     _transcriptionController.close();
+    _audioChunkController.close();
+    _interruptionController.close();
+    _commandController.close();
   }
 }
