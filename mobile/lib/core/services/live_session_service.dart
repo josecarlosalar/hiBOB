@@ -20,6 +20,7 @@ class LiveSessionService {
   final _audioChunkController = StreamController<String>.broadcast();
   final _interruptionController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
+  final _errorController = StreamController<String>.broadcast();
 
   Stream<String> get onChunk => _chunkController.stream;
   Stream<String> get onDone => _doneController.stream;
@@ -28,6 +29,7 @@ class LiveSessionService {
   Stream<String> get onAudioChunk => _audioChunkController.stream;
   Stream<void> get onInterruption => _interruptionController.stream;
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
+  Stream<String> get onError => _errorController.stream;
   LiveSessionState get state => _state;
 
   Future<void> connect(String idToken) async {
@@ -85,6 +87,11 @@ class LiveSessionService {
       ..on('command', (data) {
         _commandController.add(Map<String, dynamic>.from(data as Map));
       })
+      ..on('error', (data) {
+        final message = (data as Map<String, dynamic>)['message'] as String? ?? 'Error desconocido';
+        debugPrint('Backend Error: $message');
+        _errorController.add(message);
+      })
       ..connect();
   }
 
@@ -141,5 +148,6 @@ class LiveSessionService {
     _audioChunkController.close();
     _interruptionController.close();
     _commandController.close();
+    _errorController.close();
   }
 }

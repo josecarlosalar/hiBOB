@@ -59,12 +59,25 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.geminiSession = session;
 
       // Escuchar eventos de Gemini y retransmitir al cliente
-      session.on('text', (text) => client.emit('chunk', { text }));
-      session.on('audio', (base64Audio) => client.emit('audio_chunk', { data: base64Audio }));
-      session.on('done', () => client.emit('done', {}));
-      session.on('interruption', () => client.emit('interruption', {}));
+      session.on('text', (text) => {
+        this.logger.log(`Gemini -> Cliente [chunk]: ${text.length} chars`);
+        client.emit('chunk', { text });
+      });
+      session.on('audio', (base64Audio) => {
+        this.logger.log(`Gemini -> Cliente [audio_chunk]: ${base64Audio.length} bytes`);
+        client.emit('audio_chunk', { data: base64Audio });
+      });
+      session.on('done', () => {
+        this.logger.log('Gemini -> Cliente [done]');
+        client.emit('done', {});
+      });
+      session.on('interruption', () => {
+        this.logger.log('Gemini -> Cliente [interruption]');
+        client.emit('interruption', {});
+      });
 
       session.on('tool_call', async (toolCall) => {
+        this.logger.log(`Gemini -> Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
             const result = await (this.aiService as any).executeTool(fc.name, fc.args);
@@ -83,10 +96,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             };
           }),
         );
+        this.logger.log(`Tool Response -> Gemini: ${JSON.stringify(results)}`);
         session.sendToolResponse(results);
       });
 
-      session.on('error', (err) => client.emit('error', { message: err.message }));
+      session.on('error', (err) => {
+        this.logger.error(`Gemini Error: ${err.message}`);
+        client.emit('error', { message: err.message });
+      });
 
     } catch (err) {
       this.logger.error(`Error al conectar con Gemini Live API para cliente ${client.id}: ${err.message}`, err.stack);
@@ -110,6 +127,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!session) return;
 
     try {
+      this.logger.log(`Cliente -> Gemini [voice_frame]: audio=${payload.audioBase64?.length || 0} bytes, frame=${payload.frameBase64?.length || 0} bytes`);
       // En la Multimodal Live API, enviamos audio e imagen directamente.
       // El audio debe ser LPCM 16kHz (enviado por el cliente).
       if (payload.audioBase64) {
@@ -121,7 +139,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Señalizar fin de turno para que Gemini genere la respuesta
       session.signalTurnComplete();
     } catch (err) {
-      this.logger.error(`Error enviando a Gemini: ${err.message}`);
+      this.logger.error(`Error enviando a Gemini (voice_frame): ${err.message}`);
     }
   }
 
@@ -135,6 +153,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       if (payload.frameBase64) {
+        this.logger.log(`Cliente -> Gemini [frame]: prompt="${payload.prompt || ''}", frame=${payload.frameBase64.length} bytes`);
         if (payload.prompt) {
           session.sendText(payload.prompt);
         }
@@ -142,7 +161,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         session.signalTurnComplete();
       }
     } catch (err) {
-      this.logger.error(`Error enviando frame a Gemini: ${err.message}`);
+      this.logger.error(`Error enviando frame a Gemini (frame): ${err.message}`);
     }
   }
 }
