@@ -62,6 +62,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _lastInteractionTime;
   StreamSubscription<dynamic>? _amplitudeSub;
   Timer? _proactiveTimer;
+  Timer? _processingTimeout;
 
   // Subs WebSocket
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -112,30 +113,53 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (mounted) setState(() {});
   }
 
-  // ─── Iniciar sesión conversacional ────────────────────────────────────────
-
   Future<void> _startSession() async {
+    debugPrint('Iniciando _startSession');
     final hasPerm = await _audio.hasPermission;
     if (!hasPerm) {
+      debugPrint('No hay permiso de micrófono');
       _showMessage('Necesito permiso de micrófono');
       return;
     }
+    debugPrint('Permiso de micrófono concedido');
 
     final firebase = ref.read(firebaseServiceProvider);
     final token = await firebase.getIdToken();
-    if (token == null) return;
+    if (token == null) {
+      debugPrint('Token firebase es null');
+      return;
+    }
 
     _conversationId = const Uuid().v4();
+    debugPrint('Session ID: $_conversationId');
     _lastInteractionTime = DateTime.now();
     await _pcmAudio.init();
-    _setStateIfMounted(AssistantState.listening);
+    // No cambiamos a listening aquí, esperamos a que conecte el socket
 
     _subs.addAll([
       _liveSession.onStateChange.listen((s) {
+        debugPrint('---[LiveSession State Change: $s]---');
         if (!mounted) return;
-        if (s == LiveSessionState.connected) _startListening();
-        if (s == LiveSessionState.error)
-          _setStateIfMounted(AssistantState.inactive);
+        
+        switch (s) {
+          case LiveSessionState.connected:
+            debugPrint('Conexión exitosa, iniciando escucha');
+            _startListening();
+            break;
+          case LiveSessionState.error:
+            debugPrint('Error crítico en la sesión, reseteando');
+            _stopSession();
+            _showMessage('Error de conexión con el asistente');
+            break;
+          case LiveSessionState.disconnected:
+            if (_state != AssistantState.inactive) {
+              debugPrint('Desconexión inesperada, limpiando estado');
+              _stopSession();
+            }
+            break;
+          default:
+            break;
+        }
       }),
       _liveSession.onTranscription.listen((text) {
         if (!mounted) return;
@@ -147,6 +171,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onChunk.listen((chunk) {
         if (!mounted) return;
+        _processingTimeout?.cancel();
         setState(() => _geminiText += chunk);
       }),
       _liveSession.onAudioChunk.listen((base64Audio) {
@@ -162,6 +187,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onDone.listen((text) {
         if (!mounted) return;
+        _processingTimeout?.cancel();
         // La sesión Live API ya ha enviado todo el audio/texto
         _startListening();
       }),
@@ -223,8 +249,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _sendVoiceFrame() async {
+    if (_liveSession.state != LiveSessionState.connected) {
+      _startListening();
+      return;
+    }
+
     _amplitudeSub?.cancel();
     _setStateIfMounted(AssistantState.processing);
+    _startProcessingTimeout();
 
     try {
       final audioBase64 = await _audio.stopAndGetBase64();
@@ -284,9 +316,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             .inSeconds;
         if (sinceLastInteraction < _proactiveIntervalSec) return;
 
+        if (_liveSession.state != LiveSessionState.connected) return;
+
         final frame = await _captureFrame();
         if (frame == null || !mounted) return;
         _setStateIfMounted(AssistantState.processing);
+        _startProcessingTimeout();
         _liveSession.sendFrame(
           conversationId: _conversationId,
           frameBase64: frame,
@@ -338,10 +373,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // ─── Detener sesión ───────────────────────────────────────────────────────
 
   void _stopSession() {
+    debugPrint('Ejecutando _stopSession');
     _amplitudeSub?.cancel();
     _amplitudeSub = null;
     _proactiveTimer?.cancel();
     _proactiveTimer = null;
+    debugPrint('Cancelando ${_subs.length} suscripciones');
     for (final sub in _subs) {
       sub.cancel();
     }
@@ -352,12 +389,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _setStateIfMounted(AssistantState newState) {
+    debugPrint('Transitioning state: $_state -> $newState');
     if (!mounted || _state == newState) return;
+
+    // Si salimos de procesamiento, cancelamos el timeout
+    if (_state == AssistantState.processing &&
+        newState != AssistantState.processing) {
+      _processingTimeout?.cancel();
+    }
 
     // Feedback háptico al cambiar de estado para accesibilidad
     _triggerStateHaptics(newState);
 
     setState(() => _state = newState);
+  }
+
+  void _startProcessingTimeout() {
+    _processingTimeout?.cancel();
+    _processingTimeout = Timer(const Duration(seconds: 15), () {
+      if (_state == AssistantState.processing) {
+        debugPrint('Timeout de procesamiento alcanzado');
+        _startListening();
+      }
+    });
   }
 
   Future<void> _triggerStateHaptics(AssistantState state) async {
@@ -390,6 +444,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void dispose() {
     _amplitudeSub?.cancel();
     _proactiveTimer?.cancel();
+    _processingTimeout?.cancel();
     for (final sub in _subs) {
       sub.cancel();
     }
