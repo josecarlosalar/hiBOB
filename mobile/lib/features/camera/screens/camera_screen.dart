@@ -63,6 +63,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   StreamSubscription<dynamic>? _amplitudeSub;
   Timer? _proactiveTimer;
   Timer? _processingTimeout;
+  bool _isProactiveProcessing = false;
 
   // Subs WebSocket
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -327,7 +328,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _proactiveTimer = Timer.periodic(
       Duration(seconds: _proactiveIntervalSec),
       (_) async {
-        if (_state != AssistantState.listening) return;
+        if (_state != AssistantState.listening || _isProactiveProcessing) return;
+        
         final sinceLastInteraction = DateTime.now()
             .difference(_lastInteractionTime ?? DateTime.now())
             .inSeconds;
@@ -335,23 +337,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
         if (_liveSession.state != LiveSessionState.connected) return;
 
-        debugPrint('[Telemetry] Proactive timer: capturando frame...');
-        final frame = await _captureFrame();
-        if (frame == null || !mounted) {
-          debugPrint('[Telemetry] Proactive timer: frame nulo o no montado, abortando');
-          return;
-        }
+        _isProactiveProcessing = true;
+        try {
+          debugPrint('[Telemetry] Proactive timer: capturando frame...');
+          final frame = await _captureFrame();
+          if (frame == null || !mounted) {
+            debugPrint('[Telemetry] Proactive timer: frame nulo o no montado, abortando');
+            return;
+          }
 
-        debugPrint('[Telemetry] Proactive timer: iniciando procesamiento...');
-        _setStateIfMounted(AssistantState.processing);
-        _startProcessingTimeout();
-        _liveSession.sendFrame(
-          conversationId: _conversationId,
-          frameBase64: frame,
-          prompt:
-              'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
-        );
-        debugPrint('[Telemetry] Proactive timer: enviado');
+          debugPrint('[Telemetry] Proactive timer: iniciando procesamiento...');
+          _setStateIfMounted(AssistantState.processing);
+          _startProcessingTimeout();
+          _liveSession.sendFrame(
+            conversationId: _conversationId,
+            frameBase64: frame,
+            prompt:
+                'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
+          );
+          debugPrint('[Telemetry] Proactive timer: enviado');
+        } finally {
+          _isProactiveProcessing = false;
+        }
       },
     );
   }
