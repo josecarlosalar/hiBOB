@@ -267,24 +267,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _startProcessingTimeout();
 
     try {
+      debugPrint('[Telemetry] _sendVoiceFrame: deteniendo grabación...');
       final audioBase64 = await _audio.stopAndGetBase64();
       if (audioBase64 == null || audioBase64.isEmpty) {
+        debugPrint('[Telemetry] _sendVoiceFrame: audio vacío, abortando');
         _startListening();
         return;
       }
+      debugPrint('[Telemetry] _sendVoiceFrame: audio capturado (${audioBase64.length} chars)');
 
+      debugPrint('[Telemetry] _sendVoiceFrame: capturando frame...');
       final frame = await _captureFrame();
       if (frame == null) {
+        debugPrint('[Telemetry] _sendVoiceFrame: frame nulo, abortando');
         _startListening();
         return;
       }
+      debugPrint('[Telemetry] _sendVoiceFrame: frame capturado (${frame.length} chars)');
 
+      debugPrint('[Telemetry] _sendVoiceFrame: enviando a backend...');
       _liveSession.sendVoiceFrame(
         conversationId: _conversationId,
         frameBase64: frame,
         audioBase64: audioBase64,
       );
-    } catch (_) {
+      debugPrint('[Telemetry] _sendVoiceFrame: enviado correctamente');
+    } catch (e) {
+      debugPrint('[Telemetry] _sendVoiceFrame: ERROR crítico: $e');
       _startListening();
     }
   }
@@ -326,8 +335,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
         if (_liveSession.state != LiveSessionState.connected) return;
 
+        debugPrint('[Telemetry] Proactive timer: capturando frame...');
         final frame = await _captureFrame();
-        if (frame == null || !mounted) return;
+        if (frame == null || !mounted) {
+          debugPrint('[Telemetry] Proactive timer: frame nulo o no montado, abortando');
+          return;
+        }
+
+        debugPrint('[Telemetry] Proactive timer: iniciando procesamiento...');
         _setStateIfMounted(AssistantState.processing);
         _startProcessingTimeout();
         _liveSession.sendFrame(
@@ -336,6 +351,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           prompt:
               'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
         );
+        debugPrint('[Telemetry] Proactive timer: enviado');
       },
     );
   }
@@ -343,13 +359,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// Captura un frame con la cámara (ResolutionPreset.low → ~30-80 KB JPEG),
   /// guarda los bytes para mostrarlo en pantalla y retorna el base64.
   Future<String?> _captureFrame() async {
-    if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
+    if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) {
+      debugPrint('[Telemetry] _captureFrame: cámara no inicializada');
+      return null;
+    }
     try {
-      final file = await _cameraCtrl!.takePicture();
+      // Usar un timeout para que no se quede colgado si la cámara falla
+      final file = await _cameraCtrl!.takePicture().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          debugPrint('[Telemetry] _captureFrame: TIMEOUT en takePicture');
+          throw TimeoutException('takePicture tardó demasiado');
+        },
+      );
       final bytes = await File(file.path).readAsBytes();
       if (mounted) setState(() => _lastFrameBytes = bytes);
       return base64Encode(bytes);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Telemetry] _captureFrame: error capturando frame: $e');
       return null;
     }
   }
