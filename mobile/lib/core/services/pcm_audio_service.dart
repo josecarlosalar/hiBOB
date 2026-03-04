@@ -7,7 +7,7 @@ class PcmAudioService {
 
   Future<void> init() async {
     if (_isInitialized) return;
-    await FlutterPcmSound.setup(sampleRate: 16000, channels: 1);
+    await FlutterPcmSound.setup(sampleRate: 16000, channelCount: 1);
     _isInitialized = true;
   }
 
@@ -17,7 +17,7 @@ class PcmAudioService {
     final bytes = base64Decode(base64Audio);
     // Convertir Uint8List a Int16List (LPCM 16-bit)
     final int16List = Int16List.view(bytes.buffer);
-    FlutterPcmSound.feed(int16List);
+    FlutterPcmSound.feed(PcmArrayInt16.fromList(int16List));
   }
 
   void stop() {
