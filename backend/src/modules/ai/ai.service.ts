@@ -294,7 +294,7 @@ export class AiService implements OnModuleInit {
     const project = this.configService.get<string>('GCP_PROJECT_ID');
     // La Live API de Gemini en Vertex AI solo está disponible en us-central1
     const liveLocation = 'us-central1';
-    const modelId = 'gemini-2.0-flash-live-preview-04-09'; // Modelo compatible con Live API
+    const modelId = 'gemini-2.0-flash'; // Modelo GA de Vertex AI
 
     // El proyecto y location van solo en el modelPath del setup, no como query params
     const url = `wss://${liveLocation}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
