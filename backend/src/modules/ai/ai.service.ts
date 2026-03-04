@@ -296,7 +296,8 @@ export class AiService implements OnModuleInit {
     const liveLocation = 'us-central1';
     const modelId = 'gemini-2.0-flash-live-preview-04-09'; // Modelo compatible con Live API
 
-    const url = `wss://${liveLocation}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent?project=${project}`;
+    // El proyecto y location van solo en el modelPath del setup, no como query params
+    const url = `wss://${liveLocation}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
 
     const client = await this.auth.getClient();
     const tokenResponse = await client.getAccessToken();
