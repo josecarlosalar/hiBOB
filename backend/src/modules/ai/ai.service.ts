@@ -271,7 +271,7 @@ export class AiService implements OnModuleInit {
     if (!apiKey) throw new Error('GEMINI_API_KEY no configurada');
 
     const liveAi = new GoogleGenAI({ apiKey });
-    const modelId = 'gemini-2.0-flash-live-preview-04-09';
+    const modelId = 'gemini-2.0-flash-exp'; // Modelo disponible para Live API en AI Studio
 
     const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
