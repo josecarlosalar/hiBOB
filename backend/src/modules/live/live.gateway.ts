@@ -10,7 +10,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import * as admin from 'firebase-admin';
-import { AiService } from '../ai/ai.service';
+import { AiService, GeminiLiveSession } from '../ai/ai.service';
 
 interface FramePayload {
   conversationId: string;
@@ -35,7 +35,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(LiveGateway.name);
 
-  constructor(private readonly aiService: AiService) {}
+  constructor(private readonly aiService: AiService) { }
 
   async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token as string | undefined;
@@ -50,14 +50,54 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const decoded = await admin.auth().verifyIdToken(token);
       client.data.uid = decoded.uid;
       this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid})`);
-    } catch {
-      this.logger.warn(`Token inválido para cliente ${client.id}`);
+
+      // Iniciar sesión Live con Gemini para este cliente
+      const session = await this.aiService.createLiveSession({
+        systemInstruction: 'Eres hiBOB, un asistente multimodal para personas con discapacidad visual. Responde de forma concisa (máximo 3 frases) y natural. Tienes ojos (la cámara) y oídos (el micrófono).',
+      });
+
+      client.data.geminiSession = session;
+
+      // Escuchar eventos de Gemini y retransmitir al cliente
+      session.on('text', (text) => client.emit('chunk', { text }));
+      session.on('audio', (base64Audio) => client.emit('audio_chunk', { data: base64Audio }));
+      session.on('done', () => client.emit('done', {}));
+      session.on('interruption', () => client.emit('interruption', {}));
+
+      session.on('tool_call', async (toolCall) => {
+        const results = await Promise.all(
+          toolCall.functionCalls.map(async (fc: any) => {
+            const result = await (this.aiService as any).executeTool(fc.name, fc.args);
+
+            // Si es un comando de hardware, notificar al móvil
+            if (fc.name === 'toggle_flashlight') {
+              client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
+            } else if (fc.name === 'trigger_haptic_feedback') {
+              client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
+            }
+
+            return {
+              name: fc.name,
+              id: fc.id,
+              response: { content: result },
+            };
+          }),
+        );
+        session.sendToolResponse(results);
+      });
+
+      session.on('error', (err) => client.emit('error', { message: err.message }));
+
+    } catch (err) {
+      this.logger.warn(`Error de conexión para cliente ${client.id}: ${err.message}`);
       client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
     this.logger.log(`Cliente desconectado: ${client.id}`);
+    const session = client.data.geminiSession as GeminiLiveSession;
+    session?.close();
   }
 
   @SubscribeMessage('voice_frame')
@@ -65,42 +105,20 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: VoiceFramePayload,
     @ConnectedSocket() client: Socket,
   ) {
-    if (!client.data.uid) return;
-
-    const mimeType = payload.mimeType ?? 'audio/m4a';
+    const session = client.data.geminiSession as GeminiLiveSession;
+    if (!session) return;
 
     try {
-      // 1. Transcribir el audio del usuario
-      const transcription = await this.aiService.processAudio(payload.audioBase64, mimeType);
-      this.logger.log(`Transcripción (uid=${client.data.uid}): "${transcription}"`);
-
-      // Emitir transcripción al cliente para mostrar en UI
-      if (transcription.trim()) {
-        client.emit('transcription', { text: transcription });
+      // En la Multimodal Live API, enviamos audio e imagen directamente.
+      // El audio debe ser LPCM 16kHz (enviado por el cliente).
+      if (payload.audioBase64) {
+        session.sendAudio(payload.audioBase64);
       }
-
-      // 2. Construir prompt combinando voz + visión
-      const prompt = transcription.trim()
-        ? `El usuario ha dicho: "${transcription}"\n\nMirando la imagen de la cámara, responde de forma natural y concisa. Si la pregunta es sobre lo que ves, descríbelo. Habla directamente al usuario. Máximo 3 frases.`
-        : 'Describe brevemente y de forma natural lo que ves en la imagen. Sé conciso, máximo 2 frases. Habla en primera persona como si fueras los ojos del usuario.';
-
-      // 3. Generar respuesta con streaming (imagen + transcripción)
-      let fullText = '';
-
-      await this.aiService.generateContentStream(
-        prompt,
-        (chunk) => {
-          fullText += chunk;
-          client.emit('chunk', { text: chunk });
-        },
-        [payload.frameBase64],
-      );
-
-      client.emit('done', { text: fullText, conversationId: payload.conversationId });
+      if (payload.frameBase64) {
+        session.sendImage(payload.frameBase64);
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Error en voice_frame: ${message}`);
-      client.emit('error', { message });
+      this.logger.error(`Error enviando a Gemini: ${err.message}`);
     }
   }
 
@@ -109,28 +127,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() payload: FramePayload,
     @ConnectedSocket() client: Socket,
   ) {
-    if (!client.data.uid) return;
-
-    const prompt =
-      payload.prompt?.trim() ||
-      'Describe brevemente qué ves en la imagen. Sé conciso (máximo 2 frases).';
+    const session = client.data.geminiSession as GeminiLiveSession;
+    if (!session) return;
 
     try {
-      let fullText = '';
-
-      await this.aiService.generateContentStream(
-        prompt,
-        (chunk) => {
-          fullText += chunk;
-          client.emit('chunk', { text: chunk });
-        },
-        [payload.frameBase64],
-      );
-
-      client.emit('done', { text: fullText, conversationId: payload.conversationId });
+      if (payload.frameBase64) {
+        session.sendImage(payload.frameBase64);
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      client.emit('error', { message });
+      this.logger.error(`Error enviando frame a Gemini: ${err.message}`);
     }
   }
 }
