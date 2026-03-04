@@ -148,23 +148,26 @@ export class GeminiLiveSession extends EventEmitter {
         tools: AGENT_TOOLS,
       },
       callbacks: {
-        onopen: () => {
-          this.logger.log('Gemini Live SDK: sesión abierta');
-        },
-        onmessage: (msg: any) => {
-          this._handleSdkMessage(msg);
-        },
-        onerror: (err: ErrorEvent) => {
-          this.logger.error(`Gemini Live SDK error: ${err.message}`);
-          this.emit('error', new Error(err.message));
-        },
-        onclose: (evt: CloseEvent) => {
-          this.logger.warn(`Gemini Live SDK: cerrado code=${evt.code} reason=${evt.reason}`);
-          if (!this.closed) this.emit('close');
-        },
+        onmessage: () => { },
       },
     });
     this.logger.log('GeminiLiveSession conectada via SDK');
+    this._startMessageLoop();
+  }
+
+  private async _startMessageLoop() {
+    try {
+      for await (const msg of this.session) {
+        if (this.closed) break;
+        this._handleSdkMessage(msg);
+      }
+    } catch (err) {
+      this.logger.error(`Error en el loop de mensajes de Gemini: ${err.message}`);
+      if (!this.closed) this.emit('error', err);
+    } finally {
+      this.logger.warn('Gemini Live SDK: loop cerrado');
+      if (!this.closed) this.emit('close');
+    }
   }
 
   private _handleSdkMessage(msg: any) {
@@ -202,35 +205,41 @@ export class GeminiLiveSession extends EventEmitter {
 
   sendAudio(base64Audio: string) {
     if (!this.session || this.closed) return;
-    this.session.sendRealtimeInput({
-      media: { mimeType: 'audio/pcm;rate=16000', data: base64Audio },
+    this.session.send({
+      realtimeInput: {
+        mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Audio }]
+      },
     });
   }
 
   sendImage(base64Image: string) {
     if (!this.session || this.closed) return;
-    this.session.sendRealtimeInput({
-      media: { mimeType: 'image/jpeg', data: base64Image },
+    this.session.send({
+      realtimeInput: {
+        mediaChunks: [{ mimeType: 'image/jpeg', data: base64Image }]
+      },
     });
   }
 
   sendText(text: string) {
     if (!this.session || this.closed) return;
-    this.session.sendClientContent({
-      turns: [{ role: 'user', parts: [{ text }] }],
-      turnComplete: false,
+    this.session.send({
+      clientContent: {
+        turns: [{ role: 'user', parts: [{ text }] }],
+        turnComplete: false,
+      },
     });
   }
 
   /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
   signalTurnComplete() {
     if (!this.session || this.closed) return;
-    this.session.sendClientContent({ turnComplete: true });
+    this.session.send({ clientContent: { turns: [], turnComplete: true } });
   }
 
   sendToolResponse(toolResponses: any[]) {
     if (!this.session || this.closed) return;
-    this.session.sendToolResponse({ functionResponses: toolResponses });
+    this.session.send({ toolResponse: { functionResponses: toolResponses } });
   }
 
   close() {

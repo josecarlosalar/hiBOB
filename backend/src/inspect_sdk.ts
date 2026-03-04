@@ -3,29 +3,56 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 async function inspect() {
-    const genAI = new GoogleGenAI({
-        vertexai: true,
-        project: process.env.GCP_PROJECT_ID || 'test',
-        location: process.env.GCP_LOCATION || 'us-central1',
-    });
+    console.log('--- SDK Inspection ---');
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        console.error('Error: GEMINI_API_KEY no encontrada en .env');
+        return;
+    }
 
-    console.log('--- GenAI Inspection ---');
-    console.log('Methods:', Object.keys(genAI));
-
-    // En @google/genai (Unified SDK), no existe getGenerativeModel en la instancia principal.
-    // Se usa directamente genAI.models o se inspecciona el objeto models.
-    console.log('--- Models Inspection ---');
-    console.log('Available in .models:', Object.keys(genAI.models));
+    const genAI = new GoogleGenAI({ apiKey });
+    console.log('SDK initialized with API Key');
 
     try {
-        const response = await genAI.models.generateContent({
+        console.log('Iniciando live.connect...');
+        const session = await genAI.live.connect({
             model: 'gemini-2.0-flash-exp',
-            contents: [{ role: 'user', parts: [{ text: 'Hola, di "Conexión exitosa"' }] }]
+            config: {
+                systemInstruction: { parts: [{ text: 'Di solo "Test Live OK"' }] }
+            },
+            callbacks: {
+                onmessage: () => { }
+            }
         });
-        console.log('--- Test Response ---');
-        console.log('Response text:', response.text);
+
+        console.log('Session result:', Object.keys(session));
+        console.log('Session constructor:', session.constructor.name);
+
+        // Intentar enviar un mensaje de texto
+        console.log('Enviando mensaje de prueba...');
+        (session as any).send({
+            clientContent: {
+                turns: [{ role: 'user', parts: [{ text: 'Hola, prueba de live' }] }],
+                turnComplete: true
+            }
+        });
+
+        // Escuchar mensajes (asumiendo iterador asíncrono)
+        console.log('Esperando respuesta (vía iterador)...');
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de 10s')), 10000));
+
+        const messagePromise = (async () => {
+            for await (const msg of (session as any)) {
+                console.log('Mensaje recibido:', JSON.stringify(msg, null, 2));
+                break; // Solo queremos el primero para el test
+            }
+        })();
+
+        await Promise.race([messagePromise, timeoutPromise]);
+        console.log('Prueba finalizada con éxito');
+
     } catch (err) {
-        console.error('Error al generar contenido:', err);
+        console.error('Error durante la inspección Live:', err);
     }
 }
 
