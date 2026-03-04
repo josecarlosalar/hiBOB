@@ -118,6 +118,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (payload.frameBase64) {
         session.sendImage(payload.frameBase64);
       }
+      // Señalizar fin de turno para que Gemini genere la respuesta
+      session.signalTurnComplete();
     } catch (err) {
       this.logger.error(`Error enviando a Gemini: ${err.message}`);
     }
@@ -133,7 +135,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       if (payload.frameBase64) {
+        if (payload.prompt) {
+          session.sendText(payload.prompt);
+        }
         session.sendImage(payload.frameBase64);
+        session.signalTurnComplete();
       }
     } catch (err) {
       this.logger.error(`Error enviando frame a Gemini: ${err.message}`);
