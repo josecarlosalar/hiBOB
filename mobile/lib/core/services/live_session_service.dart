@@ -104,6 +104,7 @@ class LiveSessionService {
   }) {
     if (_state != LiveSessionState.connected) return;
 
+    debugPrint('[LiveSessionService] Sending voice_frame: audio=${audioBase64.length} chars, frame=${frameBase64.length} chars');
     _socket?.emit('voice_frame', {
       'conversationId': conversationId,
       'frameBase64': frameBase64,
@@ -120,6 +121,7 @@ class LiveSessionService {
   }) {
     if (_state != LiveSessionState.connected) return;
 
+    debugPrint('[LiveSessionService] Sending frame: prompt="$prompt", frame=${frameBase64.length} chars');
     _socket?.emit('frame', {
       'conversationId': conversationId,
       'frameBase64': frameBase64,
