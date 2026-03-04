@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui'; // Necesario para BackdropFilter e ImageFilter
 import 'dart:convert';
 import 'dart:io';
@@ -31,7 +32,6 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
-
   // Cámara
   CameraController? _cameraCtrl;
 
@@ -44,10 +44,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   // Estado
   AssistantState _state = AssistantState.inactive;
   String _conversationId = '';
-  String _transcription = '';   // lo que dijo el usuario
-  String _geminiText = '';      // respuesta acumulada (streaming + final)
+  String _transcription = ''; // lo que dijo el usuario
+  String _geminiText = ''; // respuesta acumulada (streaming + final)
   String? _navigationInstruction; // Instrucción de navegación actual
-  Uint8List? _lastFrameBytes;   // último frame capturado para mostrar en pantalla
+  Uint8List? _lastFrameBytes; // último frame capturado para mostrar en pantalla
 
   // VAD (Voice Activity Detection)
   static const double _vadThresholdDb = -35.0;
@@ -134,11 +134,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onStateChange.listen((s) {
         if (!mounted) return;
         if (s == LiveSessionState.connected) _startListening();
-        if (s == LiveSessionState.error) _setStateIfMounted(AssistantState.inactive);
+        if (s == LiveSessionState.error)
+          _setStateIfMounted(AssistantState.inactive);
       }),
       _liveSession.onTranscription.listen((text) {
         if (!mounted) return;
-        setState(() { _transcription = text; _geminiText = ''; });
+        setState(() {
+          _transcription = text;
+          _geminiText = '';
+        });
         _lastInteractionTime = DateTime.now();
       }),
       _liveSession.onChunk.listen((chunk) {
@@ -153,7 +157,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onInterruption.listen((_) {
         if (!mounted) return;
-        this.logger.log('Interrupción detectada por Gemini');
+        debugPrint('Interrupción detectada por Gemini');
         _stopSpeaking();
       }),
       _liveSession.onDone.listen((text) {
@@ -185,7 +189,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _processAmplitude(Amplitude amp) {
-    if (_state != AssistantState.listening && _state != AssistantState.recording) return;
+    if (_state != AssistantState.listening &&
+        _state != AssistantState.recording) return;
 
     final now = DateTime.now();
     final isSpeaking = amp.current > _vadThresholdDb;
@@ -202,7 +207,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } else {
       if (_isVoiceActive) {
         _silenceStartTime ??= now;
-        final silenceDuration = now.difference(_silenceStartTime!).inMilliseconds;
+        final silenceDuration =
+            now.difference(_silenceStartTime!).inMilliseconds;
         final recordDuration = now.difference(_voiceStartTime!).inMilliseconds;
 
         if (silenceDuration >= _silenceMs && recordDuration >= _minRecordMs) {
@@ -284,7 +290,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.sendFrame(
           conversationId: _conversationId,
           frameBase64: frame,
-          prompt: 'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
+          prompt:
+              'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
         );
       },
     );
@@ -335,7 +342,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _amplitudeSub = null;
     _proactiveTimer?.cancel();
     _proactiveTimer = null;
-    for (final sub in _subs) { sub.cancel(); }
+    for (final sub in _subs) {
+      sub.cancel();
+    }
     _subs.clear();
     _tts.stop();
     _liveSession.disconnect();
@@ -344,10 +353,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _setStateIfMounted(AssistantState newState) {
     if (!mounted || _state == newState) return;
-    
+
     // Feedback háptico al cambiar de estado para accesibilidad
     _triggerStateHaptics(newState);
-    
+
     setState(() => _state = newState);
   }
 
@@ -381,7 +390,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void dispose() {
     _amplitudeSub?.cancel();
     _proactiveTimer?.cancel();
-    for (final sub in _subs) { sub.cancel(); }
+    for (final sub in _subs) {
+      sub.cancel();
+    }
     _liveSession.disconnect();
     _liveSession.dispose();
     _tts.dispose();
@@ -398,8 +409,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _toggleFlashLocally() async {
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return;
     try {
-      final newMode = _cameraCtrl!.value.flashMode == FlashMode.torch 
-          ? FlashMode.off 
+      final newMode = _cameraCtrl!.value.flashMode == FlashMode.torch
+          ? FlashMode.off
           : FlashMode.torch;
       await _cameraCtrl!.setFlashMode(newMode);
       setState(() {});
@@ -491,7 +502,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               ? CameraPreview(_cameraCtrl!)
               : Container(
                   color: Colors.grey[900],
-                  child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64),
+                  child: const Icon(Icons.camera_alt,
+                      color: Colors.white24, size: 64),
                 ),
         ),
       ),
@@ -520,15 +532,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _state == AssistantState.inactive 
-                        ? 'hiBOB Desconectado' 
+                    _state == AssistantState.inactive
+                        ? 'hiBOB Desconectado'
                         : 'hiBOB en línea',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 _CircleButton(
-                  icon: _cameraCtrl?.value.flashMode == FlashMode.torch 
-                      ? Icons.flashlight_on 
+                  icon: _cameraCtrl?.value.flashMode == FlashMode.torch
+                      ? Icons.flashlight_on
                       : Icons.flashlight_off,
                   onTap: () => _toggleFlashLocally(),
                 ),
@@ -570,7 +583,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                         child: Text(
                           _transcription,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14),
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 14),
                         ),
                       ),
                     const SizedBox(height: 12),
@@ -580,7 +595,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       value: _proactiveIntervalSec,
                       onChanged: (v) {
                         setState(() => _proactiveIntervalSec = v);
-                        if (_state == AssistantState.listening) _startProactiveTimer();
+                        if (_state == AssistantState.listening)
+                          _startProactiveTimer();
                       },
                     ),
                   ],
@@ -604,7 +620,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       case AssistantState.speaking:
         return _SpeakingWave(anim: _waveAnim, colors: colors);
       default:
-        return const Text('Presiona el botón para comenzar', 
+        return const Text('Presiona el botón para comenzar',
             style: TextStyle(color: Colors.white54));
     }
   }
@@ -617,9 +633,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       child: Center(
         child: Semantics(
           button: true,
-          label: _state == AssistantState.inactive ? 'Iniciar asistente' : 'Detener asistente',
+          label: _state == AssistantState.inactive
+              ? 'Iniciar asistente'
+              : 'Detener asistente',
           child: GestureDetector(
-            onTap: _state == AssistantState.inactive ? _startSession : _stopSession,
+            onTap: _state == AssistantState.inactive
+                ? _startSession
+                : _stopSession,
             child: Container(
               width: 72,
               height: 72,
@@ -639,7 +659,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ],
               ),
               child: Icon(
-                _state == AssistantState.inactive ? Icons.power_settings_new : Icons.stop,
+                _state == AssistantState.inactive
+                    ? Icons.power_settings_new
+                    : Icons.stop,
                 color: Colors.white,
                 size: 32,
               ),
@@ -806,7 +828,8 @@ class _ListeningWave extends StatelessWidget {
         children: [
           Icon(Icons.mic_none_rounded, color: Colors.white60, size: 36),
           SizedBox(height: 6),
-          Text('Escuchando…', style: TextStyle(color: Colors.white54, fontSize: 13)),
+          Text('Escuchando…',
+              style: TextStyle(color: Colors.white54, fontSize: 13)),
         ],
       ),
     );
@@ -829,7 +852,10 @@ class _RecordingIndicator extends StatelessWidget {
           SizedBox(height: 6),
           Text(
             'Grabando…',
-            style: TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: Colors.redAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -847,17 +873,30 @@ class _StatusIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     Color color;
     switch (state) {
-      case AssistantState.listening: color = Colors.greenAccent; break;
-      case AssistantState.recording: color = Colors.redAccent; break;
-      case AssistantState.processing: color = Colors.purpleAccent; break;
-      case AssistantState.speaking: color = Colors.cyanAccent; break;
-      default: color = Colors.white24;
+      case AssistantState.listening:
+        color = Colors.greenAccent;
+        break;
+      case AssistantState.recording:
+        color = Colors.redAccent;
+        break;
+      case AssistantState.processing:
+        color = Colors.purpleAccent;
+        break;
+      case AssistantState.speaking:
+        color = Colors.cyanAccent;
+        break;
+      default:
+        color = Colors.white24;
     }
     return Container(
       width: 10,
       height: 10,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: color, boxShadow: [
-        BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 4, spreadRadius: 1),
+      decoration:
+          BoxDecoration(shape: BoxShape.circle, color: color, boxShadow: [
+        BoxShadow(
+            color: color.withValues(alpha: 0.5),
+            blurRadius: 4,
+            spreadRadius: 1),
       ]),
     );
   }
@@ -880,7 +919,8 @@ class _CyberSpinner extends StatelessWidget {
           ),
         ),
         SizedBox(height: 12),
-        Text('Procesando...', style: TextStyle(color: Colors.white70, fontSize: 14)),
+        Text('Procesando...',
+            style: TextStyle(color: Colors.white70, fontSize: 14)),
       ],
     );
   }
@@ -907,11 +947,16 @@ class _MainButton extends StatelessWidget {
       child: FilledButton.icon(
         onPressed: onTap,
         style: FilledButton.styleFrom(
-          backgroundColor: isActive ? colors.errorContainer : colors.primaryContainer,
-          foregroundColor: isActive ? colors.onErrorContainer : colors.onPrimaryContainer,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          backgroundColor:
+              isActive ? colors.errorContainer : colors.primaryContainer,
+          foregroundColor:
+              isActive ? colors.onErrorContainer : colors.onPrimaryContainer,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        icon: Icon(isActive ? Icons.stop_rounded : Icons.spatial_audio_off_rounded, size: 22),
+        icon: Icon(
+            isActive ? Icons.stop_rounded : Icons.spatial_audio_off_rounded,
+            size: 22),
         label: Text(
           isActive ? 'Detener' : 'Iniciar conversación',
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
@@ -957,7 +1002,7 @@ class _IntervalSlider extends StatelessWidget {
                 value: value.toDouble(),
                 min: 3,
                 max: 30,
-                divisions: 9,  // 3, 6, 9, 12, 15, 18, 21, 24, 27, 30
+                divisions: 9, // 3, 6, 9, 12, 15, 18, 21, 24, 27, 30
                 onChanged: (v) => onChanged(v.round()),
               ),
             ),
@@ -994,7 +1039,8 @@ class _NavigationBox extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.near_me_rounded, color: colors.onSecondaryContainer, size: 28),
+          Icon(Icons.near_me_rounded,
+              color: colors.onSecondaryContainer, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
