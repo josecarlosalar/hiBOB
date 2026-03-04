@@ -156,8 +156,8 @@ export class GeminiLiveSession extends EventEmitter {
         reject(err);
       });
 
-      this.ws.on('close', () => {
-        this.logger.log('Conexión con Gemini Live API cerrada');
+      this.ws.on('close', (code, reason) => {
+        this.logger.warn(`Conexión con Gemini Live API cerrada: code=${code} reason=${reason?.toString()}`);
         this.emit('close');
       });
     });
@@ -292,10 +292,11 @@ export class AiService implements OnModuleInit {
 
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
     const project = this.configService.get<string>('GCP_PROJECT_ID');
-    const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
-    const modelId = 'gemini-2.0-flash-exp'; // Forzado para Live API
+    // La Live API de Gemini en Vertex AI solo está disponible en us-central1
+    const liveLocation = 'us-central1';
+    const modelId = 'gemini-2.0-flash-live-preview-04-09'; // Modelo compatible con Live API
 
-    const url = `wss://${location}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent?project=${project}&location=${location}`;
+    const url = `wss://${liveLocation}-aiplatform.googleapis.com/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent?project=${project}&location=${liveLocation}`;
 
     const client = await this.auth.getClient();
     const tokenResponse = await client.getAccessToken();
@@ -303,7 +304,7 @@ export class AiService implements OnModuleInit {
 
     if (!token) throw new Error('No se pudo obtener el token de acceso de GCP');
 
-    const modelPath = `projects/${project}/locations/${location}/publishers/google/models/${modelId}`;
+    const modelPath = `projects/${project}/locations/${liveLocation}/publishers/google/models/${modelId}`;
     const session = new GeminiLiveSession(url, token, modelPath, options);
     await session.connect();
     return session;
