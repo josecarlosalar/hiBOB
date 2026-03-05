@@ -128,16 +128,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     try {
       this.logger.log(`Cliente -> Gemini [voice_frame]: audio=${payload.audioBase64?.length || 0} bytes, frame=${payload.frameBase64?.length || 0} bytes`);
-      // En la Multimodal Live API, enviamos audio e imagen directamente.
-      // El audio debe ser LPCM 16kHz (enviado por el cliente).
       if (payload.audioBase64) {
-        session.sendAudio(payload.audioBase64);
+        session.sendAudioFrame(payload.audioBase64);
       }
       if (payload.frameBase64) {
-        session.sendImage(payload.frameBase64);
+        session.sendFrameWithPrompt(payload.frameBase64);
       }
-      // Señalizar fin de turno para que Gemini genere la respuesta
-      session.signalTurnComplete();
     } catch (err) {
       this.logger.error(`Error enviando a Gemini (voice_frame): ${err.message}`);
     }
@@ -154,11 +150,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       if (payload.frameBase64) {
         this.logger.log(`Cliente -> Gemini [frame]: prompt="${payload.prompt || ''}", frame=${payload.frameBase64.length} bytes`);
-        if (payload.prompt) {
-          session.sendText(payload.prompt);
-        }
-        session.sendImage(payload.frameBase64);
-        session.signalTurnComplete();
+        session.sendFrameWithPrompt(payload.frameBase64, payload.prompt);
       }
     } catch (err) {
       this.logger.error(`Error enviando frame a Gemini (frame): ${err.message}`);
