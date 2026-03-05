@@ -559,7 +559,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         auraColor = Colors.cyanAccent.withValues(alpha: 0.4);
         break;
       default:
-        auraColor = Colors.transparent;
+        auraColor = colors.primary.withValues(alpha: 0.15); // Sutil aura púrpura en idle
     }
 
     return AnimatedContainer(
@@ -569,10 +569,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         gradient: RadialGradient(
           colors: [
             auraColor,
+            Colors.black.withValues(alpha: 0.8), // Menos negro puro para que el aura respire
             Colors.black,
           ],
           center: Alignment.center,
-          radius: _state == AssistantState.processing ? 1.5 : 1.0,
+          radius: _state == AssistantState.processing ? 1.8 : 1.2,
         ),
       ),
     );
@@ -669,9 +670,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.4),
-                  border: Border.all(color: Colors.white10),
+                  color: Colors.black.withValues(alpha: 0.65), // Más opaco para mejor contraste
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
                   borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
                 child: Column(
                   children: [
