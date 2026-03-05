@@ -78,8 +78,8 @@ hiBOB es un agente de IA multimodal que utiliza la **Gemini Multimodal Live API*
 |---|---|---|
 | Framework | NestJS | ^11.x |
 | Runtime | Node.js | LTS |
-| IA | Vertex AI (Multimodal Live API) | SDK `@google/genai` |
-| Modelo | `gemini-live-2.5-flash-preview-native-audio-09-2025` | (Live, solo AUDIO) |
+| IA | Vertex AI (Multimodal Live API) | SDK `@google/genai` (v1.43+) |
+| Modelo | `models/gemini-2.0-flash` | (Live GA, bidi multimodal) |
 | WebSocket | `@google/genai` live.connect() + `socket.io` | — |
 | Auth | Firebase Admin + Google Auth (GCP Tokens) | — |
 | Base de datos | Firestore (Firebase) | — |
@@ -153,26 +153,31 @@ hiBOB usa el SDK oficial `@google/genai` con Vertex AI (cuenta de servicio GCP).
 ```typescript
 const liveAi = new GoogleGenAI({ vertexai: true, project, location });
 const session = await liveAi.live.connect({
-  model: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
+  model: 'models/gemini-2.0-flash',
   config: {
-    responseModalities: [Modality.AUDIO],       // Solo audio — sin texto
+    responseModalities: [Modality.AUDIO],       // Audio bidi
     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } } },
-    inputAudioTranscription: {},                // Transcripción de lo que dice el usuario
-    outputAudioTranscription: {},               // Transcripción de la respuesta (logs)
+    inputAudioTranscription: {},                // Transcripción del usuario
+    outputAudioTranscription: {},               // Transcripción de Gemini
     tools: AGENT_TOOLS,
   },
+  // Patrón de Callbacks (SDK v1.43+)
+  onmessage: (msg) => this._handleSdkMessage(msg),
+  onerror: (err) => this.logger.error(`Error SDK: ${err.message}`),
+  onclose: () => this.logger.warn('Sesión cerrada'),
 });
 ```
 
 **Clase `GeminiLiveSession`:**
 Clase encargada de la comunicación bidi-stream:
 
-- `connect()`: Establece sesión Live con Gemini via SDK oficial.
-- `sendAudio(base64)`: Envía chunks de audio LPCM 16kHz del usuario.
-- `sendImage(base64)`: Envía frames de cámara JPEG.
-- `sendText(text)`: Envía texto al turno del usuario.
-- `signalTurnComplete()`: Señaliza a Gemini que el usuario terminó de hablar.
-- `_handleSdkMessage(msg)`: Recibe audio PCM 24kHz, transcripciones, interrupciones y *tool calls*.
+- `connect()`: Establece sesión Live con callbacks (`onmessage`, etc).
+- `sendAudio(base64)`: Usa `session.sendRealtimeInput({ audio: ... })`.
+- `sendImage(base64)`: Usa `session.sendRealtimeInput({ media: ... })` (JPEG).
+- `sendText(text)`: Usa `session.sendClientContent({ turns })`.
+- `signalTurnComplete()`: Usa `session.sendClientContent({ turnComplete: true })`.
+- `sendToolResponse(responses)`: Usa `session.sendToolResponse()`.
+- `_handleSdkMessage(msg)`: Procesa `LiveServerMessage` (no iterador).
 
 **Variables de entorno relevantes:**
 ```
@@ -553,7 +558,7 @@ El historial de la sesión Live se mantiene en memoria en el `LiveGateway` por s
 ```env
 GCP_PROJECT_ID=websites-technology
 GCP_LOCATION=us-central1
-GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MODEL=gemini-2.0-flash
 GEMINI_MAX_OUTPUT_TOKENS=8192
 GEMINI_TEMPERATURE=1.0
 GOOGLE_APPLICATION_CREDENTIALS=./credentials/gemini-agent-sa-key.json
