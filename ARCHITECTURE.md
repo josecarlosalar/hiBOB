@@ -1,6 +1,6 @@
 # hiBOB — Estado del Desarrollo y Arquitectura Técnica
 
-> Documento generado: 2026-03-04
+> Documento generado: 2026-03-05
 > Proyecto: **Gemini Live Agent Challenge** — Asistente multimodal accesible (vista + habla) para personas con discapacidad visual
 
 ---
@@ -78,9 +78,9 @@ hiBOB es un agente de IA multimodal que utiliza la **Gemini Multimodal Live API*
 |---|---|---|
 | Framework | NestJS | ^11.x |
 | Runtime | Node.js | LTS |
-| IA | Vertex AI (Multimodal Live API) | v1beta1 |
-| Modelo | `gemini-2.0-flash-exp` | (Live) |
-| WebSocket | `ws` (Bidi-stream) + `socket.io` | — |
+| IA | Vertex AI (Multimodal Live API) | SDK `@google/genai` |
+| Modelo | `gemini-live-2.5-flash-preview-native-audio-09-2025` | (Live, solo AUDIO) |
+| WebSocket | `@google/genai` live.connect() + `socket.io` | — |
 | Auth | Firebase Admin + Google Auth (GCP Tokens) | — |
 | Base de datos | Firestore (Firebase) | — |
 | Búsqueda web | Tavily (`@tavily/core`) | ^0.7.2 |
@@ -89,8 +89,8 @@ hiBOB es un agente de IA multimodal que utiliza la **Gemini Multimodal Live API*
 | Componente | Tecnología | Versión |
 |---|---|---|
 | Framework | Flutter | SDK stable |
-| Reproducción LPCM | `flutter_pcm_sound` | ^1.1.0 |
-| Registro PCM | `record` (LPCM 16-bit 16kHz) | 6.1.2 |
+| Reproducción LPCM | `flutter_pcm_sound` (24kHz salida Gemini) | ^1.1.0 |
+| Registro PCM | `record` (LPCM 16-bit 16kHz entrada usuario) | 6.1.2 |
 | Linterna | `torch_light` | ^1.0.1 |
 | Vibración | `vibration` | ^2.0.1 |
 | Diseño | Glassmorphism & Aura UI | Custom |
@@ -148,29 +148,37 @@ backend/src/
 ### 3.2 AiService — Agentic loop con Gemini
 
 **Inicialización y Conexión:**
-hiBOB utiliza una conexión directa por WebSocket a la Vertex AI Multimodal Live API. Para ello, obtiene un token de acceso dinámico de Google Cloud:
+hiBOB usa el SDK oficial `@google/genai` con Vertex AI (cuenta de servicio GCP). La conexión Live se establece a través de `ai.live.connect()` del SDK, que gestiona internamente el WebSocket bidi-stream:
 
 ```typescript
-const auth = new GoogleAuth({
-  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+const liveAi = new GoogleGenAI({ vertexai: true, project, location });
+const session = await liveAi.live.connect({
+  model: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
+  config: {
+    responseModalities: [Modality.AUDIO],       // Solo audio — sin texto
+    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } } },
+    inputAudioTranscription: {},                // Transcripción de lo que dice el usuario
+    outputAudioTranscription: {},               // Transcripción de la respuesta (logs)
+    tools: AGENT_TOOLS,
+  },
 });
-const client = await auth.getClient();
-const token = (await client.getAccessToken()).token;
-const url = `wss://${location}-aiplatform.googleapis.com/v1beta1/.../models/${modelId}:streamGenerateContent`;
 ```
 
 **Clase `GeminiLiveSession`:**
-Nueva clase encargada de la comunicación bidi-stream:
-- `sendSetup()`: Configura el modelo (instrucciones, herramientas).
-- `sendAudio(base64)`: Envía chunks de audio LPCM 16kHz.
-- `sendImage(base64)`: Envía frames de cámara.
-- `handleMessage(msg)`: Recibe audio, texto, interrupciones y *tool calls*.
+Clase encargada de la comunicación bidi-stream:
+
+- `connect()`: Establece sesión Live con Gemini via SDK oficial.
+- `sendAudio(base64)`: Envía chunks de audio LPCM 16kHz del usuario.
+- `sendImage(base64)`: Envía frames de cámara JPEG.
+- `sendText(text)`: Envía texto al turno del usuario.
+- `signalTurnComplete()`: Señaliza a Gemini que el usuario terminó de hablar.
+- `_handleSdkMessage(msg)`: Recibe audio PCM 24kHz, transcripciones, interrupciones y *tool calls*.
 
 **Variables de entorno relevantes:**
 ```
 GCP_PROJECT_ID=websites-technology
 GCP_LOCATION=us-central1
-GEMINI_MODEL=gemini-2.0-flash-exp
+GEMINI_MODEL=gemini-2.5-flash          ← para endpoints REST (no Live)
 GEMINI_MAX_OUTPUT_TOKENS=8192
 GEMINI_TEMPERATURE=1.0
 GOOGLE_APPLICATION_CREDENTIALS=./credentials/gemini-agent-sa-key.json

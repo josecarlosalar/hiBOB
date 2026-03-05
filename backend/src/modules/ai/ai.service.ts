@@ -141,10 +141,15 @@ export class GeminiLiveSession extends EventEmitter {
     this.session = await this.ai.live.connect({
       model: this.modelId,
       config: {
-        responseModalities: [Modality.AUDIO, Modality.TEXT],
+        responseModalities: [Modality.AUDIO],
         systemInstruction: {
           parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, un asistente amable para personas con discapacidad visual. Responde de forma concisa y natural.' }],
         },
+        speechConfig: {
+          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } },
+        },
+        inputAudioTranscription: {},
+        outputAudioTranscription: {},
         tools: AGENT_TOOLS,
       },
       callbacks: {
@@ -172,15 +177,24 @@ export class GeminiLiveSession extends EventEmitter {
 
   private _handleSdkMessage(msg: any) {
     this.logger.debug(`Gemini SDK Message: ${JSON.stringify(msg)}`);
-    // serverContent: texto y audio de respuesta
+
     if (msg.serverContent) {
-      const { modelTurn, turnComplete, interrupted } = msg.serverContent;
+      const { modelTurn, turnComplete, interrupted, outputTranscription, inputTranscription } = msg.serverContent;
+
+      // Transcripción del audio del usuario (lo que dijo el usuario)
+      if (inputTranscription?.text) {
+        this.logger.log(`Input Transcription: ${inputTranscription.text}`);
+        this.emit('transcription', inputTranscription.text);
+      }
+
+      // Transcripción de la respuesta de Gemini (para logs, no se envía al móvil como texto)
+      if (outputTranscription?.text) {
+        this.logger.log(`Output Transcription: ${outputTranscription.text}`);
+      }
+
       if (modelTurn?.parts) {
         for (const part of modelTurn.parts) {
-          if (part.text) {
-            this.logger.log(`Gemini Text Part: ${part.text}`);
-            this.emit('text', part.text);
-          }
+          // Audio de respuesta (PCM 24kHz del modelo nativo)
           if (part.inlineData?.data) {
             this.logger.log(`Gemini Audio Part: ${part.inlineData.data.length} bytes`);
             this.emit('audio', part.inlineData.data);
@@ -196,6 +210,7 @@ export class GeminiLiveSession extends EventEmitter {
         this.emit('interruption');
       }
     }
+
     // toolCall: llamadas a herramientas del agente
     if (msg.toolCall) {
       this.logger.log(`Gemini Tool Call: ${JSON.stringify(msg.toolCall)}`);
@@ -288,13 +303,14 @@ export class AiService implements OnModuleInit {
   // ─── Live Session ──────────────────────────────────────────────────────────
 
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
-    // Usar el SDK @google/genai con AI Studio API key para la Live API.
-    // Esto cumple el requisito del hackathon de usar el SDK oficial de Google GenAI.
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) throw new Error('GEMINI_API_KEY no configurada');
+    // Usar el SDK @google/genai con Vertex AI (cuenta de servicio GCP).
+    // Cumple los requisitos del hackathon: SDK oficial de Google GenAI + Vertex AI.
+    const project = this.configService.get<string>('GCP_PROJECT_ID');
+    const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
 
-    const liveAi = new GoogleGenAI({ apiKey });
-    const modelId = 'gemini-2.0-flash-exp'; // Modelo disponible para Live API en AI Studio
+    const liveAi = new GoogleGenAI({ vertexai: true, project, location });
+    // Modelo nativo de audio para Live API en Vertex AI (hackathon requirement)
+    const modelId = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
 
     const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
