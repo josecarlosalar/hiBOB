@@ -79,7 +79,7 @@ hiBOB es un agente de IA multimodal que utiliza la **Gemini Multimodal Live API*
 | Framework | NestJS | ^11.x |
 | Runtime | Node.js | LTS |
 | IA | Vertex AI (Multimodal Live API) | SDK `@google/genai` (v1.43+) |
-| Modelo | `models/gemini-2.0-flash` | (Live GA, bidi multimodal) |
+| Modelo Live | `gemini-2.0-flash-live-001` | (Live GA, bidi multimodal imagen+audio) |
 | WebSocket | `@google/genai` live.connect() + `socket.io` | — |
 | Auth | Firebase Admin + Google Auth (GCP Tokens) | — |
 | Base de datos | Firestore (Firebase) | — |
@@ -172,12 +172,12 @@ const session = await liveAi.live.connect({
 Clase encargada de la comunicación bidi-stream:
 
 - `connect()`: Establece sesión Live con callbacks (`onmessage`, etc).
-- `sendAudio(base64)`: Usa `session.sendRealtimeInput({ audio: ... })`.
-- `sendImage(base64)`: Usa `session.sendRealtimeInput({ media: ... })` (JPEG).
-- `sendText(text)`: Usa `session.sendClientContent({ turns })`.
-- `signalTurnComplete()`: Usa `session.sendClientContent({ turnComplete: true })`.
+- `sendFrameWithPrompt(base64Image, prompt?)`: Envía imagen + texto opcinal en **un único** `sendClientContent` con `turnComplete: true`, garantizando que Gemini genere la respuesta.
+- `sendAudioFrame(base64)`: Usa `session.sendRealtimeInput({ audio: ... })` para audio en tiempo real.
 - `sendToolResponse(responses)`: Usa `session.sendToolResponse()`.
 - `_handleSdkMessage(msg)`: Procesa `LiveServerMessage` (no iterador).
+
+> **Por qué un solo mensaje:** Enviar texto e imagen en llamadas separadas con `turnComplete: false` seguido de un tercer mensaje vacío con `turnComplete: true` es frágil. El SDK puede ignorar el turn complete si no hay contenido adjunto. Consolidar todo en un único `sendClientContent` con `turnComplete: true` es el patrón fiable.
 
 **Variables de entorno relevantes:**
 ```
