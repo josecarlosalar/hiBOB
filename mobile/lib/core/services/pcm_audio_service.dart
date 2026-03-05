@@ -7,7 +7,8 @@ class PcmAudioService {
 
   Future<void> init() async {
     if (_isInitialized) return;
-    await FlutterPcmSound.setup(sampleRate: 16000, channelCount: 1);
+    // El modelo nativo gemini-live-2.5-flash-preview devuelve PCM a 24kHz
+    await FlutterPcmSound.setup(sampleRate: 24000, channelCount: 1);
     _isInitialized = true;
   }
 
