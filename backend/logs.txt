@@ -1,0 +1,473 @@
+2026-03-04 21:17:05 Application is running on: http://localhost:8080
+2026-03-04 21:17:59 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-04 21:18:02 [32m[Nest] 1  - [39m03/04/2026, 9:18:02 PM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1958ms[39m
+2026-03-04 21:18:24 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-04 21:18:24 [32m[Nest] 1  - [39m03/04/2026, 9:18:24 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: ik0mGLDWKB6ZxHUwAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-04 21:18:24 [32m[Nest] 1  - [39m03/04/2026, 9:18:24 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGemini Live SDK: sesi?n abierta[39m
+2026-03-04 21:18:24 [32m[Nest] 1  - [39m03/04/2026, 9:18:24 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-04 21:18:24 [33m[Nest] 1  - [39m03/04/2026, 9:18:24 PM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: cerrado code=1008 reason=models/gemini-2.0-flash-exp is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListMode[39m
+2026-03-04 21:18:28 [32m[Nest] 1  - [39m03/04/2026, 9:18:28 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=19604 bytes[39m
+2026-03-04 21:19:01 [32m[Nest] 1  - [39m03/04/2026, 9:19:01 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=19740 bytes[39m
+2026-03-04 21:19:07 [32m[Nest] 1  - [39m03/04/2026, 9:19:07 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente desconectado: ik0mGLDWKB6ZxHUwAAAB[39m
+2026-03-04 21:21:32 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-04 21:21:32 [32m[Nest] 1  - [39m03/04/2026, 9:21:32 PM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 58ms[39m
+2026-03-04 21:21:44 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-04 21:21:44 [32m[Nest] 1  - [39m03/04/2026, 9:21:44 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: P9rudjX45E8UduiSAAAD (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-04 21:21:44 [32m[Nest] 1  - [39m03/04/2026, 9:21:44 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGemini Live SDK: sesi?n abierta[39m
+2026-03-04 21:21:44 [32m[Nest] 1  - [39m03/04/2026, 9:21:44 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-04 21:21:44 [33m[Nest] 1  - [39m03/04/2026, 9:21:44 PM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: cerrado code=1008 reason=models/gemini-2.0-flash-exp is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListMode[39m
+2026-03-04 21:21:48 [32m[Nest] 1  - [39m03/04/2026, 9:21:48 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=21192 bytes[39m
+2026-03-04 21:22:29 [32m[Nest] 1  - [39m03/04/2026, 9:22:29 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=20612 bytes[39m
+2026-03-04 21:22:29 [32m[Nest] 1  - [39m03/04/2026, 9:22:29 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente desconectado: P9rudjX45E8UduiSAAAD[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +21ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +27ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +5ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +3ms[39m
+2026-03-04 21:32:19 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-04 21:32:19 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-04 21:32:19 [32m[Nest] 1  - [39m03/04/2026, 9:32:19 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+2026-03-04 21:32:19 Application is running on: http://localhost:8080
+2026-03-04 21:38:50 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-04 21:38:52 [32m[Nest] 1  - [39m03/04/2026, 9:38:52 PM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1423ms[39m
+2026-03-04 21:39:04 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-04 21:39:04 [32m[Nest] 1  - [39m03/04/2026, 9:39:04 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: Hlg9AGQz-_ZKWb2yAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-04 21:39:04 [32m[Nest] 1  - [39m03/04/2026, 9:39:04 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-04 21:39:04 [31m[Nest] 1  - [39m03/04/2026, 9:39:04 PM [31m  ERROR[39m [38;5;3m[GeminiLiveSession] [39m[31mError en el loop de mensajes de Gemini: this.session is not async iterable[39m
+2026-03-04 21:39:04 [33m[Nest] 1  - [39m03/04/2026, 9:39:04 PM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-04 21:39:04 /app/dist/modules/ai/ai.service.js:140
+2026-03-04 21:39:04             for await (const msg of this.session) {
+2026-03-04 21:39:04                                          ^
+2026-03-04 21:39:04 TypeError: this.session is not async iterable
+    at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:140:42)
+    at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+    at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-04 21:39:04 Emitted 'error' event on GeminiLiveSession instance at:
+2026-03-04 21:39:04     at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:149:22)
+2026-03-04 21:39:04     at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+2026-03-04 21:39:04     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-03-04 21:39:04     at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+2026-03-04 21:39:04     at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-04 21:39:04 Node.js v22.22.0
+2026-03-04 21:39:12 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +23ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +20ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +4ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:14 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-04 21:39:14 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:14 Application is running on: http://localhost:8080
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: ZAGKDqjSrwHJO4BUAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-04 21:39:14 [32m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-04 21:39:14 [31m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [31m  ERROR[39m [38;5;3m[GeminiLiveSession] [39m[31mError en el loop de mensajes de Gemini: this.session is not async iterable[39m
+2026-03-04 21:39:14 [33m[Nest] 1  - [39m03/04/2026, 9:39:14 PM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-04 21:39:14 /app/dist/modules/ai/ai.service.js:140
+2026-03-04 21:39:14             for await (const msg of this.session) {
+2026-03-04 21:39:14                                          ^
+2026-03-04 21:39:14 TypeError: this.session is not async iterable
+    at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:140:42)
+    at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+    at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-04 21:39:14 Emitted 'error' event on GeminiLiveSession instance at:
+2026-03-04 21:39:14     at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:149:22)
+2026-03-04 21:39:14     at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+2026-03-04 21:39:14     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-03-04 21:39:14     at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+2026-03-04 21:39:14     at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-04 21:39:14 Node.js v22.22.0
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +32ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +22ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +6ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:18 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-04 21:39:18 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-04 21:39:18 [32m[Nest] 1  - [39m03/04/2026, 9:39:18 PM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+2026-03-04 21:39:18 Application is running on: http://localhost:8080
+2026-03-05 07:35:33 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +29ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +28ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +4ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-05 07:35:37 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 07:35:37 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 07:35:37 [32m[Nest] 1  - [39m03/05/2026, 7:35:37 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +1ms[39m
+2026-03-05 07:35:37 Application is running on: http://localhost:8080
+2026-03-05 07:35:39 [32m[Nest] 1  - [39m03/05/2026, 7:35:39 AM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1171ms[39m
+2026-03-05 07:35:43 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-05 07:35:43 [32m[Nest] 1  - [39m03/05/2026, 7:35:43 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: Ohk0u5GUg_H6vAAQAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-05 07:35:43 [32m[Nest] 1  - [39m03/05/2026, 7:35:43 AM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-05 07:35:43 [31m[Nest] 1  - [39m03/05/2026, 7:35:43 AM [31m  ERROR[39m [38;5;3m[GeminiLiveSession] [39m[31mError en el loop de mensajes de Gemini: this.session is not async iterable[39m
+2026-03-05 07:35:43 [33m[Nest] 1  - [39m03/05/2026, 7:35:43 AM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-05 07:35:43 /app/dist/modules/ai/ai.service.js:140
+2026-03-05 07:35:43             for await (const msg of this.session) {
+2026-03-05 07:35:43                                          ^
+2026-03-05 07:35:43 TypeError: this.session is not async iterable
+    at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:140:42)
+    at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+    at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-05 07:35:43 Emitted 'error' event on GeminiLiveSession instance at:
+2026-03-05 07:35:43     at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:149:22)
+2026-03-05 07:35:43     at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:136:14)
+2026-03-05 07:35:43     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-03-05 07:35:43     at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:266:9)
+2026-03-05 07:35:43     at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-05 07:35:43 Node.js v22.22.0
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +23ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +23ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +3ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +5ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +8ms[39m
+2026-03-05 07:36:25 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 07:36:25 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 07:36:25 [32m[Nest] 1  - [39m03/05/2026, 7:36:25 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+2026-03-05 07:36:25 Application is running on: http://localhost:8080
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +22ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +2ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +29ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +4ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +2ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-05 07:43:44 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 07:43:44 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 07:43:44 [32m[Nest] 1  - [39m03/05/2026, 7:43:44 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +1ms[39m
+2026-03-05 07:43:44 Application is running on: http://localhost:8080
+2026-03-05 07:45:49 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-05 07:45:51 [32m[Nest] 1  - [39m03/05/2026, 7:45:51 AM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1568ms[39m
+2026-03-05 07:45:59 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-05 07:45:59 [32m[Nest] 1  - [39m03/05/2026, 7:45:59 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: W2-k_VcyzynownpbAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-05 07:45:59 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 07:46:00 [32m[Nest] 1  - [39m03/05/2026, 7:46:00 AM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-05 07:46:00 [31m[Nest] 1  - [39m03/05/2026, 7:46:00 AM [31m  ERROR[39m [38;5;3m[GeminiLiveSession] [39m[31mError en el loop de mensajes de Gemini: this.session is not async iterable[39m
+2026-03-05 07:46:00 [33m[Nest] 1  - [39m03/05/2026, 7:46:00 AM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-05 07:46:00 /app/dist/modules/ai/ai.service.js:145
+2026-03-05 07:46:00             for await (const msg of this.session) {
+2026-03-05 07:46:00                                          ^
+2026-03-05 07:46:00 TypeError: this.session is not async iterable
+    at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:145:42)
+    at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:141:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:273:9)
+    at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-05 07:46:00 Emitted 'error' event on GeminiLiveSession instance at:
+2026-03-05 07:46:00     at GeminiLiveSession._startMessageLoop (/app/dist/modules/ai/ai.service.js:154:22)
+2026-03-05 07:46:00     at GeminiLiveSession.connect (/app/dist/modules/ai/ai.service.js:141:14)
+2026-03-05 07:46:00     at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+2026-03-05 07:46:00     at async AiService.createLiveSession (/app/dist/modules/ai/ai.service.js:273:9)
+2026-03-05 07:46:00     at async LiveGateway.handleConnection (/app/dist/modules/live/live.gateway.js:73:29)
+2026-03-05 07:46:00 Node.js v22.22.0
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +21ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +22ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +6ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 07:46:11 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 07:46:11 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 07:46:11 [32m[Nest] 1  - [39m03/05/2026, 7:46:11 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+2026-03-05 07:46:11 Application is running on: http://localhost:8080
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +24ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +3ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +29ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +6ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +3ms[39m
+2026-03-05 08:41:07 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 08:41:07 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 08:41:07 [32m[Nest] 1  - [39m03/05/2026, 8:41:07 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+2026-03-05 08:41:07 Application is running on: http://localhost:8080
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +19ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +31ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +6ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-05 08:44:57 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 08:44:57 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 08:44:57 [32m[Nest] 1  - [39m03/05/2026, 8:44:57 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+2026-03-05 08:44:57 Application is running on: http://localhost:8080
+2026-03-05 08:46:12 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-05 08:46:14 [32m[Nest] 1  - [39m03/05/2026, 8:46:14 AM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1651ms[39m
+2026-03-05 08:46:22 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-05 08:46:22 [32m[Nest] 1  - [39m03/05/2026, 8:46:22 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: 3cG6wceock_lreKuAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-05 08:46:22 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:46:23 [32m[Nest] 1  - [39m03/05/2026, 8:46:23 AM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-05 08:46:23 [33m[Nest] 1  - [39m03/05/2026, 8:46:23 AM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-05 08:46:26 [32m[Nest] 1  - [39m03/05/2026, 8:46:26 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=20384 bytes[39m
+2026-03-05 08:46:59 [32m[Nest] 1  - [39m03/05/2026, 8:46:59 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=19868 bytes[39m
+2026-03-05 08:47:22 [32m[Nest] 1  - [39m03/05/2026, 8:47:22 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente desconectado: 3cG6wceock_lreKuAAAB[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +19ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +27ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +2ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +4ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-05 08:53:14 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 08:53:14 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 08:53:14 [32m[Nest] 1  - [39m03/05/2026, 8:53:14 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +3ms[39m
+2026-03-05 08:53:14 Application is running on: http://localhost:8080
+2026-03-05 08:54:57 GET 200 https://hibob-backend-777378009998.europe-west1.run.app/conversation
+2026-03-05 08:54:59 [32m[Nest] 1  - [39m03/05/2026, 8:54:59 AM [32m    LOG[39m [38;5;3m[HTTP] [39m[32mGET /conversation ? 1441ms[39m
+2026-03-05 08:55:10 GET 101 https://hibob-backend-777378009998.europe-west1.run.app/socket.io/?EIO=4&transport=websocket
+2026-03-05 08:55:10 [32m[Nest] 1  - [39m03/05/2026, 8:55:10 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente conectado: YlimieDmXM9Go9mMAAAB (uid=bmQSzuVOMXYnYHkazUka6C5SyES2)[39m
+2026-03-05 08:55:10 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:55:11 [32m[Nest] 1  - [39m03/05/2026, 8:55:11 AM [32m    LOG[39m [38;5;3m[GeminiLiveSession] [39m[32mGeminiLiveSession conectada via SDK[39m
+2026-03-05 08:55:11 [33m[Nest] 1  - [39m03/05/2026, 8:55:11 AM [33m   WARN[39m [38;5;3m[GeminiLiveSession] [39m[33mGemini Live SDK: loop cerrado[39m
+2026-03-05 08:55:14 [32m[Nest] 1  - [39m03/05/2026, 8:55:14 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=20352 bytes[39m
+2026-03-05 08:55:47 [32m[Nest] 1  - [39m03/05/2026, 8:55:47 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente -> Gemini [frame]: prompt="Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. S? conciso y natural.", frame=20336 bytes[39m
+2026-03-05 08:56:02 [32m[Nest] 1  - [39m03/05/2026, 8:56:02 AM [32m    LOG[39m [38;5;3m[LiveGateway] [39m[32mCliente desconectado: YlimieDmXM9Go9mMAAAB[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[NestFactory] [39m[32mStarting Nest application...[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigHostModule dependencies initialized[39m[38;5;3m +28ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mThrottlerModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mHealthModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConfigModule dependencies initialized[39m[38;5;3m +2ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mToolsModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAppModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mLiveModule dependencies initialized[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mAiModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mConversationModule dependencies initialized[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "voice_frame" message[39m[38;5;3m +27ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[WebSocketsController] [39m[32mLiveGateway subscribed to the "frame" message[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAppController {/}:[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/, GET} route[39m[38;5;3m +4ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mHealthController {/health}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/health, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mAiController {/ai}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/generate, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/ai/stream, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mConversationController {/conversation}:[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation, GET} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/chat/stream, POST} route[39m[38;5;3m +0ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/voice, POST} route[39m[38;5;3m +1ms[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/conversation/:conversationId/messages, GET} route[39m[38;5;3m +2ms[39m
+2026-03-05 08:58:32 The user provided project/location will take precedence over the API key from the environment variables.
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[AiService] [39m[32mGoogle GenAI inicializado: proyecto=websites-technology
+2026-03-05 08:58:32 , modelo=gemini-3.1-flash-lite-preview[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[AppModule] [39m[32mFirebase Admin inicializado: proyecto=websites-technology[39m
+2026-03-05 08:58:32 [32m[Nest] 1  - [39m03/05/2026, 8:58:32 AM [32m    LOG[39m [38;5;3m[NestApplication] [39m[32mNest application successfully started[39m[38;5;3m +2ms[39m
+2026-03-05 08:58:32 Application is running on: http://localhost:8080
