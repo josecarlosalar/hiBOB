@@ -139,7 +139,7 @@ export class GeminiLiveSession extends EventEmitter {
 
   async connect(): Promise<void> {
     this.session = await this.ai.live.connect({
-      model: this.modelId,
+      model: 'models/gemini-2.0-flash',
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: {
