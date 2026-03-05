@@ -153,26 +153,23 @@ export class GeminiLiveSession extends EventEmitter {
         tools: AGENT_TOOLS,
       },
       callbacks: {
-        onmessage: () => { },
+        onmessage: (msg: any) => {
+          if (!this.closed) this._handleSdkMessage(msg);
+        },
+        onerror: (err: any) => {
+          this.logger.error(`Error en Gemini: ${err.message || err.error || err}`);
+          if (!this.closed) this.emit('error', err);
+        },
+        onclose: () => {
+          this.logger.warn('Gemini Live SDK: loop cerrado');
+          if (!this.closed) {
+            this.closed = true;
+            this.emit('close');
+          }
+        }
       },
     });
     this.logger.log('GeminiLiveSession conectada via SDK');
-    this._startMessageLoop();
-  }
-
-  private async _startMessageLoop() {
-    try {
-      for await (const msg of this.session) {
-        if (this.closed) break;
-        this._handleSdkMessage(msg);
-      }
-    } catch (err) {
-      this.logger.error(`Error en el loop de mensajes de Gemini: ${err.message}`);
-      if (!this.closed) this.emit('error', err);
-    } finally {
-      this.logger.warn('Gemini Live SDK: loop cerrado');
-      if (!this.closed) this.emit('close');
-    }
   }
 
   private _handleSdkMessage(msg: any) {
