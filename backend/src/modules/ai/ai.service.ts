@@ -173,7 +173,7 @@ export class GeminiLiveSession extends EventEmitter {
   }
 
   private _handleSdkMessage(msg: any) {
-    this.logger.debug(`Gemini SDK Message: ${JSON.stringify(msg)}`);
+    this.logger.log(`[SDK MSG] Keys: ${Object.keys(msg).join(',')} | raw: ${JSON.stringify(msg).substring(0, 200)}`);
 
     if (msg.serverContent) {
       const { modelTurn, turnComplete, interrupted, outputTranscription, inputTranscription } = msg.serverContent;
@@ -217,30 +217,46 @@ export class GeminiLiveSession extends EventEmitter {
 
   sendAudio(base64Audio: string) {
     if (!this.session || this.closed) return;
-    this.session.sendRealtimeInput({
-      audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
-    });
+    try {
+      this.session.sendRealtimeInput({
+        audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendAudio: ${err.message}`);
+    }
   }
 
   sendImage(base64Image: string) {
     if (!this.session || this.closed) return;
-    this.session.sendRealtimeInput({
-      video: { data: base64Image, mimeType: 'image/jpeg' },
-    });
+    try {
+      this.session.sendRealtimeInput({
+        media: { data: base64Image, mimeType: 'image/jpeg' },
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendImage: ${err.message}`);
+    }
   }
 
   sendText(text: string) {
     if (!this.session || this.closed) return;
-    this.session.sendClientContent({
-      turns: [{ role: 'user', parts: [{ text }] }],
-      turnComplete: false,
-    });
+    try {
+      this.session.sendClientContent({
+        turns: [{ role: 'user', parts: [{ text }] }],
+        turnComplete: false,
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendText: ${err.message}`);
+    }
   }
 
   /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
   signalTurnComplete() {
     if (!this.session || this.closed) return;
-    this.session.sendClientContent({ turnComplete: true });
+    try {
+      this.session.sendClientContent({ turnComplete: true });
+    } catch (err) {
+      this.logger.error(`Error en signalTurnComplete: ${err.message}`);
+    }
   }
 
   sendToolResponse(toolResponses: any[]) {
