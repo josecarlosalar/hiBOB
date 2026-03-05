@@ -138,12 +138,8 @@ export class GeminiLiveSession extends EventEmitter {
   }
 
   async connect(): Promise<void> {
-    // En Vertex AI, el nombre del modelo a veces no requiere el prefijo 'models/' 
-    // o requiere la versión específica. Probamos con el string más compatible.
-    const model = 'gemini-2.0-flash-001';
-
     this.session = await this.ai.live.connect({
-      model: model,
+      model: this.modelId,
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: {
@@ -304,7 +300,9 @@ export class AiService implements OnModuleInit {
 
     const liveAi = new GoogleGenAI({ vertexai: true, project, location });
     // Modelo nativo de audio para Live API en Vertex AI (hackathon requirement)
-    const modelId = 'gemini-live-2.5-flash-preview-native-audio-09-2025';
+    // gemini-2.0-flash-live-001: modelo GA de Vertex AI que soporta Live API multimodal
+    // (audio + imagen). El modelo native-audio solo acepta audio, sin visión.
+    const modelId = 'gemini-2.0-flash-live-001';
 
     const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
