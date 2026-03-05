@@ -219,58 +219,30 @@ export class GeminiLiveSession extends EventEmitter {
     }
   }
 
-  sendAudio(base64Audio: string) {
+  /** Envía imagen + texto en un solo turno completo para asegurar que Gemini responda. */
+  sendFrameWithPrompt(base64Image: string, prompt?: string) {
+    if (!this.session || this.closed) return;
+    try {
+      const parts: any[] = [];
+      if (prompt) parts.push({ text: prompt });
+      parts.push({ inlineData: { data: base64Image, mimeType: 'image/jpeg' } });
+      this.session.sendClientContent({
+        turns: [{ role: 'user', parts }],
+        turnComplete: true,
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendFrameWithPrompt: ${err.message}`);
+    }
+  }
+
+  sendAudioFrame(base64Audio: string) {
     if (!this.session || this.closed) return;
     try {
       this.session.sendRealtimeInput({
         audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
       });
     } catch (err) {
-      this.logger.error(`Error en sendAudio: ${err.message}`);
-    }
-  }
-
-  sendImage(base64Image: string) {
-    if (!this.session || this.closed) return;
-    try {
-      // Para frames individuales de cámara, el SDK prefiere enviarlos como parte 
-      // del contenido del cliente para asegurar que el modelo los procese en el turno actual.
-      this.session.sendClientContent({
-        turns: [{
-          role: 'user',
-          parts: [{
-            inlineData: {
-              data: base64Image,
-              mimeType: 'image/jpeg'
-            }
-          }]
-        }],
-        turnComplete: false,
-      });
-    } catch (err) {
-      this.logger.error(`Error en sendImage: ${err.message}`);
-    }
-  }
-
-  sendText(text: string) {
-    if (!this.session || this.closed) return;
-    try {
-      this.session.sendClientContent({
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: false,
-      });
-    } catch (err) {
-      this.logger.error(`Error en sendText: ${err.message}`);
-    }
-  }
-
-  /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
-  signalTurnComplete() {
-    if (!this.session || this.closed) return;
-    try {
-      this.session.sendClientContent({ turnComplete: true });
-    } catch (err) {
-      this.logger.error(`Error en signalTurnComplete: ${err.message}`);
+      this.logger.error(`Error en sendAudioFrame: ${err.message}`);
     }
   }
 
