@@ -138,8 +138,12 @@ export class GeminiLiveSession extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    // En Vertex AI, el nombre del modelo a veces no requiere el prefijo 'models/' 
+    // o requiere la versión específica. Probamos con el string más compatible.
+    const model = 'gemini-2.0-flash-001';
+
     this.session = await this.ai.live.connect({
-      model: 'models/gemini-2.0-flash',
+      model: model,
       config: {
         responseModalities: [Modality.AUDIO],
         systemInstruction: {
@@ -229,8 +233,19 @@ export class GeminiLiveSession extends EventEmitter {
   sendImage(base64Image: string) {
     if (!this.session || this.closed) return;
     try {
-      this.session.sendRealtimeInput({
-        media: { data: base64Image, mimeType: 'image/jpeg' },
+      // Para frames individuales de cámara, el SDK prefiere enviarlos como parte 
+      // del contenido del cliente para asegurar que el modelo los procese en el turno actual.
+      this.session.sendClientContent({
+        turns: [{
+          role: 'user',
+          parts: [{
+            inlineData: {
+              data: base64Image,
+              mimeType: 'image/jpeg'
+            }
+          }]
+        }],
+        turnComplete: false,
       });
     } catch (err) {
       this.logger.error(`Error en sendImage: ${err.message}`);
