@@ -217,41 +217,35 @@ export class GeminiLiveSession extends EventEmitter {
 
   sendAudio(base64Audio: string) {
     if (!this.session || this.closed) return;
-    this.session.send({
-      realtimeInput: {
-        mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Audio }]
-      },
+    this.session.sendRealtimeInput({
+      audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
     });
   }
 
   sendImage(base64Image: string) {
     if (!this.session || this.closed) return;
-    this.session.send({
-      realtimeInput: {
-        mediaChunks: [{ mimeType: 'image/jpeg', data: base64Image }]
-      },
+    this.session.sendRealtimeInput({
+      video: { data: base64Image, mimeType: 'image/jpeg' },
     });
   }
 
   sendText(text: string) {
     if (!this.session || this.closed) return;
-    this.session.send({
-      clientContent: {
-        turns: [{ role: 'user', parts: [{ text }] }],
-        turnComplete: false,
-      },
+    this.session.sendClientContent({
+      turns: [{ role: 'user', parts: [{ text }] }],
+      turnComplete: false,
     });
   }
 
   /** Señaliza a Gemini que el turno del usuario ha terminado y debe responder. */
   signalTurnComplete() {
     if (!this.session || this.closed) return;
-    this.session.send({ clientContent: { turns: [], turnComplete: true } });
+    this.session.sendClientContent({ turnComplete: true });
   }
 
   sendToolResponse(toolResponses: any[]) {
     if (!this.session || this.closed) return;
-    this.session.send({ toolResponse: { functionResponses: toolResponses } });
+    this.session.sendToolResponse({ functionResponses: toolResponses });
   }
 
   close() {
