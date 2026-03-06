@@ -15,7 +15,6 @@ import { AiService, GeminiLiveSession } from '../ai/ai.service';
 interface FramePayload {
   conversationId: string;
   frameBase64: string;
-  prompt?: string;
 }
 
 interface VoiceFramePayload {
@@ -195,9 +194,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       if (payload.frameBase64) {
         this.logger.log(
-          `Cliente -> Gemini [frame]: prompt="${payload.prompt || ''}", frame=${payload.frameBase64.length} bytes`,
+          `Cliente -> Gemini [frame]: frame=${payload.frameBase64.length} bytes`,
         );
-        session.sendFrameWithPrompt(payload.frameBase64, payload.prompt);
+        session.sendFrameWithPrompt(payload.frameBase64);
       }
     } catch (err) {
       this.logger.error(`Error enviando frame a Gemini (frame): ${err.message}`);

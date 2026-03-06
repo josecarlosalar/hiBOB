@@ -124,15 +124,13 @@ class LiveSessionService {
   void sendFrame({
     required String conversationId,
     required String frameBase64,
-    String? prompt,
   }) {
     if (_state != LiveSessionState.connected) return;
 
-    debugPrint('[LiveSessionService] Sending frame: prompt="$prompt", frame=${frameBase64.length} chars');
+    debugPrint('[LiveSessionService] Sending frame: frame=${frameBase64.length} chars');
     _socket?.emit('frame', {
       'conversationId': conversationId,
       'frameBase64': frameBase64,
-      if (prompt != null && prompt.isNotEmpty) 'prompt': prompt,
     });
   }
 
