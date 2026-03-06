@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' show Amplitude;
+import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:uuid/uuid.dart';
 import 'package:vibration/vibration.dart';
@@ -69,6 +70,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   final List<StreamSubscription<dynamic>> _subs = [];
   Timer? _proactiveTimer;
   Timer? _processingTimeout;
+  Timer? _locationTimer;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -244,6 +246,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     ]);
 
     await _liveSession.connect(token);
+    unawaited(_startLocationUpdates());
+  }
+
+  Future<void> _startLocationUpdates() async {
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) return;
+
+      Future<void> sendGps() async {
+        try {
+          final pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+          ).timeout(const Duration(seconds: 8));
+          _liveSession.sendLocation(
+            latitude: pos.latitude,
+            longitude: pos.longitude,
+            accuracy: pos.accuracy,
+          );
+        } catch (_) {}
+      }
+
+      unawaited(sendGps());
+      _locationTimer = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(sendGps()));
+    } catch (_) {}
   }
 
   void _startListening() {
@@ -473,6 +502,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _proactiveTimer = null;
     _processingTimeout?.cancel();
     _processingTimeout = null;
+    _locationTimer?.cancel();
+    _locationTimer = null;
     unawaited(_audio.stopRecording());
 
     for (final sub in _subs) {
