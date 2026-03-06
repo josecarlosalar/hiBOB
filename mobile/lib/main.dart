@@ -1,13 +1,12 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:firebase_core/firebase_core.dart';
+
 import 'core/providers/firebase_providers.dart';
-import 'features/intro/screens/splash_screen.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
-import 'features/chat/screens/chat_screen.dart';
-import 'features/conversations/screens/conversations_screen.dart';
+import 'features/intro/screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,16 +24,19 @@ class GeminiAgentApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF673AB7), // Deep Purple
+          seedColor: const Color(0xFF673AB7),
           primary: const Color(0xFF673AB7),
-          secondary: const Color(0xFF00B0FF), // Light Blue / Cyan
+          secondary: const Color(0xFF00B0FF),
           surface: const Color(0xFF121212),
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
-        fontFamily: 'Roboto', 
+        fontFamily: 'Roboto',
         textTheme: const TextTheme(
-          headlineMedium: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1),
+          headlineMedium: TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
           bodyLarge: TextStyle(fontSize: 16),
         ),
       ),
@@ -58,53 +60,8 @@ class _AuthGate extends ConsumerWidget {
           );
         }
         if (snapshot.data == null) return const LoginScreen();
-        return const _HomeShell();
+        return const CameraScreen();
       },
-    );
-  }
-}
-
-class _HomeShell extends StatefulWidget {
-  const _HomeShell();
-
-  @override
-  State<_HomeShell> createState() => _HomeShellState();
-}
-
-class _HomeShellState extends State<_HomeShell> {
-  int _currentIndex = 0;
-
-  static const _screens = [
-    ChatScreen(),
-    CameraScreen(),
-    ConversationsScreen(),
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: 'Chat',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.camera_alt_outlined),
-            selectedIcon: Icon(Icons.camera_alt_rounded),
-            label: 'Cámara',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history_rounded),
-            label: 'Historial',
-          ),
-        ],
-      ),
     );
   }
 }
