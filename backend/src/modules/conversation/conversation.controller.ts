@@ -49,6 +49,7 @@ export class ConversationController {
   }
 
   @Post('voice')
+  // Endpoint REST legado (no Live API): mantiene fallback audio/m4a.
   voice(
     @Body() dto: { conversationId: string; audioBase64: string; mimeType?: string },
     @Req() req: AuthRequest,

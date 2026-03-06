@@ -46,7 +46,7 @@ Requisitos:
 ```bash
 cd mobile
 flutter pub get
-flutter run                 # apunta automáticamente a http://10.0.2.2:3000
+flutter run                 # usa Cloud Run por defecto (API_BASE_URL del codigo)
 ```
 
 ## Arquitectura

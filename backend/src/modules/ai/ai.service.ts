@@ -13,6 +13,7 @@ import { TavilyService } from '../tools/tavily.service';
 import { LocationService } from '../tools/location.service';
 import { GoogleAuth } from 'google-auth-library';
 import { EventEmitter } from 'events';
+import { inspect } from 'util';
 
 // ─── Definición de herramientas disponibles ──────────────────────────────────
 
@@ -118,6 +119,12 @@ const AGENT_TOOLS: Tool[] = [
 
 export interface LiveSessionOptions {
   systemInstruction?: string;
+  minimalConfig?: boolean;
+  disableTools?: boolean;
+  disableSpeechConfig?: boolean;
+  disableTranscriptions?: boolean;
+  responseModalities?: Modality[];
+  verboseLogs?: boolean;
 }
 
 /**
@@ -128,6 +135,8 @@ export class GeminiLiveSession extends EventEmitter {
   private session: any; // LiveSession del SDK
   private readonly logger = new Logger(GeminiLiveSession.name);
   private closed = false;
+  private lastErrorMessage: string | null = null;
+  private sdkMsgCount = 0;
 
   constructor(
     private readonly ai: GoogleGenAI,
@@ -138,42 +147,101 @@ export class GeminiLiveSession extends EventEmitter {
   }
 
   async connect(): Promise<void> {
+    this.logger.log(`Abriendo Gemini Live session (model=${this.modelId})`);
+    const useMinimal = this.options.minimalConfig ?? false;
+    const includeTools = !useMinimal && !(this.options.disableTools ?? false);
+    const includeSpeechConfig =
+      !useMinimal && !(this.options.disableSpeechConfig ?? false);
+    const includeTranscriptions =
+      !useMinimal && !(this.options.disableTranscriptions ?? false);
+
+    const liveConfig: any = {
+      responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
+      systemInstruction: {
+        parts: [
+          {
+            text:
+              this.options.systemInstruction ||
+              'Eres hiBOB, un asistente amable para personas con discapacidad visual. Responde de forma concisa y natural.',
+          },
+        ],
+      },
+    };
+
+    if (includeSpeechConfig) {
+      liveConfig.speechConfig = {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } },
+      };
+    }
+
+    if (includeTranscriptions) {
+      liveConfig.inputAudioTranscription = {};
+      liveConfig.outputAudioTranscription = {};
+    }
+
+    if (includeTools) {
+      liveConfig.tools = AGENT_TOOLS;
+    }
+
+    this.logger.log(
+      `Live config: minimal=${useMinimal}, tools=${includeTools}, speech=${includeSpeechConfig}, transcriptions=${includeTranscriptions}`,
+    );
+
     this.session = await this.ai.live.connect({
       model: this.modelId,
-      config: {
-        responseModalities: [Modality.AUDIO],
-        systemInstruction: {
-          parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, un asistente amable para personas con discapacidad visual. Responde de forma concisa y natural.' }],
-        },
-        speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Aoede' } },
-        },
-        inputAudioTranscription: {},
-        outputAudioTranscription: {},
-        tools: AGENT_TOOLS,
-      },
+      config: liveConfig,
       callbacks: {
         onmessage: (msg: any) => {
           if (!this.closed) this._handleSdkMessage(msg);
         },
         onerror: (err: any) => {
-          this.logger.error(`Error en Gemini: ${err.message || err.error || err}`);
-          if (!this.closed) this.emit('error', err);
+          const message = err?.message || err?.error || String(err);
+          this.lastErrorMessage = message;
+          this.logger.error(`Error en Gemini: ${message}`);
+          if (this.options.verboseLogs ?? false) {
+            this.logger.error(`Error en Gemini (raw): ${inspect(err, { depth: 6 })}`);
+          }
+          if (!this.closed) this.emit('error', new Error(message));
         },
-        onclose: () => {
-          this.logger.warn('Gemini Live SDK: loop cerrado');
+        onclose: (...args: any[]) => {
+          if (this.lastErrorMessage == null && args.length > 0) {
+            const first = args[0];
+            const closeReason =
+              first?.reason ??
+              first?.message ??
+              (typeof first === 'string' ? first : null);
+            if (closeReason) {
+              this.lastErrorMessage = String(closeReason);
+            }
+          }
+          this.logger.warn(
+            `Gemini Live SDK: loop cerrado${this.lastErrorMessage != null ? ` (${this.lastErrorMessage})` : ''}`,
+          );
+          if ((this.options.verboseLogs ?? false) && args.length > 0) {
+            this.logger.warn(
+              `Gemini Live SDK: close args=${inspect(args, { depth: 6 })}`,
+            );
+          }
           if (!this.closed) {
             this.closed = true;
-            this.emit('close');
+            this.emit('close', this.lastErrorMessage);
           }
         }
       },
     });
-    this.logger.log('GeminiLiveSession conectada via SDK');
+    this.logger.log(`GeminiLiveSession conectada via SDK (model=${this.modelId})`);
   }
 
   private _handleSdkMessage(msg: any) {
-    this.logger.log(`[SDK MSG] Keys: ${Object.keys(msg).join(',')} | raw: ${JSON.stringify(msg).substring(0, 200)}`);
+    this.sdkMsgCount += 1;
+    const keys = Object.keys(msg).join(',');
+    if (this.options.verboseLogs ?? false) {
+      this.logger.log(
+        `[SDK MSG #${this.sdkMsgCount}] Keys: ${keys} | raw: ${JSON.stringify(msg).substring(0, 200)}`,
+      );
+    } else {
+      this.logger.log(`[SDK MSG #${this.sdkMsgCount}] Keys: ${keys}`);
+    }
 
     if (msg.serverContent) {
       const { modelTurn, turnComplete, interrupted, outputTranscription, inputTranscription } = msg.serverContent;
@@ -193,8 +261,13 @@ export class GeminiLiveSession extends EventEmitter {
         for (const part of modelTurn.parts) {
           // Audio de respuesta (PCM 24kHz del modelo nativo)
           if (part.inlineData?.data) {
-            this.logger.log(`Gemini Audio Part: ${part.inlineData.data.length} bytes`);
-            this.emit('audio', part.inlineData.data);
+            if (this.options.verboseLogs ?? false) {
+              this.logger.log(`Gemini Audio Part: ${part.inlineData.data.length} bytes`);
+            }
+            this.emit('audio', {
+              data: part.inlineData.data,
+              mimeType: part.inlineData.mimeType ?? null,
+            });
           }
         }
       }
@@ -251,6 +324,14 @@ export class GeminiLiveSession extends EventEmitter {
     this.closed = true;
     this.session?.close();
   }
+
+  isClosed(): boolean {
+    return this.closed;
+  }
+
+  getLastErrorMessage(): string | null {
+    return this.lastErrorMessage;
+  }
 }
 
 // ─── Servicio ─────────────────────────────────────────────────────────────────
@@ -260,6 +341,7 @@ export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
   private ai: GoogleGenAI;
   private modelName: string;
+  private fallbackModelName: string;
   private maxOutputTokens: number;
   private temperature: number;
   private auth: GoogleAuth;
@@ -275,6 +357,10 @@ export class AiService implements OnModuleInit {
     const project = this.configService.get<string>('GCP_PROJECT_ID');
     const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
     this.modelName = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
+    this.fallbackModelName = this.configService.get<string>(
+      'GEMINI_FALLBACK_MODEL',
+      'gemini-2.5-flash',
+    );
     this.maxOutputTokens = parseInt(
       this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '8192'),
     );
@@ -287,7 +373,69 @@ export class AiService implements OnModuleInit {
       scopes: ['https://www.googleapis.com/auth/cloud-platform'],
     });
 
-    this.logger.log(`Google GenAI inicializado: proyecto=${project}, modelo=${this.modelName}`);
+    this.logger.log(
+      `Google GenAI inicializado: proyecto=${project}, modelo=${this.modelName}, fallback=${this.fallbackModelName}`,
+    );
+  }
+
+  private isModelNotFoundError(error: unknown): boolean {
+    const msg =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : JSON.stringify(error);
+    return (
+      msg.includes('Publisher Model') &&
+      msg.includes('NOT_FOUND') &&
+      (msg.includes('"code":404') || msg.includes('"code": 404'))
+    );
+  }
+
+  private async generateContentWithModelFallback(request: any): Promise<any> {
+    try {
+      return await this.ai.models.generateContent(request);
+    } catch (error) {
+      if (
+        !this.isModelNotFoundError(error) ||
+        request.model === this.fallbackModelName
+      ) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `Modelo no disponible en Vertex (${request.model}). Reintentando con fallback=${this.fallbackModelName}`,
+      );
+      this.modelName = this.fallbackModelName;
+      return await this.ai.models.generateContent({
+        ...request,
+        model: this.fallbackModelName,
+      });
+    }
+  }
+
+  private async generateContentStreamWithModelFallback(
+    request: any,
+  ): Promise<any> {
+    try {
+      return await this.ai.models.generateContentStream(request);
+    } catch (error) {
+      if (
+        !this.isModelNotFoundError(error) ||
+        request.model === this.fallbackModelName
+      ) {
+        throw error;
+      }
+
+      this.logger.warn(
+        `Modelo stream no disponible en Vertex (${request.model}). Reintentando con fallback=${this.fallbackModelName}`,
+      );
+      this.modelName = this.fallbackModelName;
+      return await this.ai.models.generateContentStream({
+        ...request,
+        model: this.fallbackModelName,
+      });
+    }
   }
 
   // ─── Live Session ──────────────────────────────────────────────────────────
@@ -296,15 +444,62 @@ export class AiService implements OnModuleInit {
     // Usar el SDK @google/genai con Vertex AI (cuenta de servicio GCP).
     // Cumple los requisitos del hackathon: SDK oficial de Google GenAI + Vertex AI.
     const project = this.configService.get<string>('GCP_PROJECT_ID');
-    const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
+    const defaultLocation = this.configService.get<string>('GCP_LOCATION', 'us-central1');
 
-    const liveAi = new GoogleGenAI({ vertexai: true, project, location });
-    // Modelo nativo de audio para Live API en Vertex AI (hackathon requirement)
-    // gemini-2.0-flash-live-001: modelo GA de Vertex AI que soporta Live API multimodal
-    // (audio + imagen). El modelo native-audio solo acepta audio, sin visión.
-    const modelId = 'gemini-2.0-flash-live-001';
+    // Modelo Live multimodal (audio + imagen) para la sesión en tiempo real.
+    // Evitar *native-audio* aquí porque no soporta visión.
+    const modelId = this.configService.get<string>(
+      'GEMINI_LIVE_MODEL',
+      'gemini-live-2.5-flash-preview',
+    );
+    const configuredLiveLocation = this.configService.get<string>('GCP_LIVE_LOCATION');
+    const modelNeedsUsCentral1 =
+      modelId.includes('gemini-2.0-flash-live-preview-04-09') ||
+      modelId.includes('gemini-live-2.5-flash-preview-native-audio');
+    const liveLocation =
+      configuredLiveLocation ??
+      (modelNeedsUsCentral1 ? 'us-central1' : defaultLocation);
+    if (!configuredLiveLocation && modelNeedsUsCentral1 && liveLocation !== defaultLocation) {
+      this.logger.warn(
+        `GCP_LIVE_LOCATION no definido. Usando "${liveLocation}" por compatibilidad del modelo live "${modelId}".`,
+      );
+    }
 
-    const session = new GeminiLiveSession(liveAi, modelId, options);
+    const liveAi = new GoogleGenAI({
+      vertexai: true,
+      project,
+      location: liveLocation,
+    });
+    const minimalConfig =
+      this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
+      'true';
+    const disableTools =
+      this.configService.get<string>('GEMINI_LIVE_DISABLE_TOOLS', 'false') ===
+      'true';
+    const disableSpeechConfig =
+      this.configService.get<string>('GEMINI_LIVE_DISABLE_SPEECH_CONFIG', 'false') ===
+      'true';
+    const disableTranscriptions =
+      this.configService.get<string>('GEMINI_LIVE_DISABLE_TRANSCRIPTIONS', 'false') ===
+      'true';
+    const verboseLogs =
+      this.configService.get<string>('GEMINI_LIVE_DEBUG_VERBOSE', 'false') ===
+      'true';
+
+    this.logger.log(
+      `Live session settings: model=${modelId}, location=${liveLocation}, minimal=${minimalConfig}, disableTools=${disableTools}, disableSpeech=${disableSpeechConfig}, disableTranscriptions=${disableTranscriptions}, verbose=${verboseLogs}`,
+    );
+
+    const liveOptions: LiveSessionOptions = {
+      ...options,
+      minimalConfig,
+      disableTools,
+      disableSpeechConfig,
+      disableTranscriptions,
+      verboseLogs,
+    };
+
+    const session = new GeminiLiveSession(liveAi, modelId, liveOptions);
     await session.connect();
     return session;
   }
@@ -380,7 +575,7 @@ export class AiService implements OnModuleInit {
 
     // Agentic loop: hasta 5 iteraciones de tool use
     for (let i = 0; i < 5; i++) {
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContentWithModelFallback({
         model: this.modelName,
         contents,
         config: {
@@ -453,7 +648,7 @@ export class AiService implements OnModuleInit {
     // Agentic loop con streaming en la respuesta final
     for (let i = 0; i < 5; i++) {
       // Primero hacemos llamada no-stream para detectar function calls
-      const response = await this.ai.models.generateContent({
+      const response = await this.generateContentWithModelFallback({
         model: this.modelName,
         contents,
         config: callConfig,
@@ -465,7 +660,7 @@ export class AiService implements OnModuleInit {
 
       if (!functionCalls.length) {
         // Sin tool calls: hacer streaming de la respuesta final
-        const streamResult = await this.ai.models.generateContentStream({
+        const streamResult = await this.generateContentStreamWithModelFallback({
           model: this.modelName,
           contents,
           config: callConfig,
@@ -504,7 +699,7 @@ export class AiService implements OnModuleInit {
   // ─── processAudio ──────────────────────────────────────────────────────────
 
   async processAudio(audioBase64: string, mimeType: string): Promise<string> {
-    const response = await this.ai.models.generateContent({
+    const response = await this.generateContentWithModelFallback({
       model: this.modelName,
       contents: [{
         role: 'user' as const,
