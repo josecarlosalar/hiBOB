@@ -28,15 +28,16 @@ class CameraScreen extends ConsumerStatefulWidget {
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
   static const double _vadThresholdDb = -68.0;
-  static const double _bargeInThresholdDb = -42.0;
+  static const double _bargeInThresholdDb = -22.0;
   static const int _silenceMs = 900;
   static const int _minRecordMs = 600;
   static const int _maxRecordMs = 6000;
   static const int _proactiveIntervalSec = 2;
+  static const int _minBargeInMs = 450;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
-  CameraLensDirection _selectedLensDirection = CameraLensDirection.back;
+  CameraLensDirection _selectedLensDirection = CameraLensDirection.front;
 
   final LiveSessionService _liveSession = LiveSessionService();
   final AudioService _audio = AudioService();
@@ -51,6 +52,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _silenceStartTime;
   DateTime? _lastInteractionTime;
   DateTime? _lastVadDebugAt;
+  DateTime? _bargeInStartTime;
 
   StreamSubscription<dynamic>? _amplitudeSub;
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -235,6 +237,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _isVoiceActive = false;
     _voiceStartTime = null;
     _silenceStartTime = null;
+    _bargeInStartTime = null;
     _startVadMonitoring();
     _startProactiveTimer();
   }
@@ -269,6 +272,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _state == AssistantState.speaking || _state == AssistantState.processing
             ? _bargeInThresholdDb
             : _vadThresholdDb;
+    final isAgentResponding =
+        _state == AssistantState.speaking || _state == AssistantState.processing;
 
     if (_lastVadDebugAt == null ||
         now.difference(_lastVadDebugAt!).inMilliseconds >= 900) {
@@ -290,10 +295,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
 
     if (isSpeaking) {
+      if (isAgentResponding) {
+        _bargeInStartTime ??= now;
+        final bargeInDuration =
+            now.difference(_bargeInStartTime!).inMilliseconds;
+        if (bargeInDuration < _minBargeInMs) {
+          return;
+        }
+      }
+
       _silenceStartTime = null;
       if (!_isVoiceActive) {
-        if (_state == AssistantState.speaking ||
-            _state == AssistantState.processing) {
+        if (isAgentResponding) {
           _stopSpeaking();
         }
         _isVoiceActive = true;
@@ -303,6 +316,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _proactiveTimer?.cancel();
       }
     } else if (_isVoiceActive && _voiceStartTime != null) {
+      _bargeInStartTime = null;
       _silenceStartTime ??= now;
       final silenceDuration = now.difference(_silenceStartTime!).inMilliseconds;
       final recordDuration = now.difference(_voiceStartTime!).inMilliseconds;
@@ -314,6 +328,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _isVoiceActive = false;
         _sendVoiceFrame();
       }
+    } else {
+      _bargeInStartTime = null;
     }
   }
 
