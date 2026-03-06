@@ -3,6 +3,18 @@ import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { globalValidationPipe } from './common/pipes/validation.pipe';
+import { writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+
+// Si viene el JSON de la SA como variable de entorno, lo escribe a disco
+// para que las librerías de Google (ADC) lo encuentren via GOOGLE_APPLICATION_CREDENTIALS
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  const keyPath = join(tmpdir(), 'sa-key.json');
+  writeFileSync(keyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, 'utf8');
+  process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+  console.log(`SA key written to ${keyPath}`);
+}
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
