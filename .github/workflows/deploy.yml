@@ -62,8 +62,8 @@ jobs:
             --cpu 1 \
             --min-instances 0 \
             --max-instances 10 \
-            --set-env-vars="GCP_LOCATION=europe-west1,GCP_LIVE_LOCATION=us-central1,GEMINI_LIVE_MODEL=gemini-live-2.5-flash-preview,GEMINI_LIVE_DEBUG_VERBOSE=false,NODE_ENV=production,ALLOWED_ORIGINS=https://hibob-backend-777378009998.europe-west1.run.app" \
-            --set-secrets="GCP_PROJECT_ID=hibob-gcp-project-id:latest,FIREBASE_PROJECT_ID=hibob-firebase-project-id:latest,TAVILY_API_KEY=hibob-tavily-api-key:latest,GEMINI_MODEL=hibob-gemini-model:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=hibob-sa-key:latest" \
+            --set-env-vars="GCP_LOCATION=europe-west1,GCP_LIVE_LOCATION=us-central1,GEMINI_LIVE_MODEL=gemini-2.0-flash-live-001,GEMINI_LIVE_DEBUG_VERBOSE=false,NODE_ENV=production,ALLOWED_ORIGINS=https://hibob-backend-777378009998.europe-west1.run.app" \
+            --set-secrets="GCP_PROJECT_ID=hibob-gcp-project-id:latest,FIREBASE_PROJECT_ID=hibob-firebase-project-id:latest,TAVILY_API_KEY=hibob-tavily-api-key:latest,GEMINI_MODEL=hibob-gemini-model:latest,GEMINI_API_KEY=hibob-gemini-api-key:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=hibob-sa-key:latest" \
             --service-account gemini-agent-sa@websites-technology.iam.gserviceaccount.com
 
       - name: Mostrar URL del servicio
