@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter (Cloud Run backend)",
+      "request": "launch",
+      "type": "dart",
+      "program": "mobile/lib/main.dart",
+      "cwd": "mobile",
+      "toolArgs": [
+        "--dart-define=API_BASE_URL=https://hibob-backend-777378009998.europe-west1.run.app"
+      ]
+    },
+    {
+      "name": "Flutter (Cloud Run backend - alt)",
+      "request": "launch",
+      "type": "dart",
+      "program": "mobile/lib/main.dart",
+      "cwd": "mobile",
+      "toolArgs": [
+        "--dart-define=API_BASE_URL=https://hibob-backend-777378009998.europe-west1.run.app"
+      ]
+    }
+  ]
+}

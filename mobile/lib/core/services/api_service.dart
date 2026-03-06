@@ -96,6 +96,7 @@ class ApiService {
 
   // ─── Voz ────────────────────────────────────────────────────────────────
 
+  // Flujo REST legado (no usado en Live API): puede recibir audio/m4a.
   Future<Map<String, dynamic>> sendVoice({
     required String conversationId,
     required String audioFilePath,
