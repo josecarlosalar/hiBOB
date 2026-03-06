@@ -465,11 +465,11 @@ export class AiService implements OnModuleInit {
       );
     }
 
-    // Vertex AI Express API Key tiene precedencia sobre ADC (Service Account).
-    // Permite usar modelos Live preview sin necesitar aprobación de programa preview por cuenta de servicio.
-    const vertexExpressApiKey = this.configService.get<string>('VERTEX_EXPRESS_API_KEY');
-    const liveAi = vertexExpressApiKey
-      ? new GoogleGenAI({ apiKey: vertexExpressApiKey })
+    // Si hay GEMINI_API_KEY (AI Studio), usarla para Live API — acceso directo sin Service Account.
+    // Si no, usar Vertex AI con ADC (Service Account GCP).
+    const geminiApiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const liveAi = geminiApiKey
+      ? new GoogleGenAI({ apiKey: geminiApiKey })
       : new GoogleGenAI({ vertexai: true, project, location: liveLocation });
     const minimalConfig =
       this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
