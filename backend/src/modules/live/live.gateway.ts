@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import * as admin from 'firebase-admin';
 import { AiService, GeminiLiveSession } from '../ai/ai.service';
+import { LocationService } from '../tools/location.service';
 
 interface FramePayload {
   conversationId: string;
@@ -34,7 +35,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(LiveGateway.name);
 
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly locationService: LocationService,
+  ) {}
 
   async handleConnection(client: Socket) {
     const token = client.handshake.auth?.token as string | undefined;
@@ -105,7 +109,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`Gemini -> Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            const result = await (this.aiService as any).executeTool(fc.name, fc.args);
+            const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
 
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
@@ -144,6 +148,24 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`Cliente desconectado: ${client.id}`);
     const session = client.data.geminiSession as GeminiLiveSession;
     session?.close();
+    this.locationService.removeClientLocation(client.id);
+  }
+
+  @SubscribeMessage('update_location')
+  handleUpdateLocation(
+    @MessageBody() payload: { latitude: number; longitude: number; accuracy?: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (payload?.latitude != null && payload?.longitude != null) {
+      this.locationService.setClientLocation(client.id, {
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        accuracy: payload.accuracy,
+      });
+      this.logger.log(
+        `GPS actualizado para ${client.id}: lat=${payload.latitude}, lon=${payload.longitude}`,
+      );
+    }
   }
 
   @SubscribeMessage('voice_frame')

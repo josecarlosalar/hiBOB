@@ -120,6 +120,16 @@ class LiveSessionService {
     });
   }
 
+  /// Envía las coordenadas GPS del dispositivo al backend.
+  void sendLocation({required double latitude, required double longitude, double? accuracy}) {
+    if (_state != LiveSessionState.connected) return;
+    _socket?.emit('update_location', {
+      'latitude': latitude,
+      'longitude': longitude,
+      if (accuracy != null) 'accuracy': accuracy,
+    });
+  }
+
   /// Envía un frame de vídeo sin audio (modo exploración proactiva).
   void sendFrame({
     required String conversationId,

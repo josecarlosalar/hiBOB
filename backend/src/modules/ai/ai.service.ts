@@ -510,6 +510,7 @@ export class AiService implements OnModuleInit {
   private async executeTool(
     name: string,
     args: Record<string, unknown>,
+    socketId?: string,
   ): Promise<string> {
     if (name === 'web_search') {
       const query = args['query'] as string;
@@ -521,7 +522,7 @@ export class AiService implements OnModuleInit {
     }
 
     if (name === 'get_current_location') {
-      return await this.locationService.getCurrentLocation();
+      return await this.locationService.getCurrentLocation(socketId);
     }
 
     if (name === 'detect_safety_hazards') {
@@ -547,9 +548,8 @@ export class AiService implements OnModuleInit {
 
     if (name === 'get_navigation_directions') {
       const destination = args['destination'] as string;
-      // Para el hackathon, simulamos una ruta inteligente. 
-      // En producción aquí iría una llamada a Google Maps Directions API.
-      return `Ruta calculada hacia ${destination}. Instrucción actual: Camina 50 metros recto hasta ver un cartel azul y gira a la derecha. Yo te guiaré usando la cámara.`;
+      const origin = await this.locationService.getCurrentLocation(socketId);
+      return `Ruta desde tu posición actual (${origin}) hacia "${destination}". Guía al usuario paso a paso usando la cámara para confirmar los puntos de referencia que vayas describiendo.`;
     }
 
     return `Herramienta "${name}" no implementada.`;
