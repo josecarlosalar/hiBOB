@@ -173,11 +173,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         });
         _lastInteractionTime = DateTime.now();
       }),
-      _liveSession.onChunk.listen((chunk) {
-        if (!mounted) return;
-        _processingTimeout?.cancel();
-        setState(() => _geminiText += chunk);
-      }),
       _liveSession.onAudioChunk.listen((audioChunk) {
         if (!mounted) return;
         _lastInteractionTime = DateTime.now();
@@ -395,8 +390,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _liveSession.sendFrame(
             conversationId: _conversationId,
             frameBase64: frame,
-            prompt:
-                'Describe brevemente lo que ves como si fueras los ojos de alguien que no puede ver. Sé conciso y natural.',
           );
           debugPrint('[Telemetry] Proactive timer: enviado');
         } finally {
@@ -1233,3 +1226,4 @@ class _CircleButton extends StatelessWidget {
     );
   }
 }
+
