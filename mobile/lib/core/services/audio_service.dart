@@ -23,6 +23,9 @@ class AudioService {
         encoder: AudioEncoder.pcm16bits,
         numChannels: 1,
         sampleRate: 16000,
+        echoCancel: true,
+        noiseSuppress: true,
+        autoGain: true,
       ),
       path: _currentPath!,
     );
