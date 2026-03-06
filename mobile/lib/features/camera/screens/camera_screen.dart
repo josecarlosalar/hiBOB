@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' show Amplitude;
 import 'package:torch_light/torch_light.dart';
 import 'package:uuid/uuid.dart';
@@ -27,13 +28,15 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
-  static const double _vadThresholdDb = -68.0;
-  static const double _bargeInThresholdDb = -22.0;
-  static const int _silenceMs = 900;
-  static const int _minRecordMs = 600;
+  static const String _settingsFileName = 'conversation_settings.json';
+  static const double _defaultVadThresholdDb = -68.0;
+  static const double _defaultBargeInThresholdDb = -10.0;
+  static const int _defaultSilenceMs = 650;
+  static const int _defaultMinRecordMs = 450;
   static const int _maxRecordMs = 6000;
   static const int _proactiveIntervalSec = 2;
-  static const int _minBargeInMs = 450;
+  static const int _defaultMinBargeInMs = 900;
+  static const int _defaultAgentSpeechGraceMs = 900;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -45,6 +48,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   AssistantState _state = AssistantState.inactive;
   String _conversationId = '';
+  double _vadThresholdDb = _defaultVadThresholdDb;
+  double _bargeInThresholdDb = _defaultBargeInThresholdDb;
+  int _silenceMs = _defaultSilenceMs;
+  int _minRecordMs = _defaultMinRecordMs;
+  int _minBargeInMs = _defaultMinBargeInMs;
+  int _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
+  String _conversationProfile = 'Equilibrado';
 
   bool _isVoiceActive = false;
   bool _isProactiveProcessing = false;
@@ -53,6 +63,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _lastInteractionTime;
   DateTime? _lastVadDebugAt;
   DateTime? _bargeInStartTime;
+  DateTime? _agentSpeechStartedAt;
 
   StreamSubscription<dynamic>? _amplitudeSub;
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -69,6 +80,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     super.initState();
     _initAnimations();
     _initCamera();
+    unawaited(_loadConversationSettings());
   }
 
   void _initAnimations() {
@@ -201,6 +213,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onAudioChunk.listen((audioChunk) {
         if (!mounted) return;
         _lastInteractionTime = DateTime.now();
+        _agentSpeechStartedAt ??= _lastInteractionTime;
         _setStateIfMounted(AssistantState.speaking);
         final base64Audio = audioChunk['data'] ?? '';
         final mimeType = audioChunk['mimeType'];
@@ -214,6 +227,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onDone.listen((_) {
         if (!mounted) return;
         _lastInteractionTime = DateTime.now();
+        _agentSpeechStartedAt = null;
         _processingTimeout?.cancel();
         _startListening();
       }),
@@ -238,6 +252,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _voiceStartTime = null;
     _silenceStartTime = null;
     _bargeInStartTime = null;
+    _agentSpeechStartedAt = null;
     _startVadMonitoring();
     _startProactiveTimer();
   }
@@ -262,18 +277,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _processAmplitude(Amplitude amp) {
     if (_state != AssistantState.listening &&
         _state != AssistantState.recording &&
-        _state != AssistantState.processing &&
         _state != AssistantState.speaking) {
       return;
     }
 
     final now = DateTime.now();
-    final threshold =
-        _state == AssistantState.speaking || _state == AssistantState.processing
-            ? _bargeInThresholdDb
-            : _vadThresholdDb;
-    final isAgentResponding =
-        _state == AssistantState.speaking || _state == AssistantState.processing;
+    final isAgentSpeaking = _state == AssistantState.speaking;
+    final threshold = isAgentSpeaking ? _bargeInThresholdDb : _vadThresholdDb;
 
     if (_lastVadDebugAt == null ||
         now.difference(_lastVadDebugAt!).inMilliseconds >= 900) {
@@ -295,7 +305,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
 
     if (isSpeaking) {
-      if (isAgentResponding) {
+      if (isAgentSpeaking) {
+        if (_agentSpeechStartedAt != null &&
+            now.difference(_agentSpeechStartedAt!).inMilliseconds <
+                _agentSpeechGraceMs) {
+          return;
+        }
         _bargeInStartTime ??= now;
         final bargeInDuration =
             now.difference(_bargeInStartTime!).inMilliseconds;
@@ -306,7 +321,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
       _silenceStartTime = null;
       if (!_isVoiceActive) {
-        if (isAgentResponding) {
+        if (isAgentSpeaking) {
           _stopSpeaking();
         }
         _isVoiceActive = true;
@@ -445,6 +460,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _stopSpeaking() {
     _pcmAudio.stop();
+    _agentSpeechStartedAt = null;
     if (_state != AssistantState.inactive) {
       _setStateIfMounted(AssistantState.listening);
     }
@@ -526,6 +542,582 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (_) {}
   }
 
+  void _openFineTuningPanel() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, modalSetState) {
+            void updateSettings(VoidCallback update) {
+              modalSetState(update);
+              setState(() {});
+              unawaited(_persistConversationSettings());
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Ajuste fino de voz',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Calibracion de conversacion',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _CalibrationChip(
+                            label: 'Equilibrado',
+                            isSelected: _conversationProfile == 'Equilibrado',
+                            onTap: () => updateSettings(() {
+                              _applyConversationProfile('Equilibrado');
+                            }),
+                          ),
+                          _CalibrationChip(
+                            label: 'Evitar cortes',
+                            isSelected: _conversationProfile == 'Evitar cortes',
+                            onTap: () => updateSettings(() {
+                              _applyConversationProfile('Evitar cortes');
+                            }),
+                          ),
+                          _CalibrationChip(
+                            label: 'Mas rapido',
+                            isSelected: _conversationProfile == 'Mas rapido',
+                            onTap: () => updateSettings(() {
+                              _applyConversationProfile('Mas rapido');
+                            }),
+                          ),
+                          _CalibrationChip(
+                            label: 'Interrupcion facil',
+                            isSelected:
+                                _conversationProfile == 'Interrupcion facil',
+                            onTap: () => updateSettings(() {
+                              _applyConversationProfile('Interrupcion facil');
+                            }),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _openCalibrationAssistant();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.28),
+                            ),
+                          ),
+                          icon: const Icon(Icons.auto_fix_high_rounded),
+                          label: const Text('Calibracion guiada'),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.10),
+                          ),
+                        ),
+                        child: Text(
+                          _conversationProfileHelpText(),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 13,
+                            height: 1.35,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      _SettingSlider(
+                        label: 'Sensibilidad escucha',
+                        valueLabel: '${_vadThresholdDb.toStringAsFixed(0)} dB',
+                        value: _vadThresholdDb,
+                        min: -80,
+                        max: -35,
+                        divisions: 45,
+                        onChanged: (value) => updateSettings(() {
+                          _vadThresholdDb = value;
+                        }),
+                      ),
+                      _SettingSlider(
+                        label: 'Sensibilidad interrupcion',
+                        valueLabel:
+                            '${_bargeInThresholdDb.toStringAsFixed(0)} dB',
+                        value: _bargeInThresholdDb,
+                        min: -25,
+                        max: 0,
+                        divisions: 25,
+                        onChanged: (value) => updateSettings(() {
+                          _bargeInThresholdDb = value;
+                        }),
+                      ),
+                      _SettingSlider(
+                        label: 'Silencio fin de turno',
+                        valueLabel: '${_silenceMs} ms',
+                        value: _silenceMs.toDouble(),
+                        min: 300,
+                        max: 1400,
+                        divisions: 22,
+                        onChanged: (value) => updateSettings(() {
+                          _silenceMs = value.round();
+                        }),
+                      ),
+                      _SettingSlider(
+                        label: 'Minimo de voz',
+                        valueLabel: '${_minRecordMs} ms',
+                        value: _minRecordMs.toDouble(),
+                        min: 250,
+                        max: 1200,
+                        divisions: 19,
+                        onChanged: (value) => updateSettings(() {
+                          _minRecordMs = value.round();
+                        }),
+                      ),
+                      _SettingSlider(
+                        label: 'Interrupcion sostenida',
+                        valueLabel: '${_minBargeInMs} ms',
+                        value: _minBargeInMs.toDouble(),
+                        min: 300,
+                        max: 2000,
+                        divisions: 17,
+                        onChanged: (value) => updateSettings(() {
+                          _minBargeInMs = value.round();
+                        }),
+                      ),
+                      _SettingSlider(
+                        label: 'Gracia al empezar a hablar',
+                        valueLabel: '${_agentSpeechGraceMs} ms',
+                        value: _agentSpeechGraceMs.toDouble(),
+                        min: 0,
+                        max: 2000,
+                        divisions: 20,
+                        onChanged: (value) => updateSettings(() {
+                          _agentSpeechGraceMs = value.round();
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () => updateSettings(() {
+                            _applyConversationProfile('Equilibrado');
+                          }),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.28),
+                            ),
+                          ),
+                          child: const Text('Restablecer'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _applyConversationProfile(String profile) {
+    _conversationProfile = profile;
+    switch (profile) {
+      case 'Evitar cortes':
+        _vadThresholdDb = -66;
+        _bargeInThresholdDb = -4;
+        _silenceMs = 800;
+        _minRecordMs = 500;
+        _minBargeInMs = 1500;
+        _agentSpeechGraceMs = 1500;
+        break;
+      case 'Mas rapido':
+        _vadThresholdDb = -70;
+        _bargeInThresholdDb = -12;
+        _silenceMs = 450;
+        _minRecordMs = 300;
+        _minBargeInMs = 700;
+        _agentSpeechGraceMs = 700;
+        break;
+      case 'Interrupcion facil':
+        _vadThresholdDb = -68;
+        _bargeInThresholdDb = -16;
+        _silenceMs = 650;
+        _minRecordMs = 400;
+        _minBargeInMs = 500;
+        _agentSpeechGraceMs = 500;
+        break;
+      case 'Equilibrado':
+      default:
+        _vadThresholdDb = _defaultVadThresholdDb;
+        _bargeInThresholdDb = _defaultBargeInThresholdDb;
+        _silenceMs = _defaultSilenceMs;
+        _minRecordMs = _defaultMinRecordMs;
+        _minBargeInMs = _defaultMinBargeInMs;
+        _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
+        break;
+    }
+  }
+
+  String _conversationProfileHelpText() {
+    switch (_conversationProfile) {
+      case 'Evitar cortes':
+        return 'Prioriza que el agente no se corte con su propia voz. Recomendado si el altavoz dispara interrupciones falsas.';
+      case 'Mas rapido':
+        return 'Reduce pausas y acelera el cambio de turno. Puede ser mas sensible al ruido ambiental.';
+      case 'Interrupcion facil':
+        return 'Hace mas sencillo cortar al agente al hablarle encima. Util si quieres una conversacion muy dinamica.';
+      case 'Equilibrado':
+      default:
+        return 'Compromiso entre fluidez, pausas naturales y resistencia a interrupciones accidentales.';
+    }
+  }
+
+  Future<File> _settingsFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/$_settingsFileName');
+  }
+
+  Future<void> _loadConversationSettings() async {
+    try {
+      final file = await _settingsFile();
+      if (!await file.exists()) return;
+
+      final raw = await file.readAsString();
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (!mounted) return;
+
+      setState(() {
+        _conversationProfile =
+            json['conversationProfile'] as String? ?? 'Equilibrado';
+        _vadThresholdDb =
+            (json['vadThresholdDb'] as num?)?.toDouble() ??
+                _defaultVadThresholdDb;
+        _bargeInThresholdDb =
+            (json['bargeInThresholdDb'] as num?)?.toDouble() ??
+                _defaultBargeInThresholdDb;
+        _silenceMs = (json['silenceMs'] as num?)?.round() ?? _defaultSilenceMs;
+        _minRecordMs =
+            (json['minRecordMs'] as num?)?.round() ?? _defaultMinRecordMs;
+        _minBargeInMs =
+            (json['minBargeInMs'] as num?)?.round() ?? _defaultMinBargeInMs;
+        _agentSpeechGraceMs =
+            (json['agentSpeechGraceMs'] as num?)?.round() ??
+                _defaultAgentSpeechGraceMs;
+      });
+    } catch (e) {
+      debugPrint('[Settings] load error: $e');
+    }
+  }
+
+  Future<void> _persistConversationSettings() async {
+    try {
+      final file = await _settingsFile();
+      await file.writeAsString(
+        jsonEncode({
+          'conversationProfile': _conversationProfile,
+          'vadThresholdDb': _vadThresholdDb,
+          'bargeInThresholdDb': _bargeInThresholdDb,
+          'silenceMs': _silenceMs,
+          'minRecordMs': _minRecordMs,
+          'minBargeInMs': _minBargeInMs,
+          'agentSpeechGraceMs': _agentSpeechGraceMs,
+        }),
+      );
+    } catch (e) {
+      debugPrint('[Settings] persist error: $e');
+    }
+  }
+
+  Future<Map<String, double>?> _measureAmbientAudio({
+    Duration duration = const Duration(seconds: 6),
+  }) async {
+    if (_state != AssistantState.inactive) {
+      _showMessage('Deten el asistente antes de ejecutar la auto-calibracion');
+      return null;
+    }
+
+    final hasPermission = await _audio.hasPermission;
+    if (!hasPermission) {
+      _showMessage('Necesito permiso de microfono para calibrar');
+      return null;
+    }
+
+    final wasRecording = await _audio.isRecording;
+    final samples = <double>[];
+    StreamSubscription<Amplitude>? sub;
+
+    try {
+      if (!wasRecording) {
+        await _audio.startRecording();
+      }
+
+      final completer = Completer<void>();
+      sub = _audio.amplitudeStream().listen((amp) {
+        samples.add(amp.current);
+      });
+
+      Timer(duration, () {
+        if (!completer.isCompleted) completer.complete();
+      });
+
+      await completer.future;
+    } catch (e) {
+      debugPrint('[Calibration] ambient measure error: $e');
+      return null;
+    } finally {
+      await sub?.cancel();
+      if (!wasRecording) {
+        await _audio.stopRecording();
+      }
+    }
+
+    if (samples.isEmpty) return null;
+
+    var sum = 0.0;
+    var peak = -160.0;
+    var noisyCount = 0;
+    for (final sample in samples) {
+      sum += sample;
+      if (sample > peak) peak = sample;
+      if (sample > -45) noisyCount++;
+    }
+
+    return {
+      'average': sum / samples.length,
+      'peak': peak,
+      'noisyRatio': noisyCount / samples.length,
+    };
+  }
+
+  void _applyAutoCalibration(Map<String, double> stats) {
+    final average = stats['average'] ?? -70;
+    final peak = stats['peak'] ?? -70;
+    final noisyRatio = stats['noisyRatio'] ?? 0;
+
+    if (peak > -8 || noisyRatio > 0.22 || average > -48) {
+      _applyConversationProfile('Evitar cortes');
+      _vadThresholdDb = -62;
+      _bargeInThresholdDb = -2;
+      _minBargeInMs = 1700;
+      _agentSpeechGraceMs = 1700;
+      return;
+    }
+
+    if (average < -62 && noisyRatio < 0.05) {
+      _applyConversationProfile('Mas rapido');
+      _vadThresholdDb = -71;
+      _silenceMs = 420;
+      _minRecordMs = 280;
+      return;
+    }
+
+    _applyConversationProfile('Equilibrado');
+  }
+
+  void _openCalibrationAssistant() {
+    var isRunning = false;
+    var status =
+        'Haz la prueba con el agente parado y en el entorno donde vas a usarlo.';
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, modalSetState) {
+            Future<void> runAutoCalibration() async {
+              modalSetState(() {
+                isRunning = true;
+                status =
+                    'Escuchando el entorno durante 6 segundos. No hables.';
+              });
+
+              final stats = await _measureAmbientAudio();
+              if (!context.mounted) return;
+
+              if (stats == null) {
+                modalSetState(() {
+                  isRunning = false;
+                  status =
+                      'No se pudo medir el entorno. Revisa permisos y que el asistente este parado.';
+                });
+                return;
+              }
+
+              setState(() {
+                _applyAutoCalibration(stats);
+              });
+              await _persistConversationSettings();
+
+              final average = (stats['average'] ?? 0).toStringAsFixed(1);
+              final peak = (stats['peak'] ?? 0).toStringAsFixed(1);
+              modalSetState(() {
+                isRunning = false;
+                status =
+                    'Auto-calibracion aplicada. Ruido medio: $average dB, pico: $peak dB.';
+              });
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Calibracion guiada',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Elige el problema principal o ejecuta una auto-calibracion con el micro para estimar el ruido del entorno.',
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.10),
+                        ),
+                      ),
+                      child: Text(
+                        status,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: isRunning ? null : runAutoCalibration,
+                        icon: isRunning
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
+                            : const Icon(Icons.mic_external_on_rounded),
+                        label: Text(
+                          isRunning
+                              ? 'Midiendo entorno...'
+                              : 'Auto-calibrar con micro',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    _CalibrationActionCard(
+                      title: 'El agente se corta solo',
+                      subtitle:
+                          'Endurece la interrupcion y protege el inicio de cada respuesta.',
+                      onTap: () {
+                        setState(() {
+                          _applyConversationProfile('Evitar cortes');
+                        });
+                        unawaited(_persistConversationSettings());
+                        Navigator.of(context).pop();
+                        _showMessage('Perfil "Evitar cortes" aplicado');
+                      },
+                    ),
+                    _CalibrationActionCard(
+                      title: 'Las pausas son demasiado largas',
+                      subtitle:
+                          'Acelera el cambio de turno y reduce el silencio necesario.',
+                      onTap: () {
+                        setState(() {
+                          _applyConversationProfile('Mas rapido');
+                        });
+                        unawaited(_persistConversationSettings());
+                        Navigator.of(context).pop();
+                        _showMessage('Perfil "Mas rapido" aplicado');
+                      },
+                    ),
+                    _CalibrationActionCard(
+                      title: 'Quiero interrumpir al agente con facilidad',
+                      subtitle:
+                          'Hace el barge-in mas sensible y reduce el tiempo sostenido requerido.',
+                      onTap: () {
+                        setState(() {
+                          _applyConversationProfile('Interrupcion facil');
+                        });
+                        unawaited(_persistConversationSettings());
+                        Navigator.of(context).pop();
+                        _showMessage('Perfil "Interrupcion facil" aplicado');
+                      },
+                    ),
+                    _CalibrationActionCard(
+                      title: 'Volver a una configuracion equilibrada',
+                      subtitle:
+                          'Restablece el comportamiento base recomendado.',
+                      onTap: () {
+                        setState(() {
+                          _applyConversationProfile('Equilibrado');
+                        });
+                        unawaited(_persistConversationSettings());
+                        Navigator.of(context).pop();
+                        _showMessage('Perfil "Equilibrado" aplicado');
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _amplitudeSub?.cancel();
@@ -554,7 +1146,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       body: Stack(
         children: [
           _buildGeminiAura(colors),
-          _buildCameraPreview(size),
           _buildTopOverlay(),
           _buildBottomOverlay(colors),
           _buildMainActionButton(colors),
@@ -642,6 +1233,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           _StatusBadge(state: _state),
           const Spacer(),
+          _CircleButton(
+            icon: Icons.tune_rounded,
+            onTap: _openFineTuningPanel,
+          ),
+          const SizedBox(width: 10),
           _CameraLensButton(
             icon: Icons.camera_rear_rounded,
             isSelected: _selectedLensDirection == CameraLensDirection.back,
@@ -962,6 +1558,171 @@ class _CircleButton extends StatelessWidget {
           border: Border.all(color: Colors.white.withValues(alpha: 0.24)),
         ),
         child: Icon(icon, color: Colors.white, size: 22),
+      ),
+    );
+  }
+}
+
+class _SettingSlider extends StatelessWidget {
+  final String label;
+  final String valueLabel;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final ValueChanged<double> onChanged;
+
+  const _SettingSlider({
+    required this.label,
+    required this.valueLabel,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                valueLabel,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: Colors.white,
+              inactiveTrackColor: Colors.white24,
+              thumbColor: Colors.white,
+              overlayColor: Colors.white24,
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CalibrationChip extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CalibrationChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isSelected
+                ? Colors.white70
+                : Colors.white.withValues(alpha: 0.14),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CalibrationActionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _CalibrationActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.10),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
