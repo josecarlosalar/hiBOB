@@ -9,7 +9,7 @@ import { join } from 'path';
 
 // Si viene el JSON de la SA como variable de entorno, lo escribe a disco
 // para que las librerías de Google (ADC) lo encuentren via GOOGLE_APPLICATION_CREDENTIALS
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
   const keyPath = join(tmpdir(), 'sa-key.json');
   writeFileSync(keyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, 'utf8');
   process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
