@@ -50,11 +50,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Uint8List? _lastFrameBytes; // último frame capturado para mostrar en pantalla
 
   // VAD (Voice Activity Detection)
-  static const double _vadThresholdDb = -35.0;
-  static const int _silenceMs = 1500;
+  static const double _vadThresholdDb = -68.0;
+  static const int _silenceMs = 900;
   static const int _minRecordMs = 600;
-  static const int _maxRecordMs = 15000;
-  int _proactiveIntervalSec = 10;
+  static const int _maxRecordMs = 6000;
+  int _proactiveIntervalSec = 30;
 
   bool _isVoiceActive = false;
   DateTime? _voiceStartTime;
@@ -64,6 +64,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _proactiveTimer;
   Timer? _processingTimeout;
   bool _isProactiveProcessing = false;
+  DateTime? _lastVadDebugAt;
 
   // Subs WebSocket
   final List<StreamSubscription<dynamic>> _subs = [];
@@ -177,19 +178,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _processingTimeout?.cancel();
         setState(() => _geminiText += chunk);
       }),
-      _liveSession.onAudioChunk.listen((base64Audio) {
+      _liveSession.onAudioChunk.listen((audioChunk) {
         if (!mounted) return;
+        _lastInteractionTime = DateTime.now();
         _setStateIfMounted(AssistantState.speaking);
+        final base64Audio = audioChunk['data'] ?? '';
+        final mimeType = audioChunk['mimeType'];
         // Enviar el chunk de audio directamente al buffer PCM
-        _pcmAudio.feedBase64(base64Audio);
+        _pcmAudio.feedBase64(base64Audio, mimeType: mimeType);
       }),
       _liveSession.onInterruption.listen((_) {
         if (!mounted) return;
+        _lastInteractionTime = DateTime.now();
         debugPrint('Interrupción detectada por Gemini');
         _stopSpeaking();
       }),
       _liveSession.onDone.listen((text) {
         if (!mounted) return;
+        _lastInteractionTime = DateTime.now();
         _processingTimeout?.cancel();
         // La sesión Live API ya ha enviado todo el audio/texto
         _startListening();
@@ -218,9 +224,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _silenceStartTime = null;
 
     _amplitudeSub?.cancel();
+    unawaited(_ensureVadRecording());
     _amplitudeSub = _audio.amplitudeStream().listen(_processAmplitude);
 
     _startProactiveTimer();
+  }
+
+  Future<void> _ensureVadRecording() async {
+    try {
+      final isRecording = await _audio.isRecording;
+      if (!isRecording) {
+        await _audio.startRecording();
+        debugPrint('[VAD] Grabacion iniciada para deteccion de voz');
+      }
+    } catch (e) {
+      debugPrint('[VAD] Error iniciando grabacion: $e');
+    }
   }
 
   void _processAmplitude(Amplitude amp) {
@@ -228,16 +247,36 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _state != AssistantState.recording) return;
 
     final now = DateTime.now();
+    if (_lastVadDebugAt == null ||
+        now.difference(_lastVadDebugAt!).inMilliseconds >= 900) {
+      _lastVadDebugAt = now;
+      debugPrint(
+        '[VAD] amp=${amp.current.toStringAsFixed(1)} dB, threshold=${_vadThresholdDb.toStringAsFixed(1)}, state=$_state',
+      );
+    }
+
     final isSpeaking = amp.current > _vadThresholdDb;
+
+    // Salvaguarda: si por ruido continuo nunca hay silencio, forzamos envío.
+    if (_isVoiceActive && _voiceStartTime != null) {
+      final recordDuration = now.difference(_voiceStartTime!).inMilliseconds;
+      if (recordDuration >= _maxRecordMs) {
+        _isVoiceActive = false;
+        debugPrint('[VAD] Fin de voz por max duracion (${recordDuration}ms), enviando voice_frame');
+        _sendVoiceFrame();
+        return;
+      }
+    }
 
     if (isSpeaking) {
       _silenceStartTime = null;
       if (!_isVoiceActive) {
         _isVoiceActive = true;
         _voiceStartTime = now;
+        _lastInteractionTime = now;
+        debugPrint('[VAD] Voz detectada (dB=${amp.current.toStringAsFixed(1)})');
         _setStateIfMounted(AssistantState.recording);
         _proactiveTimer?.cancel();
-        _audio.startRecording();
       }
     } else {
       if (_isVoiceActive) {
@@ -248,9 +287,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
         if (silenceDuration >= _silenceMs && recordDuration >= _minRecordMs) {
           _isVoiceActive = false;
+          debugPrint('[VAD] Fin de voz por silencio (${silenceDuration}ms), enviando voice_frame');
           _sendVoiceFrame();
         } else if (recordDuration >= _maxRecordMs) {
           _isVoiceActive = false;
+          debugPrint('[VAD] Fin de voz por max duracion (${recordDuration}ms), enviando voice_frame');
           _sendVoiceFrame();
         }
       }
@@ -292,6 +333,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         frameBase64: frame,
         audioBase64: audioBase64,
       );
+      _lastInteractionTime = DateTime.now();
       debugPrint('[Telemetry] _sendVoiceFrame: enviado correctamente');
     } catch (e) {
       debugPrint('[Telemetry] _sendVoiceFrame: ERROR crítico: $e');
@@ -329,7 +371,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       Duration(seconds: _proactiveIntervalSec),
       (_) async {
         if (_state != AssistantState.listening || _isProactiveProcessing) return;
-        
+        if (_isVoiceActive) return;
+
         final sinceLastInteraction = DateTime.now()
             .difference(_lastInteractionTime ?? DateTime.now())
             .inSeconds;
@@ -420,6 +463,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _amplitudeSub = null;
     _proactiveTimer?.cancel();
     _proactiveTimer = null;
+    unawaited(_audio.stopRecording());
     debugPrint('Cancelando ${_subs.length} suscripciones');
     for (final sub in _subs) {
       sub.cancel();

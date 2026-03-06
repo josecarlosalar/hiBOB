@@ -17,7 +17,7 @@ class LiveSessionService {
   final _doneController = StreamController<String>.broadcast();
   final _stateController = StreamController<LiveSessionState>.broadcast();
   final _transcriptionController = StreamController<String>.broadcast();
-  final _audioChunkController = StreamController<String>.broadcast();
+  final _audioChunkController = StreamController<Map<String, String>>.broadcast();
   final _interruptionController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -26,7 +26,7 @@ class LiveSessionService {
   Stream<String> get onDone => _doneController.stream;
   Stream<LiveSessionState> get onStateChange => _stateController.stream;
   Stream<String> get onTranscription => _transcriptionController.stream;
-  Stream<String> get onAudioChunk => _audioChunkController.stream;
+  Stream<Map<String, String>> get onAudioChunk => _audioChunkController.stream;
   Stream<void> get onInterruption => _interruptionController.stream;
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
   Stream<String> get onError => _errorController.stream;
@@ -37,7 +37,7 @@ class LiveSessionService {
 
     // Intentamos varias formas de auth para máxima compatibilidad con el backend
     final authData = {'token': idToken};
-    debugPrint('Connecting to WebSocket with auth: $authData');
+    debugPrint('Connecting to WebSocket: $_baseUrl/live');
 
     _socket = io.io(
       '$_baseUrl/live',
@@ -78,8 +78,15 @@ class LiveSessionService {
         if (text.isNotEmpty) _transcriptionController.add(text);
       })
       ..on('audio_chunk', (data) {
-        final audio = (data as Map<String, dynamic>)['data'] as String? ?? '';
-        if (audio.isNotEmpty) _audioChunkController.add(audio);
+        final map = data as Map<String, dynamic>;
+        final audio = map['data'] as String? ?? '';
+        final mimeType = map['mimeType'] as String? ?? 'audio/pcm';
+        if (audio.isNotEmpty) {
+          _audioChunkController.add({
+            'data': audio,
+            'mimeType': mimeType,
+          });
+        }
       })
       ..on('interruption', (_) {
         _interruptionController.add(null);
@@ -100,7 +107,7 @@ class LiveSessionService {
     required String conversationId,
     required String frameBase64,
     required String audioBase64,
-    String mimeType = 'audio/m4a',
+    String mimeType = 'audio/pcm;rate=16000',
   }) {
     if (_state != LiveSessionState.connected) return;
 

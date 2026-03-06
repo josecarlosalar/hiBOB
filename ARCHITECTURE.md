@@ -79,7 +79,7 @@ hiBOB es un agente de IA multimodal que utiliza la **Gemini Multimodal Live API*
 | Framework | NestJS | ^11.x |
 | Runtime | Node.js | LTS |
 | IA | Vertex AI (Multimodal Live API) | SDK `@google/genai` (v1.43+) |
-| Modelo Live | `gemini-2.0-flash-live-001` | (Live GA, bidi multimodal imagen+audio) |
+| Modelo Live | `gemini-live-2.5-flash-preview` | (modelo multimodal Live usado en este proyecto) |
 | WebSocket | `@google/genai` live.connect() + `socket.io` | — |
 | Auth | Firebase Admin + Google Auth (GCP Tokens) | — |
 | Base de datos | Firestore (Firebase) | — |
@@ -182,7 +182,7 @@ Clase encargada de la comunicación bidi-stream:
 **Variables de entorno relevantes:**
 ```
 GCP_PROJECT_ID=websites-technology
-GCP_LOCATION=us-central1
+GCP_LOCATION=europe-west1
 GEMINI_MODEL=gemini-2.5-flash          ← para endpoints REST (no Live)
 GEMINI_MAX_OUTPUT_TOKENS=8192
 GEMINI_TEMPERATURE=1.0
@@ -248,13 +248,14 @@ Se ha migrado de AAC (latencia alta) a **LPCM 16-bit 16kHz Mono**. Este formato 
 
 **Flujo interno de `voice_frame`:**
 ```
-1. Recibir audio base64 + imagen base64
-2. transcribeAudio(audio) → texto del usuario
-3. Emitir 'transcription' al cliente
-4. generateContentStream(transcripción, historial, [imagen], onChunk)
-   - Por cada chunk: emitir 'chunk' al cliente
-5. Emitir 'done' al cliente
-6. Persistir mensaje usuario + respuesta en historial de sesión (en memoria)
+1. Recibir `audioBase64` + `frameBase64` desde el móvil
+2. Enviar audio realtime a Gemini: `sendAudioFrame(audioBase64)` con `audio/pcm;rate=16000`
+3. Enviar contexto visual: `sendFrameWithPrompt(frameBase64)`
+4. Retransmitir eventos Live al cliente:
+   - `transcription` (input del usuario)
+   - `chunk` (texto incremental)
+   - `audio_chunk` (`data` + `mimeType`)
+   - `interruption` y `done`
 ```
 
 #### `frame` — Solo imagen (modo proactivo)
@@ -349,7 +350,7 @@ El usuario interactúa principalmente con `CameraScreen`, donde ocurre la sesió
 
 #### `PcmAudioService` [NUEVO] — Reproducción en tiempo real
 - Motor: `flutter_pcm_sound`.
-- Función: Recibe fragmentos base64 (LPCM) desde el Socket y los reproduce inmediatamente sin esperar a que termine la frase completa.
+- Función: Recibe `audio_chunk` (`data` + `mimeType`) y reproduce inmediatamente solo si el `mimeType` es `audio/pcm`.
 - Ventaja: Conversación fluida con latencia imperceptible.
 
 #### `LiveSessionService` — Cliente WebSocket
@@ -369,7 +370,7 @@ El usuario interactúa principalmente con `CameraScreen`, donde ocurre la sesió
 
 En la nueva arquitectura, el flujo es **bidireccional y simultáneo**:
 
-1. **Entrada:** El móvil capta audio PCM e imágenes. Los envía por fragmentos sin esperar al silencio total (opcionalmente guiado por VAD).
+1. **Entrada:** El móvil capta audio PCM e imágenes. El audio se captura en PCM y se envía en cada turno de voz detectado por VAD junto con el frame actual.
 2. **Procesamiento:** Gemini consume los bytes en tiempo real.
 3. **Salida:** En cuanto Gemini genera el primer token de respuesta, el backend envía el `audio_chunk` PCM al móvil.
 4. **Interrupción (Barge-in):** Si el usuario empieza a hablar mientras suena el audio de Gemini, el modelo lo detecta (vía backend) y envía una señal de `interruption`. El móvil detiene `PcmAudioService` inmediatamente.
@@ -409,11 +410,11 @@ USUARIO habla
 │
 ▼
 [App] AudioService.startRecording()
-│     ↑ amplitud > -35dB detectada
+│     ↑ VAD detecta voz (umbral configurado en app)
 │
-▼ (silencio 1500ms detectado)
+▼ (fin de voz por silencio o max duración)
 [App] AudioService.stopAndGetBase64()
-    → audio: string (base64 AAC)
+    → audio: string (base64 PCM16 16kHz mono)
 │
 ▼
 [App] CameraController.captureFrame()
@@ -421,37 +422,32 @@ USUARIO habla
 │
 ▼
 [App] LiveSessionService.sendVoiceFrame(audio, image)
-    → WebSocket evento 'voice_frame' { audio, image, mimeType }
+    → WebSocket 'voice_frame' { audioBase64, frameBase64, mimeType='audio/pcm;rate=16000' }
 │
 ▼ (servidor recibe)
 [Backend] LiveGateway.handleVoiceFrame()
 │
-├──► AiService.transcribeAudio(audio)
-│         → Gemini multimodal: audio → texto
-│         → Emite 'transcription' { text: "lo que dijo el usuario" }
+├──► session.sendAudioFrame(audioBase64)
+└──► session.sendFrameWithPrompt(frameBase64)
 │
-└──► AiService.generateContentStream(transcripcion, historial, [imagen], onChunk)
-          │
-          ├── Gemini procesa: texto + historial + imagen de cámara
-          │
-          ├── [Si usa web_search] → Tavily → resultado → nuevo prompt
-          │         → Emite 'chunk' { text: "[Buscando información…]" }
-          │
-          ├── Por cada fragmento de respuesta:
-          │         → Emite 'chunk' { text: "fragmento..." }
-          │
-          └── Al finalizar:
-                    → Emite 'done' {}
+▼ (Gemini Live responde en streaming)
+[Backend] emite al móvil:
+  - 'transcription' { text }
+  - 'chunk' { text }
+  - 'audio_chunk' { data, mimeType }
+  - 'interruption' {}
+  - 'done' {}
 │
-▼ (app recibe chunks)
-[App] chunkStream.listen((chunk) {
-    responseBuffer += chunk.text
-    ttsService.speak(chunk.text)   ← TTS en tiempo real, chunk por chunk
-})
+▼
+[App] onAudioChunk:
+  - si mimeType empieza por 'audio/pcm' → PcmAudioService.feedBase64(data)
+  - si no → se ignora el chunk (guardrail)
 │
 ▼ (app recibe 'done')
 [App] Estado → 'listening' (listo para siguiente interacción)
 ```
+
+Nota: el endpoint REST `/conversation/voice` se mantiene como flujo legado y conserva fallback `audio/m4a`.
 
 ### 5.6 Animaciones y Diseño Heroico (UI/UX)
 
@@ -538,6 +534,75 @@ El historial de la sesión Live se mantiene en memoria en el `LiveGateway` por s
 
 ## 8. Despliegue
 
+---
+
+## 9. Informe de depuracion Live API (2026-03-05)
+
+### 9.1 Resumen de causa raiz
+
+- La app **si conectaba** al backend local (`host=10.0.2.2:3000` en `LiveGateway`).
+- El cierre temprano de sesion no era por camara, Socket.io ni Firebase Auth.
+- El problema era el modelo Live configurado:
+  - `gemini-2.0-flash-live-001` era rechazado en este entorno con cierre `1008`.
+- Modelo validado en AI Studio/Vertex para este proyecto:
+  - `gemini-2.0-flash-live-preview-04-09`
+
+### 9.2 Evidencia observada en logs
+
+- Con modelo incorrecto:
+  - `Gemini Live SDK: loop cerrado`
+  - `Close code 1008` con razon de `Publisher Model ...`
+- Con modelo correcto:
+  - `setupComplete`
+  - `audio_chunk` en streaming
+  - `done` y `interruption` segun flujo
+  - cierre `1000` limpio al desconectar
+
+### 9.3 Cambios aplicados en backend
+
+- `backend/src/modules/live/live.gateway.ts`
+  - Logs de handshake para confirmar origen/host/token.
+  - Manejo explicito de sesion cerrada para evitar timeouts silenciosos.
+  - Reenvio de `transcription`, `error`, `close` al cliente.
+- `backend/src/modules/ai/ai.service.ts`
+  - Live config parametrizable por entorno:
+    - `GEMINI_LIVE_MODEL`
+    - `GEMINI_LIVE_MINIMAL_CONFIG`
+    - `GEMINI_LIVE_DISABLE_TOOLS`
+    - `GEMINI_LIVE_DISABLE_SPEECH_CONFIG`
+    - `GEMINI_LIVE_DISABLE_TRANSCRIPTIONS`
+  - Estado interno de sesion (`isClosed`, `getLastErrorMessage`).
+  - Mejor telemetria de cierre/error para diagnostico.
+  - Nuevo control de verbosidad:
+    - `GEMINI_LIVE_DEBUG_VERBOSE`
+    - `false`: logs resumidos
+    - `true`: payload/raw detallado para investigacion
+
+### 9.4 Cambios aplicados en mobile
+
+- `mobile/lib/core/services/live_session_service.dart`
+  - Log de URL real de WebSocket para confirmar destino efectivo:
+    - `Connecting to WebSocket: <base>/live`
+
+### 9.5 Configuracion recomendada actual
+
+Para desarrollo local:
+
+```env
+GEMINI_LIVE_MODEL=gemini-live-2.5-flash-preview
+GEMINI_LIVE_MINIMAL_CONFIG=true
+GEMINI_LIVE_DISABLE_TOOLS=false
+GEMINI_LIVE_DISABLE_SPEECH_CONFIG=false
+GEMINI_LIVE_DISABLE_TRANSCRIPTIONS=false
+GEMINI_LIVE_DEBUG_VERBOSE=false
+```
+
+### 9.6 Nota operativa
+
+- Los warnings de `CameraValidator` en emulador Android pueden aparecer de forma intermitente y no implican fallo de la sesion Live.
+- Si se necesita analizar cierres nuevamente, activar temporalmente:
+  - `GEMINI_LIVE_DEBUG_VERBOSE=true`
+
 ### Backend — Google Cloud Run
 
 - **Servicio:** `hibob-backend`
@@ -557,8 +622,8 @@ El historial de la sesión Live se mantiene en memoria en el `LiveGateway` por s
 
 ```env
 GCP_PROJECT_ID=websites-technology
-GCP_LOCATION=us-central1
-GEMINI_MODEL=gemini-2.0-flash
+GCP_LOCATION=europe-west1
+GEMINI_MODEL=gemini-3.1-flash-lite-preview
 GEMINI_MAX_OUTPUT_TOKENS=8192
 GEMINI_TEMPERATURE=1.0
 GOOGLE_APPLICATION_CREDENTIALS=./credentials/gemini-agent-sa-key.json
@@ -567,3 +632,88 @@ TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 PORT=3000
 NODE_ENV=production
 ```
+
+### 9.7 Ajustes recientes de estabilidad de audio y turn-taking (2026-03-05)
+
+Cambios aplicados para evitar respuestas interrumpidas y mejorar deteccion de voz del usuario:
+
+- `mobile/lib/features/camera/screens/camera_screen.dart`
+  - Ajuste de VAD para mejorar turn-taking:
+    - `_vadThresholdDb: -68.0`
+    - `_silenceMs: 900`
+    - `_maxRecordMs: 6000`
+    - `_proactiveIntervalSec: 30`
+  - Se actualiza `_lastInteractionTime` al recibir:
+    - `onAudioChunk`
+    - `onInterruption`
+    - `onDone`
+  - El temporizador proactivo ahora evita disparos si hay voz activa:
+    - `if (_isVoiceActive) return;`
+- `mobile/lib/core/services/live_session_service.dart`
+  - `voice_frame` usa MIME consistente con el audio capturado:
+    - `audio/pcm;rate=16000`
+  - `audio_chunk` incluye metadata de formato:
+    - `{ data, mimeType }`
+- `mobile/lib/core/services/pcm_audio_service.dart`
+  - Reproducción defensiva:
+    - Solo acepta chunks `audio/pcm`
+    - Ignora formatos no PCM
+
+Resultado esperado:
+- Menos interrupciones espurias entre turnos.
+- Menos casos de "solo responde al inicio y luego no vuelve a contestar".
+- Mejor deteccion de entrada de voz frente al modo proactivo.
+
+---
+
+## 10. Checklist de cumplimiento del Hackathon (Devpost) - estado al 2026-03-05
+
+Referencia oficial:
+- Pagina principal: `https://geminiliveagentchallenge.devpost.com/`
+- Reglas: `https://geminiliveagentchallenge.devpost.com/rules`
+
+### 10.1 Requisitos tecnicos del proyecto (codigo/arquitectura)
+
+1. Agente multimodal con entradas/salidas no solo texto:
+   - Estado: CUMPLE
+   - Evidencia: camara + audio de usuario + salida de audio en Live API.
+2. Uso de Gemini Live API / Gemini model:
+   - Estado: CUMPLE
+   - Evidencia: `AiService` + `GeminiLiveSession` con `@google/genai`.
+3. Uso de Google GenAI SDK o ADK:
+   - Estado: CUMPLE
+   - Evidencia: `@google/genai` en backend.
+4. Backend alojado en Google Cloud:
+   - Estado: CUMPLE
+   - Evidencia: despliegue en Cloud Run documentado.
+5. Uso de al menos un servicio de Google Cloud:
+   - Estado: CUMPLE
+   - Evidencia: Cloud Run + Vertex AI + Firestore/Firebase Auth.
+6. Arquitectura de agente robusta (manejo de errores/interrupciones):
+   - Estado: CUMPLE (con mejoras recientes)
+   - Evidencia: manejo `close/error/interruption`, estados de sesion y telemetria.
+
+### 10.2 Requisitos de entrega Devpost (submission package)
+
+1. Descripcion de proyecto (features, stack, aprendizajes):
+   - Estado: CUMPLE (material disponible en README/arquitectura; requiere pegar en Devpost).
+2. Repositorio publico + instrucciones de arranque:
+   - Estado: CUMPLE (README con pasos; requiere repo publico al enviar).
+3. Prueba de despliegue en Google Cloud (video corto o evidencia de codigo):
+   - Estado: PARCIAL
+   - Nota: hay evidencia en codigo; falta adjuntar prueba explicita en la submission.
+4. Diagrama de arquitectura:
+   - Estado: CUMPLE
+   - Evidencia: diagrama incluido en este documento.
+5. Video demo (<= 4 min, software real, pitch claro, en ingles o subtitulado):
+   - Estado: PENDIENTE DE ENTREGA
+   - Nota: requisito de submission, no del runtime del repo.
+
+### 10.3 Conclusion de cumplimiento
+
+Con la implementacion actual del repositorio, hiBOB CUMPLE los requisitos tecnicos centrales del Gemini Live Agent Challenge.
+
+Para una conformidad completa de submission en Devpost, solo falta asegurar que en la entrega final esten adjuntos:
+- video demo final,
+- prueba explicita de despliegue en Google Cloud,
+- y completar el formulario de texto en Devpost con el material ya documentado.
