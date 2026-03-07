@@ -19,17 +19,24 @@ export class TavilyService {
     this.client = tavily({ apiKey });
   }
 
-  async search(query: string, maxResults = 5): Promise<SearchResult[]> {
-    this.logger.log(`Búsqueda Tavily: "${query}"`);
-    const response = await this.client.search(query, {
-      maxResults,
-      includeAnswer: false,
-    });
+  async search(query: string, maxResults = 3): Promise<SearchResult[]> {
+    this.logger.log(`Búsqueda Tavily (limitada): "${query}"`);
+    try {
+      const response = await this.client.search(query, {
+        maxResults,
+        includeAnswer: true,
+        searchDepth: 'basic',
+      });
 
-    return (response.results ?? []).map((r) => ({
-      title: r.title ?? '',
-      url: r.url ?? '',
-      content: r.content ?? '',
-    }));
+      return (response.results ?? []).map((r) => ({
+        title: r.title ?? '',
+        url: r.url ?? '',
+        // Limitamos el contenido a 600 caracteres por resultado para no saturar el WebSocket
+        content: (r.content ?? '').substring(0, 600) + '...',
+      }));
+    } catch (e) {
+      this.logger.error(`Error en búsqueda Tavily: ${e.message}`);
+      return [];
+    }
   }
 }
