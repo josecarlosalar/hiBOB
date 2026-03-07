@@ -249,7 +249,7 @@ export class GeminiLiveSession extends EventEmitter {
         }
       },
     });
-    this.logger.log(`GeminiLiveSession conectada via SDK (model=${this.modelId})`);
+    this.logger.log(`[V2.1] GeminiLiveSession conectada via SDK (model=${this.modelId})`);
   }
 
   private _handleSdkMessage(msg: any) {
