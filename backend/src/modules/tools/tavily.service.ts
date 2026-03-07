@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { tavily } from '@tavily/core';
 
 export interface SearchResult {
   title: string;
@@ -8,40 +7,51 @@ export interface SearchResult {
   content: string;
 }
 
+interface BraveWebResult {
+  title?: string;
+  url?: string;
+  description?: string;
+}
+
+interface BraveSearchResponse {
+  web?: {
+    results?: BraveWebResult[];
+  };
+}
+
 @Injectable()
 export class TavilyService {
   private readonly logger = new Logger(TavilyService.name);
-  private readonly client: ReturnType<typeof tavily>;
+  private readonly apiKey: string;
 
   constructor(private readonly configService: ConfigService) {
-    const apiKey = this.configService.get<string>('TAVILY_API_KEY');
-    if (!apiKey) throw new Error('TAVILY_API_KEY no está configurada');
-    this.client = tavily({ apiKey });
+    const apiKey = this.configService.get<string>('BRAVE_SEARCH_API_KEY');
+    if (!apiKey) throw new Error('BRAVE_SEARCH_API_KEY no está configurada');
+    this.apiKey = apiKey;
   }
 
-  async search(query: string, maxResults = 3): Promise<SearchResult[]> {
+  async search(query: string, maxResults = 5): Promise<SearchResult[]> {
     this.logger.log(`Ejecutando WebSearch para: "${query}"`);
     try {
-      const response = await this.client.search(query, {
-        maxResults,
-        includeAnswer: true,
-        searchDepth: 'advanced', // Mayor profundidad para encontrar resultados difíciles
+      const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip',
+          'X-Subscription-Token': this.apiKey,
+        },
       });
 
-      const results: SearchResult[] = (response.results ?? []).map((r) => ({
+      if (!response.ok) {
+        throw new Error(`Brave Search API error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as BraveSearchResponse;
+      const results: SearchResult[] = (data.web?.results ?? []).map((r) => ({
         title: r.title ?? '',
         url: r.url ?? '',
-        content: (r.content ?? '').substring(0, 800) + '...',
+        content: (r.description ?? '').substring(0, 800),
       }));
-
-      // Si Tavily nos da una respuesta directa, la añadimos como el primer resultado "maestro"
-      if (response.answer) {
-        results.unshift({
-          title: 'Resumen de búsqueda',
-          url: 'N/A',
-          content: response.answer,
-        });
-      }
 
       this.logger.log(`WebSearch finalizado: ${results.length} resultados encontrados.`);
       return results;
