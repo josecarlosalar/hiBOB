@@ -5,27 +5,31 @@ import 'package:flutter_background_service_android/flutter_background_service_an
 
 class hiBOBBackgroundService {
   static Future<void> initialize() async {
-    final service = FlutterBackgroundService();
+    try {
+      final service = FlutterBackgroundService();
 
-    await service.configure(
-      androidConfiguration: AndroidConfiguration(
-        onStart: onStart,
-        autoStart: false,
-        isForegroundMode: true,
-        notificationChannelId: 'hibob_foreground',
-        initialNotificationTitle: 'hiBOB activo',
-        initialNotificationContent: 'Te estoy acompañando en segundo plano',
-        foregroundServiceTypes: [
-          AndroidForegroundType.microphone,
-          AndroidForegroundType.mediaProjection,
-        ],
-      ),
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: (_) => true,
-      ),
-    );
+      await service.configure(
+        androidConfiguration: AndroidConfiguration(
+          onStart: onStart,
+          autoStart: false,
+          isForegroundMode: true,
+          notificationChannelId: 'hibob_foreground',
+          initialNotificationTitle: 'hiBOB activo',
+          initialNotificationContent: 'Te estoy acompañando en segundo plano',
+          foregroundServiceTypes: [
+            AndroidForegroundType.microphone,
+            AndroidForegroundType.mediaProjection,
+          ],
+        ),
+        iosConfiguration: IosConfiguration(
+          autoStart: false,
+          onForeground: onStart,
+          onBackground: (_) => true,
+        ),
+      );
+    } catch (e) {
+      debugPrint('[BackgroundService] Failed to initialize: $e');
+    }
   }
 
   @pragma('vm:entry-point')

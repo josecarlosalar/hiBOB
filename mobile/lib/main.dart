@@ -12,7 +12,10 @@ import 'core/services/background_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  await hiBOBBackgroundService.initialize();
+  
+  // Inicializamos el servicio de fondo, pero no bloqueamos el arranque de la UI
+  unawaited(hiBOBBackgroundService.initialize());
+  
   runApp(const ProviderScope(child: GeminiAgentApp()));
 }
 
