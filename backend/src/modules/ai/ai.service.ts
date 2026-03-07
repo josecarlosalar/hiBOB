@@ -441,21 +441,26 @@ export class AiService implements OnModuleInit {
   // ─── Live Session ──────────────────────────────────────────────────────────
 
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
-    // Usar el SDK @google/genai con Vertex AI (cuenta de servicio GCP).
-    // Cumple los requisitos del hackathon: SDK oficial de Google GenAI + Vertex AI.
-    const project = this.configService.get<string>('GCP_PROJECT_ID');
-    const defaultLocation = this.configService.get<string>('GCP_LOCATION', 'us-central1');
-
     // Modelo Live multimodal (audio + imagen) para la sesión en tiempo real.
     const modelId = this.configService.get<string>(
       'GEMINI_LIVE_MODEL',
-      'gemini-2.0-flash-live-001',
+      'gemini-2.5-flash-native-audio-latest',
     );
-    const liveLocation = this.configService.get<string>('GCP_LIVE_LOCATION', defaultLocation);
 
-    // Live API usa Vertex AI con SA (ADC). Verificado que gemini-2.0-flash-live-001
-    // funciona en europe-west1 con visión (sendClientContent + imágenes) y audio.
-    const liveAi = new GoogleGenAI({ vertexai: true, project, location: liveLocation });
+    // Autenticación: si hay GEMINI_API_KEY usa AI Studio (más sencillo, sin IAM).
+    // Si no hay key, usa Vertex AI con ADC (Service Account en Cloud Run).
+    const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    let liveAi: GoogleGenAI;
+    if (apiKey) {
+      this.logger.log(`Live API: usando AI Studio key (model=${modelId})`);
+      liveAi = new GoogleGenAI({ apiKey });
+    } else {
+      const project = this.configService.get<string>('GCP_PROJECT_ID');
+      const defaultLocation = this.configService.get<string>('GCP_LOCATION', 'europe-west1');
+      const liveLocation = this.configService.get<string>('GCP_LIVE_LOCATION', defaultLocation);
+      this.logger.log(`Live API: usando Vertex AI ADC (project=${project}, location=${liveLocation}, model=${modelId})`);
+      liveAi = new GoogleGenAI({ vertexai: true, project, location: liveLocation });
+    }
     const minimalConfig =
       this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
       'true';
