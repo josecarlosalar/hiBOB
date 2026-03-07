@@ -17,6 +17,7 @@ class LiveSessionService {
   final _transcriptionController = StreamController<String>.broadcast();
   final _audioChunkController = StreamController<Map<String, String>>.broadcast();
   final _interruptionController = StreamController<void>.broadcast();
+  final _doneController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _frameRequestController = StreamController<void>.broadcast();
   final _errorController = StreamController<String>.broadcast();
@@ -25,6 +26,7 @@ class LiveSessionService {
   Stream<String> get onTranscription => _transcriptionController.stream;
   Stream<Map<String, String>> get onAudioChunk => _audioChunkController.stream;
   Stream<void> get onInterruption => _interruptionController.stream;
+  Stream<void> get onDone => _doneController.stream;
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
   /// El backend solicita un frame de cámara (para herramientas visuales).
   Stream<void> get onFrameRequest => _frameRequestController.stream;
@@ -80,6 +82,9 @@ class LiveSessionService {
       })
       ..on('interruption', (_) {
         _interruptionController.add(null);
+      })
+      ..on('done', (_) {
+        _doneController.add(null);
       })
       ..on('frame_request', (_) {
         // El backend necesita un frame para procesar una herramienta visual
@@ -143,6 +148,7 @@ class LiveSessionService {
     _transcriptionController.close();
     _audioChunkController.close();
     _interruptionController.close();
+    _doneController.close();
     _commandController.close();
     _frameRequestController.close();
     _errorController.close();

@@ -87,6 +87,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         client.emit('interruption', {});
       });
 
+      session.on('done', () => {
+        this.logger.log('Gemini -> Cliente [done]');
+        client.emit('done', {});
+      });
+
       session.on('close', (reason?: string) => {
         const message = reason ?? 'La sesion Live con Gemini se cerro inesperadamente.';
         this.logger.warn(`Gemini -> Cliente [close]: ${message}`);
