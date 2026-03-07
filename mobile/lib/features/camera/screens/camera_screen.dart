@@ -64,6 +64,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   double _lastAmplitudeDb = -160.0;
   bool _showCameraPreview = false;
   Timer? _hideCameraTimer;
+  Map<String, dynamic>? _structuredContent;
+  Map<String, dynamic>? _selectedItem;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -76,6 +78,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _initAnimations();
     _initCamera();
     unawaited(_loadConversationSettings());
+    _liveSession.onDisplayContent.listen((data) {
+      if (mounted) setState(() => _structuredContent = data);
+    });
   }
 
   void _initAnimations() {
@@ -628,10 +633,163 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _buildGeminiAura(colors),
           _buildTopOverlay(),
           _buildCameraPreview(size),
+          if (_structuredContent != null) _buildStructuredPanel(size, colors),
           _buildBottomControlBar(colors),
         ],
       ),
     );
+  }
+
+  Widget _buildStructuredPanel(Size size, ColorScheme colors) {
+    final isDetail = _selectedItem != null;
+    final title = isDetail ? _selectedItem!['title'] : _structuredContent!['title'];
+    final items = _structuredContent!['items'] as List<dynamic>? ?? [];
+
+    return Center(
+      child: Container(
+        width: size.width * 0.88,
+        height: size.height * 0.55,
+        margin: const EdgeInsets.only(bottom: 60),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 40)],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            _buildPanelHeader(title, isDetail),
+            Expanded(
+              child: isDetail 
+                ? _buildDetailView(_selectedItem!, colors)
+                : _buildListView(items, colors),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPanelHeader(String title, bool isDetail) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
+      child: Row(
+        children: [
+          if (isDetail) IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+            onPressed: () => setState(() => _selectedItem = null),
+          ),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded, color: Colors.white70),
+            onPressed: () => setState(() { _structuredContent = null; _selectedItem = null; }),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildListView(List<dynamic> items, ColorScheme colors) {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        final item = items[index] as Map<String, dynamic>;
+        return InkWell(
+          onTap: () => setState(() => _selectedItem = item),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                if (item['imageUrl'] != null) ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(item['imageUrl'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.image, color: Colors.white24)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(item['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                      const SizedBox(height: 4),
+                      Text(item['description'] ?? '', style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailView(Map<String, dynamic> item, ColorScheme colors) {
+    final metadata = item['metadata'] as Map<String, dynamic>? ?? {};
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item['imageUrl'] != null) ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.network(item['imageUrl'], width: double.infinity, height: 150, fit: BoxFit.cover),
+          ),
+          const SizedBox(height: 16),
+          Text(item['description'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
+          if (metadata.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            ...metadata.entries.map((e) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(e.key.toUpperCase(), style: TextStyle(color: colors.secondary, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                  const SizedBox(height: 4),
+                  Text(e.value.toString(), style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                ],
+              ),
+            )),
+          ],
+          if (item['url'] != null && item['url'].toString().startsWith('http')) ...[
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => _launchUrl(item['url']),
+                style: FilledButton.styleFrom(
+                  backgroundColor: colors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                label: const Text('Ver más información', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchUrl(String url) async {
+    _showMessage('Abriendo: $url');
+    // Implementación básica usando el sistema nativo
+    // Nota: Para producción se recomienda instalar url_launcher
   }
 
   Widget _buildGeminiAura(ColorScheme colors) {
