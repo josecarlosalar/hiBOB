@@ -58,7 +58,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   final List<StreamSubscription<dynamic>> _subs = [];
   Timer? _locationTimer;
   Timer? _agentSpeechIdleTimer;
-  DateTime? _lastVoiceDetectedAt;
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
@@ -247,7 +246,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _setStateIfMounted(AssistantState.listening);
     _audioStreamSub?.cancel();
     _amplitudeSub?.cancel();
-    _lastVoiceDetectedAt = null;
     _bargeInStartedAt = null;
     _agentSpeechStartedAt = null;
     _agentAudioActive = false;
@@ -267,11 +265,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _handleAmplitudeSample(Amplitude amp) {
     final now = DateTime.now();
     final currentDb = amp.current;
-    final speechDetected = currentDb >= _vadThresholdDb;
-
-    if (speechDetected) {
-      _lastVoiceDetectedAt = now;
-    }
 
     if (!_agentAudioActive) {
       _bargeInStartedAt = null;
@@ -296,37 +289,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   bool _shouldForwardAudioChunk() {
-    final now = DateTime.now();
-    final recentVoiceWindow = Duration(milliseconds: _silenceMs);
-    final hasRecentVoice = _lastVoiceDetectedAt != null &&
-        now.difference(_lastVoiceDetectedAt!) <= recentVoiceWindow;
-
-    if (!_agentAudioActive) {
-      return hasRecentVoice;
-    }
-
-    if (_state != AssistantState.speaking) {
-      return hasRecentVoice;
-    }
-
-    if (_conversationProfile != 'Interrupcion facil') {
-      return false;
-    }
-
-    final bargeInStartedAt = _bargeInStartedAt;
-    if (bargeInStartedAt == null) {
-      return false;
-    }
-
-    return now.difference(bargeInStartedAt).inMilliseconds >= _minBargeInMs;
+    // Siempre enviamos audio continuo a Gemini para que su VAD interno funcione
+    // correctamente. Si filtramos aquí, Gemini no puede detectar cuándo el usuario
+    // empieza o termina de hablar, causando respuestas tardías o nulas.
+    // El barge-in de la UI (parar reproducción PCM) se gestiona en _handleAmplitudeSample.
+    return true;
   }
 
   void _markAgentSpeechActive() {
     _agentSpeechStartedAt ??= DateTime.now();
     _agentAudioActive = true;
+    // Reiniciar el timer cada vez que llega un chunk. Si no llega nada en
+    // 1500ms consideramos que el agente terminó de hablar. Este valor alto
+    // evita que el gap natural entre chunks PCM dispare un falso "fin de turno"
+    // que haría que el cliente enviara audio y Gemini se interrumpiera a sí mismo.
     _agentSpeechIdleTimer?.cancel();
     _agentSpeechIdleTimer = Timer(
-      const Duration(milliseconds: 450),
+      const Duration(milliseconds: 1500),
       _handleAgentSpeechEnded,
     );
   }
@@ -420,7 +399,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _locationTimer = null;
     _agentSpeechIdleTimer?.cancel();
     _agentSpeechIdleTimer = null;
-    _lastVoiceDetectedAt = null;
     _bargeInStartedAt = null;
     _agentSpeechStartedAt = null;
     _agentAudioActive = false;
