@@ -125,6 +125,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool get _hasBackCamera =>
       _findCameraForLens(CameraLensDirection.back) != null;
 
+  bool get _bargeInEnabled =>
+      _conversationProfile == 'Interrupcion facil';
+
   Future<void> _switchCamera(CameraLensDirection lensDirection) async {
     if (_selectedLensDirection == lensDirection) return;
 
@@ -304,6 +307,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     if (_state != AssistantState.speaking) {
       return hasRecentVoice;
+    }
+
+    if (_conversationProfile != 'Interrupcion facil') {
+      return false;
     }
 
     final bargeInStartedAt = _bargeInStartedAt;
@@ -588,18 +595,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _vadThresholdDb = value;
                         }),
                       ),
-                      _SettingSlider(
-                        label: 'Sensibilidad interrupcion',
-                        valueLabel:
-                            '${_bargeInThresholdDb.toStringAsFixed(0)} dB',
-                        value: _bargeInThresholdDb,
-                        min: -25,
-                        max: 0,
-                        divisions: 25,
-                        onChanged: (value) => updateSettings(() {
-                          _bargeInThresholdDb = value;
-                        }),
-                      ),
+                      if (_bargeInEnabled) ...[
+                        _SettingSlider(
+                          label: 'Sensibilidad interrupcion',
+                          valueLabel:
+                              '${_bargeInThresholdDb.toStringAsFixed(0)} dB',
+                          value: _bargeInThresholdDb,
+                          min: -25,
+                          max: 0,
+                          divisions: 25,
+                          onChanged: (value) => updateSettings(() {
+                            _bargeInThresholdDb = value;
+                          }),
+                        ),
+                      ] else ...[
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(top: 6, bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: const Text(
+                            'Sensibilidad interrupcion desactivada en este perfil. Solo se usa en "Interrupcion facil".',
+                            style: TextStyle(
+                              color: Colors.white60,
+                              fontSize: 12,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
                       _SettingSlider(
                         label: 'Silencio fin de turno',
                         valueLabel: '${_silenceMs} ms',
@@ -622,17 +652,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           _minRecordMs = value.round();
                         }),
                       ),
-                      _SettingSlider(
-                        label: 'Interrupcion sostenida',
-                        valueLabel: '${_minBargeInMs} ms',
-                        value: _minBargeInMs.toDouble(),
-                        min: 300,
-                        max: 2000,
-                        divisions: 17,
-                        onChanged: (value) => updateSettings(() {
-                          _minBargeInMs = value.round();
-                        }),
-                      ),
+                      if (_bargeInEnabled)
+                        _SettingSlider(
+                          label: 'Interrupcion sostenida',
+                          valueLabel: '${_minBargeInMs} ms',
+                          value: _minBargeInMs.toDouble(),
+                          min: 300,
+                          max: 2000,
+                          divisions: 17,
+                          onChanged: (value) => updateSettings(() {
+                            _minBargeInMs = value.round();
+                          }),
+                        ),
                       _SettingSlider(
                         label: 'Gracia al empezar a hablar',
                         valueLabel: '${_agentSpeechGraceMs} ms',
@@ -676,18 +707,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     switch (profile) {
       case 'Evitar cortes':
         _vadThresholdDb = -66;
-        _bargeInThresholdDb = -4;
+        _bargeInThresholdDb = 0;
         _silenceMs = 800;
         _minRecordMs = 500;
-        _minBargeInMs = 1500;
-        _agentSpeechGraceMs = 1500;
+        _minBargeInMs = 2000;
+        _agentSpeechGraceMs = 1800;
         break;
       case 'Mas rapido':
         _vadThresholdDb = -70;
-        _bargeInThresholdDb = -12;
+        _bargeInThresholdDb = 0;
         _silenceMs = 450;
         _minRecordMs = 300;
-        _minBargeInMs = 700;
+        _minBargeInMs = 2000;
         _agentSpeechGraceMs = 700;
         break;
       case 'Interrupcion facil':
@@ -701,11 +732,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       case 'Equilibrado':
       default:
         _vadThresholdDb = _defaultVadThresholdDb;
-        _bargeInThresholdDb = _defaultBargeInThresholdDb;
+        _bargeInThresholdDb = 0;
         _silenceMs = _defaultSilenceMs;
         _minRecordMs = _defaultMinRecordMs;
-        _minBargeInMs = _defaultMinBargeInMs;
-        _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
+        _minBargeInMs = 2000;
+        _agentSpeechGraceMs = 1200;
         break;
     }
   }
@@ -713,14 +744,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   String _conversationProfileHelpText() {
     switch (_conversationProfile) {
       case 'Evitar cortes':
-        return 'Prioriza que el agente no se corte con su propia voz. Recomendado si el altavoz dispara interrupciones falsas.';
+        return 'Desactiva en la practica las interrupciones mientras el agente habla. Recomendado si el altavoz dispara cortes falsos.';
       case 'Mas rapido':
-        return 'Reduce pausas y acelera el cambio de turno. Puede ser mas sensible al ruido ambiental.';
+        return 'Reduce pausas al terminar cada turno, pero mantiene bloqueada la interrupcion del agente para evitar autocortes.';
       case 'Interrupcion facil':
-        return 'Hace mas sencillo cortar al agente al hablarle encima. Util si quieres una conversacion muy dinamica.';
+        return 'Permite cortar al agente al hablarle encima. Es el unico perfil que mantiene el barge-in activo y puede reintroducir autocortes.';
       case 'Equilibrado':
       default:
-        return 'Compromiso entre fluidez, pausas naturales y resistencia a interrupciones accidentales.';
+        return 'Compromiso entre fluidez y estabilidad. El agente termina su frase antes de volver a escuchar.';
     }
   }
 
@@ -904,10 +935,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
               final average = (stats['average'] ?? 0).toStringAsFixed(1);
               final peak = (stats['peak'] ?? 0).toStringAsFixed(1);
+              final profileSummary = switch (_conversationProfile) {
+                'Evitar cortes' =>
+                  'Perfil aplicado: Evitar cortes. El agente no se dejara interrumpir mientras habla.',
+                'Mas rapido' =>
+                  'Perfil aplicado: Mas rapido. El agente termina su frase antes de volver a escuchar.',
+                'Interrupcion facil' =>
+                  'Perfil aplicado: Interrupcion facil. El agente podra cortarse si le hablas encima.',
+                _ =>
+                  'Perfil aplicado: Equilibrado. El agente termina su frase antes de volver a escuchar.',
+              };
               modalSetState(() {
                 isRunning = false;
                 status =
-                    'Auto-calibracion aplicada. Ruido medio: $average dB, pico: $peak dB.';
+                    'Auto-calibracion aplicada. Ruido medio: $average dB, pico: $peak dB. $profileSummary';
               });
             }
 
@@ -981,7 +1022,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     _CalibrationActionCard(
                       title: 'El agente se corta solo',
                       subtitle:
-                          'Endurece la interrupcion y protege el inicio de cada respuesta.',
+                          'Bloquea la interrupcion mientras el agente habla y protege el inicio de cada respuesta.',
                       onTap: () {
                         setState(() {
                           _applyConversationProfile('Evitar cortes');
@@ -994,7 +1035,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     _CalibrationActionCard(
                       title: 'Las pausas son demasiado largas',
                       subtitle:
-                          'Acelera el cambio de turno y reduce el silencio necesario.',
+                          'Acelera el cambio de turno, pero el agente seguira terminando su frase antes de escuchar.',
                       onTap: () {
                         setState(() {
                           _applyConversationProfile('Mas rapido');
@@ -1007,7 +1048,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     _CalibrationActionCard(
                       title: 'Quiero interrumpir al agente con facilidad',
                       subtitle:
-                          'Hace el barge-in mas sensible y reduce el tiempo sostenido requerido.',
+                          'Activa el unico perfil con barge-in real. Puede reintroducir autocortes si el altavoz se cuela en el micro.',
                       onTap: () {
                         setState(() {
                           _applyConversationProfile('Interrupcion facil');
@@ -1020,7 +1061,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     _CalibrationActionCard(
                       title: 'Volver a una configuracion equilibrada',
                       subtitle:
-                          'Restablece el comportamiento base recomendado.',
+                          'Restablece el comportamiento recomendado. El agente termina su frase antes de volver a escuchar.',
                       onTap: () {
                         setState(() {
                           _applyConversationProfile('Equilibrado');
