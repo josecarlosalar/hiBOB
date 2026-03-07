@@ -20,22 +20,33 @@ export class TavilyService {
   }
 
   async search(query: string, maxResults = 3): Promise<SearchResult[]> {
-    this.logger.log(`Búsqueda Tavily (limitada): "${query}"`);
+    this.logger.log(`Ejecutando WebSearch para: "${query}"`);
     try {
       const response = await this.client.search(query, {
         maxResults,
         includeAnswer: true,
-        searchDepth: 'basic',
+        searchDepth: 'advanced', // Mayor profundidad para encontrar resultados difíciles
       });
 
-      return (response.results ?? []).map((r) => ({
+      const results: SearchResult[] = (response.results ?? []).map((r) => ({
         title: r.title ?? '',
         url: r.url ?? '',
-        // Limitamos el contenido a 600 caracteres por resultado para no saturar el WebSocket
-        content: (r.content ?? '').substring(0, 600) + '...',
+        content: (r.content ?? '').substring(0, 800) + '...',
       }));
+
+      // Si Tavily nos da una respuesta directa, la añadimos como el primer resultado "maestro"
+      if (response.answer) {
+        results.unshift({
+          title: 'Resumen de búsqueda',
+          url: 'N/A',
+          content: response.answer,
+        });
+      }
+
+      this.logger.log(`WebSearch finalizado: ${results.length} resultados encontrados.`);
+      return results;
     } catch (e) {
-      this.logger.error(`Error en búsqueda Tavily: ${e.message}`);
+      this.logger.error(`Error crítico en WebSearch: ${e.message}`);
       return [];
     }
   }

@@ -19,12 +19,16 @@ interface AudioChunkPayload {
 }
 
 interface FramePayload {
-  frameBase64: string;
+  frameBase64?: string;
+  frame?: string; // Soporte para formato alternativo
+  prompt?: string;
 }
 
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: 'live',
+  pingInterval: 10000,
+  pingTimeout: 5000,
 })
 export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -38,25 +42,17 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token as string | undefined;
-    const host = client.handshake.headers?.host ?? 'unknown-host';
-    const origin = client.handshake.headers?.origin ?? 'unknown-origin';
-    this.logger.log(
-      `Handshake recibido: client=${client.id}, nsp=${client.nsp.name}, host=${host}, origin=${origin}, tokenPresent=${token != null}, tokenLen=${token?.length ?? 0}`,
-    );
-
-    if (!token) {
-      this.logger.warn(`Cliente ${client.id} sin token - desconectando`);
-      client.emit('error', { message: 'Falta token de autenticacion en handshake.' });
-      client.disconnect();
-      return;
-    }
-
     try {
+      const token = client.handshake.auth?.token as string | undefined;
+      if (!token) {
+        this.logger.warn(`Cliente ${client.id} sin token - desconectando`);
+        client.disconnect();
+        return;
+      }
+
       const decoded = await admin.auth().verifyIdToken(token);
       client.data.uid = decoded.uid;
       this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid})`);
-      this.logger.log(`Creando sesion Gemini Live para client=${client.id}`);
 
       const session = await this.aiService.createLiveSession({
         systemInstruction:
@@ -72,69 +68,54 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
       client.data.geminiSession = session;
-      this.logger.log(`Sesion Gemini Live lista para client=${client.id}`);
 
       session.on('audio', (audio) => {
-        try {
-          const base64Audio = audio?.data as string | undefined;
-          const mimeType = (audio?.mimeType as string | undefined) ?? 'audio/pcm';
-          if (!base64Audio) return;
-          client.emit('audio_chunk', { data: base64Audio, mimeType });
-        } catch (e) {
-          this.logger.error(`Error emitiendo audio_chunk: ${e.message}`);
-        }
+        if (!client.connected) return;
+        client.emit('audio_chunk', { data: audio.data, mimeType: audio.mimeType || 'audio/pcm' });
       });
 
       session.on('transcription', (text) => {
-        try {
-          this.logger.log(`Gemini -> Cliente [transcription]: ${text.length} chars`);
-          client.emit('transcription', { text });
-        } catch (e) {
-          this.logger.error(`Error emitiendo transcription: ${e.message}`);
-        }
+        if (!client.connected) return;
+        client.emit('transcription', { text });
       });
 
       session.on('interruption', () => {
-        this.logger.log('Gemini -> Cliente [interruption]');
+        if (!client.connected) return;
         client.emit('interruption', {});
       });
 
       session.on('done', () => {
-        this.logger.log('Gemini -> Cliente [done]');
+        if (!client.connected) return;
         client.emit('done', {});
       });
 
-      session.on('close', (reason?: string) => {
-        const message = reason ?? 'La sesion Live con Gemini se cerro inesperadamente.';
-        this.logger.warn(`Gemini -> Cliente [close]: ${message}`);
-        client.emit('error', { message });
+      session.on('close', (reason) => {
+        this.logger.warn(`Gemini sesión cerrada para ${client.id}: ${reason || 'sin razón'}`);
+        if (client.connected) {
+          client.emit('error', { message: 'La conexión con la IA se ha reiniciado.' });
+        }
       });
 
       session.on('tool_call', async (toolCall) => {
-        this.logger.log(`Gemini -> Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            // Herramientas visuales: pedir frame al móvil antes de ejecutar
             if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view') {
-              this.logger.log(`Solicitando frame al cliente ${client.id} para herramienta visual: ${fc.name}`);
               client.emit('frame_request', {});
-              // Esperar el frame (máx 4s)
               const frameBase64 = await this._waitForFrame(client, 4000);
               if (frameBase64) {
                 session.sendImageFrame(frameBase64);
               } else {
-                this.logger.warn(`No se recibió frame a tiempo para la herramienta ${fc.name}`);
-                // Devolvemos un error explícito a la herramienta para que Gemini no alucine
                 return {
                   name: fc.name,
                   id: fc.id,
-                  response: { content: 'ERROR: No se ha podido capturar la imagen de la cámara a tiempo. Informa al usuario del problema técnico y no intentes describir nada.' },
+                  response: { content: 'ERROR: Imagen no recibida. Informa al usuario del problema de conexión.' },
                 };
               }
             }
 
             const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
 
+            // Comandos de hardware
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
@@ -143,101 +124,77 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
             }
 
-            return {
-              name: fc.name,
-              id: fc.id,
-              response: { content: result },
-            };
+            return { name: fc.name, id: fc.id, response: { content: result } };
           }),
         );
-        this.logger.log(`Tool Response -> Gemini: ${JSON.stringify(results)}`);
         session.sendToolResponse(results);
       });
 
       session.on('error', (err) => {
-        const message = err?.message || 'Error desconocido en sesion Live';
-        this.logger.error(`Gemini Error: ${message}`);
-        client.emit('error', { message });
+        this.logger.error(`Error Gemini Live: ${err.message}`);
+        if (client.connected) client.emit('error', { message: err.message });
       });
+
     } catch (err) {
-      const message = err?.message || String(err);
-      this.logger.error(
-        `Error al conectar con Gemini Live API para cliente ${client.id}: ${message}`,
-        err?.stack,
-      );
-      client.emit('error', { message: 'No se pudo conectar con el asistente de IA' });
+      this.logger.error(`Error en handleConnection: ${err.message}`);
       client.disconnect();
     }
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.log(`Cliente desconectado: ${client.id}`);
     const session = client.data.geminiSession as GeminiLiveSession;
     session?.close();
     this.locationService.removeClientLocation(client.id);
+    this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 
-  /** Espera a que el cliente envíe un frame tras un frame_request. */
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<string | null> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         client.off('frame', handler);
         resolve(null);
       }, timeoutMs);
-
       const handler = (payload: FramePayload) => {
         clearTimeout(timer);
-        resolve(payload?.frameBase64 ?? null);
+        resolve(payload?.frameBase64 || payload?.frame || null);
       };
-
       client.once('frame', handler);
     });
   }
 
   @SubscribeMessage('audio_chunk')
-  handleAudioChunk(
-    @MessageBody() payload: AudioChunkPayload,
-    @ConnectedSocket() client: Socket,
-  ) {
-    const session = client.data.geminiSession as GeminiLiveSession;
-    if (!session || session.isClosed()) return;
-
-    if (payload?.audioBase64) {
-      const mimeType = payload.mimeType ?? 'audio/pcm;rate=16000';
-      session.sendAudioFrame(payload.audioBase64, mimeType);
+  handleAudioChunk(@MessageBody() payload: AudioChunkPayload, @ConnectedSocket() client: Socket) {
+    try {
+      const session = client.data.geminiSession as GeminiLiveSession;
+      if (session && !session.isClosed() && payload?.audioBase64) {
+        session.sendAudioFrame(payload.audioBase64, payload.mimeType || 'audio/pcm;rate=16000');
+      }
+    } catch (e) {
+      this.logger.error(`Error procesando audio_chunk: ${e.message}`);
     }
   }
 
   @SubscribeMessage('frame')
-  handleFrame(
-    @MessageBody() payload: FramePayload,
-    @ConnectedSocket() client: Socket,
-  ) {
-    const session = client.data.geminiSession as GeminiLiveSession;
-    if (!session || session.isClosed()) return;
-
-    if (payload?.frameBase64) {
-      this.logger.log(
-        `Cliente -> Gemini [frame]: ${payload.frameBase64.length} chars`,
-      );
-      session.sendImageFrame(payload.frameBase64);
+  handleFrame(@MessageBody() payload: FramePayload, @ConnectedSocket() client: Socket) {
+    try {
+      const session = client.data.geminiSession as GeminiLiveSession;
+      const frame = payload?.frameBase64 || payload?.frame;
+      if (session && !session.isClosed() && frame) {
+        session.sendImageFrame(frame);
+      }
+    } catch (e) {
+      this.logger.error(`Error procesando frame: ${e.message}`);
     }
   }
 
   @SubscribeMessage('update_location')
-  handleUpdateLocation(
-    @MessageBody() payload: { latitude: number; longitude: number; accuracy?: number },
-    @ConnectedSocket() client: Socket,
-  ) {
+  handleUpdateLocation(@MessageBody() payload: any, @ConnectedSocket() client: Socket) {
     if (payload?.latitude != null && payload?.longitude != null) {
       this.locationService.setClientLocation(client.id, {
         latitude: payload.latitude,
         longitude: payload.longitude,
         accuracy: payload.accuracy,
       });
-      this.logger.log(
-        `GPS actualizado para ${client.id}: lat=${payload.latitude}, lon=${payload.longitude}`,
-      );
     }
   }
 }
