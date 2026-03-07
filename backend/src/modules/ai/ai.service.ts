@@ -53,6 +53,16 @@ const DETECT_HAZARDS_FUNCTION: FunctionDeclaration = {
   },
 };
 
+const DESCRIBE_VISION_FUNCTION: FunctionDeclaration = {
+  name: 'describe_camera_view',
+  description:
+    'Captura una imagen de la cámara actual (frontal o trasera) y describe lo que hay delante. Úsala cuando el usuario pregunte "¿qué ves?", "¿puedes verme?", "¿qué hay delante de mí?" o cualquier pregunta sobre el entorno visual.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
 const TOGGLE_FLASHLIGHT_FUNCTION: FunctionDeclaration = {
   name: 'toggle_flashlight',
   description: 'Enciende o apaga la linterna del dispositivo móvil. Úsala si la imagen está oscura o si el usuario lo solicita.',
@@ -101,16 +111,30 @@ const GET_DIRECTIONS_FUNCTION: FunctionDeclaration = {
   },
 };
 
+const SWITCH_CAMERA_FUNCTION: FunctionDeclaration = {
+  name: 'switch_camera',
+  description: 'Cambia entre la cámara frontal (selfie) y la trasera (entorno). Úsala cuando el usuario pida cambiar de cámara o ver lo que hay al otro lado.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      direction: { type: Type.STRING, enum: ['front', 'back'], description: 'La dirección de la cámara a activar' },
+    },
+    required: ['direction'],
+  },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
       WEB_SEARCH_FUNCTION,
       GET_LOCATION_FUNCTION,
       DETECT_HAZARDS_FUNCTION,
+      DESCRIBE_VISION_FUNCTION,
       TOGGLE_FLASHLIGHT_FUNCTION,
       TRIGGER_HAPTIC_FEEDBACK_FUNCTION,
       MARK_PLACE_FUNCTION,
       GET_DIRECTIONS_FUNCTION,
+      SWITCH_CAMERA_FUNCTION,
     ],
   },
 ];
@@ -512,9 +536,19 @@ export class AiService implements OnModuleInit {
       return 'SISTEMA DE SEGURIDAD ACTIVADO: Analiza cada píxel de la imagen actual. Busca específicamente: 1) Obstáculos a nivel del suelo, 2) Bordes o escaleras hacia abajo, 3) Objetos en movimiento (coches, bicis), 4) Altura de techos o ramas. Responde con un aviso de seguridad crítico si encuentras algo, o confirma que el camino parece despejado.';
     }
 
+    if (name === 'describe_camera_view') {
+      this.logger.log('Solicitando descripción de cámara...');
+      return 'IMAGEN CAPTURADA: Analiza la imagen que acabas de recibir y describe qué hay delante de forma natural para el usuario.';
+    }
+
     if (name === 'toggle_flashlight') {
       const enabled = args['enabled'] as boolean;
       return `Linterna ${enabled ? 'encendida' : 'apagada'} correctamente.`;
+    }
+
+    if (name === 'switch_camera') {
+      const direction = args['direction'] as string;
+      return `Cámara cambiada a ${direction === 'front' ? 'frontal (selfie)' : 'trasera'} correctamente.`;
     }
 
     if (name === 'trigger_haptic_feedback') {
