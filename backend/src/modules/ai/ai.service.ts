@@ -241,13 +241,9 @@ export class GeminiLiveSession extends EventEmitter {
           this.logger.warn(
             `Gemini Live SDK: loop cerrado${this.lastErrorMessage != null ? ` (${this.lastErrorMessage})` : ''}`,
           );
-          if ((this.options.verboseLogs ?? false) && args.length > 0) {
-            this.logger.warn(
-              `Gemini Live SDK: close args=${inspect(args, { depth: 6 })}`,
-            );
-          }
           if (!this.closed) {
             this.closed = true;
+            this.session = null; // Liberar referencia
             this.emit('close', this.lastErrorMessage);
           }
         }

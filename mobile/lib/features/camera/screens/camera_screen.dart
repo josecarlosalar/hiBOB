@@ -825,7 +825,17 @@ class _CalibrationChip extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(color: isSelected ? Colors.white12 : Colors.white05, borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? Colors.white70 : Colors.white12)),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? Colors.white.withValues(alpha: 0.70)
+                : Colors.white.withValues(alpha: 0.12),
+          ),
+        ),
         child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 12)),
       ),
     );
