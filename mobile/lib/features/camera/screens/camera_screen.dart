@@ -10,7 +10,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
-import 'package:uuid/uuid.dart';
 import 'package:vibration/vibration.dart';
 
 import '../../../core/providers/firebase_providers.dart';
@@ -18,7 +17,7 @@ import '../../../core/services/audio_service.dart';
 import '../../../core/services/live_session_service.dart';
 import '../../../core/services/pcm_audio_service.dart';
 
-enum AssistantState { inactive, listening, recording, processing, speaking }
+enum AssistantState { inactive, listening, speaking }
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -34,8 +33,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const double _defaultBargeInThresholdDb = -10.0;
   static const int _defaultSilenceMs = 650;
   static const int _defaultMinRecordMs = 450;
-  static const int _maxRecordMs = 6000;
-  static const int _proactiveIntervalSec = 2;
   static const int _defaultMinBargeInMs = 900;
   static const int _defaultAgentSpeechGraceMs = 900;
 
@@ -48,7 +45,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   final PcmAudioService _pcmAudio = PcmAudioService();
 
   AssistantState _state = AssistantState.inactive;
-  String _conversationId = '';
   double _vadThresholdDb = _defaultVadThresholdDb;
   double _bargeInThresholdDb = _defaultBargeInThresholdDb;
   int _silenceMs = _defaultSilenceMs;
@@ -57,19 +53,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
   String _conversationProfile = 'Equilibrado';
 
-  bool _isVoiceActive = false;
-  bool _isProactiveProcessing = false;
-  DateTime? _voiceStartTime;
-  DateTime? _silenceStartTime;
-  DateTime? _lastInteractionTime;
-  DateTime? _lastVadDebugAt;
-  DateTime? _bargeInStartTime;
-  DateTime? _agentSpeechStartedAt;
-
-  StreamSubscription<dynamic>? _amplitudeSub;
+  StreamSubscription<String>? _audioStreamSub;
   final List<StreamSubscription<dynamic>> _subs = [];
-  Timer? _proactiveTimer;
-  Timer? _processingTimeout;
   Timer? _locationTimer;
 
   late final AnimationController _pulseCtrl;
@@ -181,8 +166,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       return;
     }
 
-    _conversationId = const Uuid().v4();
-    _lastInteractionTime = DateTime.now();
     await _pcmAudio.init();
 
     _subs.addAll([
@@ -190,7 +173,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         if (!mounted) return;
         switch (s) {
           case LiveSessionState.connected:
-            _startListening();
+            _startStreaming();
             break;
           case LiveSessionState.error:
             _stopSession();
@@ -202,20 +185,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             }
             break;
           case LiveSessionState.connecting:
-            _setStateIfMounted(AssistantState.processing);
+            _setStateIfMounted(AssistantState.listening);
             break;
         }
       }),
-      _liveSession.onTranscription.listen((_) {
-        if (!mounted) return;
-        _processingTimeout?.cancel();
-        _startProcessingTimeout();
-        _lastInteractionTime = DateTime.now();
-      }),
       _liveSession.onAudioChunk.listen((audioChunk) {
         if (!mounted) return;
-        _lastInteractionTime = DateTime.now();
-        _agentSpeechStartedAt ??= _lastInteractionTime;
         _setStateIfMounted(AssistantState.speaking);
         final base64Audio = audioChunk['data'] ?? '';
         final mimeType = audioChunk['mimeType'];
@@ -223,15 +198,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onInterruption.listen((_) {
         if (!mounted) return;
-        _lastInteractionTime = DateTime.now();
         _stopSpeaking();
       }),
-      _liveSession.onDone.listen((_) {
+      _liveSession.onFrameRequest.listen((_) async {
         if (!mounted) return;
-        _lastInteractionTime = DateTime.now();
-        _agentSpeechStartedAt = null;
-        _processingTimeout?.cancel();
-        _startListening();
+        final frame = await _captureFrame();
+        if (frame != null) {
+          _liveSession.sendFrame(frameBase64: frame);
+        }
       }),
       _liveSession.onCommand.listen((cmd) {
         if (!mounted) return;
@@ -239,20 +213,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onError.listen((msg) {
         if (!mounted) return;
-        _processingTimeout?.cancel();
-        // Si el error es de autenticación, cerrar sesión y volver al login
-        if (msg.contains('autenticacion') || msg.contains('token') || msg.contains('auth') || msg.contains('401') || msg.contains('403')) {
+        if (msg.contains('autenticacion') || msg.contains('token') ||
+            msg.contains('auth') || msg.contains('401') || msg.contains('403')) {
           _stopSession();
           ref.read(firebaseServiceProvider).signOut();
           return;
         }
         _showMessage('Asistente: $msg');
-        _startListening();
       }),
     ]);
 
     await _liveSession.connect(token);
     unawaited(_startLocationUpdates());
+  }
+
+  /// Inicia el streaming continuo de audio hacia Gemini.
+  /// El VAD lo gestiona Gemini automáticamente — no hay lógica de VAD en el cliente.
+  void _startStreaming() {
+    _setStateIfMounted(AssistantState.listening);
+    _audioStreamSub?.cancel();
+
+    unawaited(_audio.startStreamingRecording(intervalMs: 200));
+
+    _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
+      if (_liveSession.state == LiveSessionState.connected) {
+        _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+      }
+    });
   }
 
   Future<void> _startLocationUpdates() async {
@@ -281,146 +268,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (_) {}
   }
 
-  void _startListening() {
-    _setStateIfMounted(AssistantState.listening);
-    _isVoiceActive = false;
-    _voiceStartTime = null;
-    _silenceStartTime = null;
-    _bargeInStartTime = null;
-    _agentSpeechStartedAt = null;
-    _startVadMonitoring();
-    _startProactiveTimer();
-  }
-
-  void _startVadMonitoring() {
-    _amplitudeSub?.cancel();
-    unawaited(_ensureVadRecording());
-    _amplitudeSub = _audio.amplitudeStream().listen(_processAmplitude);
-  }
-
-  Future<void> _ensureVadRecording() async {
-    try {
-      final isRecording = await _audio.isRecording;
-      if (!isRecording) {
-        await _audio.startRecording();
-      }
-    } catch (e) {
-      debugPrint('[VAD] Error starting recording: $e');
-    }
-  }
-
-  void _processAmplitude(Amplitude amp) {
-    if (_state != AssistantState.listening &&
-        _state != AssistantState.recording &&
-        _state != AssistantState.speaking) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final isAgentSpeaking = _state == AssistantState.speaking;
-    final threshold = isAgentSpeaking ? _bargeInThresholdDb : _vadThresholdDb;
-
-    if (_lastVadDebugAt == null ||
-        now.difference(_lastVadDebugAt!).inMilliseconds >= 900) {
-      _lastVadDebugAt = now;
-      debugPrint(
-        '[VAD] amp=${amp.current.toStringAsFixed(1)} dB, threshold=${threshold.toStringAsFixed(1)}, state=$_state',
-      );
-    }
-
-    final isSpeaking = amp.current > threshold;
-
-    if (_isVoiceActive && _voiceStartTime != null) {
-      final recordDuration = now.difference(_voiceStartTime!).inMilliseconds;
-      if (recordDuration >= _maxRecordMs) {
-        _isVoiceActive = false;
-        _sendVoiceFrame();
-        return;
-      }
-    }
-
-    if (isSpeaking) {
-      if (isAgentSpeaking) {
-        if (_agentSpeechStartedAt != null &&
-            now.difference(_agentSpeechStartedAt!).inMilliseconds <
-                _agentSpeechGraceMs) {
-          return;
-        }
-        _bargeInStartTime ??= now;
-        final bargeInDuration =
-            now.difference(_bargeInStartTime!).inMilliseconds;
-        if (bargeInDuration < _minBargeInMs) {
-          return;
-        }
-      }
-
-      _silenceStartTime = null;
-      if (!_isVoiceActive) {
-        if (isAgentSpeaking) {
-          _stopSpeaking();
-        }
-        _isVoiceActive = true;
-        _voiceStartTime = now;
-        _lastInteractionTime = now;
-        _setStateIfMounted(AssistantState.recording);
-        _proactiveTimer?.cancel();
-      }
-    } else if (_isVoiceActive && _voiceStartTime != null) {
-      _bargeInStartTime = null;
-      _silenceStartTime ??= now;
-      final silenceDuration = now.difference(_silenceStartTime!).inMilliseconds;
-      final recordDuration = now.difference(_voiceStartTime!).inMilliseconds;
-
-      if (silenceDuration >= _silenceMs && recordDuration >= _minRecordMs) {
-        _isVoiceActive = false;
-        _sendVoiceFrame();
-      } else if (recordDuration >= _maxRecordMs) {
-        _isVoiceActive = false;
-        _sendVoiceFrame();
-      }
-    } else {
-      _bargeInStartTime = null;
-    }
-  }
-
-  Future<void> _sendVoiceFrame() async {
-    if (_liveSession.state != LiveSessionState.connected) {
-      _startListening();
-      return;
-    }
-
-    _setStateIfMounted(AssistantState.processing);
-    _startProcessingTimeout();
-
-    try {
-      final audioBase64 = await _audio.stopAndGetBase64();
-      if (audioBase64 == null || audioBase64.isEmpty) {
-        _startListening();
-        return;
-      }
-
-      final frame = await _captureFrame();
-      if (frame == null) {
-        _startListening();
-        return;
-      }
-
-      _liveSession.sendVoiceFrame(
-        conversationId: _conversationId,
-        frameBase64: frame,
-        audioBase64: audioBase64,
-      );
-      _lastInteractionTime = DateTime.now();
-      _isVoiceActive = false;
-      _voiceStartTime = null;
-      _silenceStartTime = null;
-      _startVadMonitoring();
-    } catch (e) {
-      debugPrint('[Live] sendVoiceFrame error: $e');
-      _startListening();
-    }
-  }
-
   void _handleHardwareCommand(Map<String, dynamic> cmd) async {
     final action = cmd['action'] as String?;
     if (action == 'flashlight') {
@@ -443,39 +290,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  void _startProactiveTimer() {
-    _proactiveTimer?.cancel();
-    _proactiveTimer = Timer.periodic(
-      Duration(seconds: _proactiveIntervalSec),
-      (_) async {
-        if (_state != AssistantState.listening || _isProactiveProcessing) return;
-        if (_isVoiceActive) return;
-
-        final sinceLastInteraction = DateTime.now()
-            .difference(_lastInteractionTime ?? DateTime.now())
-            .inSeconds;
-        if (sinceLastInteraction < _proactiveIntervalSec) return;
-        if (_liveSession.state != LiveSessionState.connected) return;
-
-        _isProactiveProcessing = true;
-        try {
-          final frame = await _captureFrame();
-          if (frame == null || !mounted) return;
-
-          _setStateIfMounted(AssistantState.processing);
-          _startProcessingTimeout();
-          _liveSession.sendFrame(
-            conversationId: _conversationId,
-            frameBase64: frame,
-          );
-          _startVadMonitoring();
-        } finally {
-          _isProactiveProcessing = false;
-        }
-      },
-    );
-  }
-
   Future<String?> _captureFrame() async {
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) {
       return null;
@@ -495,19 +309,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _stopSpeaking() {
     _pcmAudio.stop();
-    _agentSpeechStartedAt = null;
     if (_state != AssistantState.inactive) {
       _setStateIfMounted(AssistantState.listening);
     }
   }
 
   void _stopSession() {
-    _amplitudeSub?.cancel();
-    _amplitudeSub = null;
-    _proactiveTimer?.cancel();
-    _proactiveTimer = null;
-    _processingTimeout?.cancel();
-    _processingTimeout = null;
+    _audioStreamSub?.cancel();
+    _audioStreamSub = null;
     _locationTimer?.cancel();
     _locationTimer = null;
     unawaited(_audio.stopRecording());
@@ -524,24 +333,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _setStateIfMounted(AssistantState newState) {
     if (!mounted || _state == newState) return;
-
-    if (_state == AssistantState.processing &&
-        newState != AssistantState.processing) {
-      _processingTimeout?.cancel();
-    }
-
     _triggerStateHaptics(newState);
     setState(() => _state = newState);
-  }
-
-  void _startProcessingTimeout() {
-    _processingTimeout?.cancel();
-    _processingTimeout = Timer(const Duration(seconds: 30), () {
-      if (_state == AssistantState.processing) {
-        _showMessage('El asistente esta tardando demasiado');
-        _startListening();
-      }
-    });
   }
 
   Future<void> _triggerStateHaptics(AssistantState state) async {
@@ -549,12 +342,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       switch (state) {
         case AssistantState.listening:
           await Vibration.vibrate(duration: 50, amplitude: 64);
-          break;
-        case AssistantState.recording:
-          await Vibration.vibrate(duration: 100, amplitude: 128);
-          break;
-        case AssistantState.processing:
-          await Vibration.vibrate(pattern: [0, 50, 50, 50]);
           break;
         case AssistantState.speaking:
         case AssistantState.inactive:
@@ -1157,9 +944,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   @override
   void dispose() {
-    _amplitudeSub?.cancel();
-    _proactiveTimer?.cancel();
-    _processingTimeout?.cancel();
+    _audioStreamSub?.cancel();
+    _locationTimer?.cancel();
     for (final sub in _subs) {
       sub.cancel();
     }
@@ -1197,12 +983,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       case AssistantState.listening:
         auraColor = colors.secondary.withValues(alpha: 0.30);
         break;
-      case AssistantState.recording:
-        auraColor = Colors.redAccent.withValues(alpha: 0.36);
-        break;
-      case AssistantState.processing:
-        auraColor = colors.primary.withValues(alpha: 0.42);
-        break;
       case AssistantState.speaking:
         auraColor = Colors.cyanAccent.withValues(alpha: 0.38);
         break;
@@ -1222,7 +1002,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             Colors.black,
           ],
           center: Alignment.center,
-          radius: _state == AssistantState.processing ? 1.8 : 1.2,
+          radius: 1.2,
         ),
       ),
     );
@@ -1339,10 +1119,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     switch (_state) {
       case AssistantState.listening:
         return _ListeningWave(anim: _pulseAnim);
-      case AssistantState.recording:
-        return _RecordingIndicator(anim: _pulseAnim, colors: colors);
-      case AssistantState.processing:
-        return const _CyberSpinner();
       case AssistantState.speaking:
         return _SpeakingWave(anim: _waveAnim, colors: colors);
       case AssistantState.inactive:
@@ -1452,35 +1228,6 @@ class _ListeningWave extends StatelessWidget {
   }
 }
 
-class _RecordingIndicator extends StatelessWidget {
-  final Animation<double> anim;
-  final ColorScheme colors;
-
-  const _RecordingIndicator({required this.anim, required this.colors});
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: anim,
-      child: Container(
-        width: 26,
-        height: 26,
-        decoration: BoxDecoration(
-          color: Colors.redAccent,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.redAccent.withValues(alpha: 0.45),
-              blurRadius: 18,
-              spreadRadius: 4,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StatusBadge extends StatelessWidget {
   final AssistantState state;
 
@@ -1494,14 +1241,6 @@ class _StatusBadge extends StatelessWidget {
       case AssistantState.listening:
         color = Colors.greenAccent;
         icon = Icons.hearing_rounded;
-        break;
-      case AssistantState.recording:
-        color = Colors.redAccent;
-        icon = Icons.mic_rounded;
-        break;
-      case AssistantState.processing:
-        color = Colors.purpleAccent;
-        icon = Icons.blur_on_rounded;
         break;
       case AssistantState.speaking:
         color = Colors.cyanAccent;
@@ -1545,22 +1284,6 @@ class _StatusBadge extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CyberSpinner extends StatelessWidget {
-  const _CyberSpinner();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox(
-      height: 44,
-      width: 44,
-      child: CircularProgressIndicator(
-        strokeWidth: 3,
-        valueColor: AlwaysStoppedAnimation<Color>(Colors.purpleAccent),
       ),
     );
   }

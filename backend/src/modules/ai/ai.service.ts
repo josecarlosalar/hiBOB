@@ -288,30 +288,26 @@ export class GeminiLiveSession extends EventEmitter {
     }
   }
 
-  /** Envía imagen + texto en un solo turno completo para asegurar que Gemini responda. */
-  sendFrameWithPrompt(base64Image: string, prompt?: string) {
-    if (!this.session || this.closed) return;
-    try {
-      const parts: any[] = [];
-      if (prompt) parts.push({ text: prompt });
-      parts.push({ inlineData: { data: base64Image, mimeType: 'image/jpeg' } });
-      this.session.sendClientContent({
-        turns: [{ role: 'user', parts }],
-        turnComplete: true,
-      });
-    } catch (err) {
-      this.logger.error(`Error en sendFrameWithPrompt: ${err.message}`);
-    }
-  }
-
-  sendAudioFrame(base64Audio: string) {
+  sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
     if (!this.session || this.closed) return;
     try {
       this.session.sendRealtimeInput({
-        audio: { data: base64Audio, mimeType: 'audio/pcm;rate=16000' },
+        audio: { data: base64Audio, mimeType },
       });
     } catch (err) {
       this.logger.error(`Error en sendAudioFrame: ${err.message}`);
+    }
+  }
+
+  /** Envía un frame de imagen via sendRealtimeInput (no interrumpe el flujo de audio). */
+  sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
+    if (!this.session || this.closed) return;
+    try {
+      this.session.sendRealtimeInput({
+        video: { data: base64Image, mimeType },
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendImageFrame: ${err.message}`);
     }
   }
 
