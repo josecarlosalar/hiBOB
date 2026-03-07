@@ -363,7 +363,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _handleHardwareCommand(Map<String, dynamic> cmd) async {
     final action = cmd['action'] as String?;
-    } else if (action == 'flashlight') {
+    if (action == 'flashlight') {
       final enabled = cmd['enabled'] as bool? ?? false;
       try {
         if (enabled) {
@@ -380,7 +380,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         await _switchCamera(CameraLensDirection.back);
       }
     } else if (action == 'vibrate') {
-
       final pattern = cmd['pattern'] as String? ?? 'success';
       if (await Vibration.hasVibrator()) {
         if (pattern == 'success') Vibration.vibrate(duration: 100);
@@ -439,7 +438,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _setStateIfMounted(AssistantState newState) {
     if (!mounted || _state == newState) return;
-    _triggerStateHaptics(newState);
+    
+    // Solo vibramos si no estamos en un perfil que requiere estabilidad máxima
+    // o si estamos pasando a estado inactivo. Esto evita que el ruido del
+    // motor de vibración sea captado por el micro y corte al agente.
+    if (_conversationProfile == 'Interrupcion facil' || newState == AssistantState.inactive) {
+      _triggerStateHaptics(newState);
+    }
+    
     setState(() => _state = newState);
   }
 
