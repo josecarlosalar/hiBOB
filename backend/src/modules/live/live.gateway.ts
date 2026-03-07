@@ -58,10 +58,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         systemInstruction:
           'Eres hiBOB, una asistente mujer multimodal para personas con discapacidad visual. ' +
           'Habla siempre en ESPAÑOL DE ESPAÑA con un tono amable y profesional. ' +
-          'REGLA DE ORO: Cada vez que proporciones una lista de noticias, recetas, productos o cualquier información estructurada, utiliza SIEMPRE la herramienta display_content inmediatamente. No esperes a que el usuario te lo pida. ' +
-          'REGLA VISUAL: Nunca inventes detalles visuales. Si no tienes una imagen clara, di que no puedes verla. ' +
-          'Cuando el usuario te pregunte por su aspecto personal (camiseta, cara, expresión), utiliza switch_camera(direction: "front") antes de describe_camera_view. ' +
-          'Cuando busques en internet (web_search), utiliza términos de búsqueda simples (máximo 4 palabras). ' +
+          'MODO COPILOTO: Puedes ayudar al usuario a usar su móvil. Si te pide ayuda con una configuración o app, utiliza observe_screen para ver su pantalla y guía al usuario paso a paso (ej. "Pulsa en Ajustes", "Ahora baja hasta Pantalla"). ' +
+          'REGLA DE ORO: Cada vez que proporciones una lista de noticias, recetas o información estructurada, utiliza display_content inmediatamente. ' +
+          'REGLA VISUAL: Nunca inventes detalles. Si no tienes una imagen clara (cámara o pantalla), di que no puedes verla. ' +
+          'Cuando el usuario te pregunte por su aspecto, usa switch_camera(direction: "front") antes de describe_camera_view. ' +
           'IMPORTANTE: Ignora ruidos de fondo. No te interrumpas a ti misma salvo orden directa.',
       });
 
@@ -97,16 +97,20 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.on('tool_call', async (toolCall) => {
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view') {
-              client.emit('frame_request', {});
+            if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'observe_screen') {
+              const isScreen = fc.name === 'observe_screen';
+              this.logger.log(`Solicitando frame (${isScreen ? 'PANTALLA' : 'CÁMARA'}) para: ${fc.name}`);
+              
+              client.emit('frame_request', { source: isScreen ? 'screen' : 'camera' });
               const frameBase64 = await this._waitForFrame(client, 4000);
+              
               if (frameBase64) {
                 session.sendImageFrame(frameBase64);
               } else {
                 return {
                   name: fc.name,
                   id: fc.id,
-                  response: { content: 'ERROR: Imagen no recibida. Informa al usuario del problema de conexión.' },
+                  response: { content: 'ERROR: Imagen no recibida. Informa al usuario de que necesitas que esté en la pantalla correcta.' },
                 };
               }
             }

@@ -7,12 +7,15 @@ import 'core/providers/firebase_providers.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
 import 'features/intro/screens/splash_screen.dart';
+import 'core/services/background_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const ProviderScope(child: GeminiAgentApp()));
+  await hiBOBBackgroundService.initialize();
+  runApp(const ProviderScope(child: MyApp()));
 }
+
 
 class GeminiAgentApp extends StatelessWidget {
   const GeminiAgentApp({super.key});

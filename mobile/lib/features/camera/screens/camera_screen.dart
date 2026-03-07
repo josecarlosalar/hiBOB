@@ -11,6 +11,7 @@ import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
@@ -29,6 +30,8 @@ class CameraScreen extends ConsumerStatefulWidget {
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin {
   static const String _settingsFileName = 'conversation_settings.json';
+  final GlobalKey _screenCaptureKey = GlobalKey();
+  
   static const double _defaultVadThresholdDb = -68.0;
   static const double _defaultBargeInThresholdDb = -10.0;
   static const int _defaultSilenceMs = 650;
@@ -392,7 +395,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  Future<String?> _captureFrame() async {
+  Future<String?> _captureFrame({String source = 'camera'}) async {
+    if (source == 'screen') {
+      try {
+        final boundary = _screenCaptureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+        if (boundary == null) return null;
+        final image = await boundary.toImage(pixelRatio: 1.0);
+        final byteData = await image.toByteData(format: ImageByteFormat.png);
+        if (byteData == null) return null;
+        return base64Encode(byteData.buffer.asUint8List());
+      } catch (e) {
+        debugPrint('[ScreenCapture] error: $e');
+        return null;
+      }
+    }
+
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) {
       return null;
     }
