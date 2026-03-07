@@ -62,6 +62,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
   double _lastAmplitudeDb = -160.0;
+  bool _showCameraPreview = false;
+  Timer? _hideCameraTimer;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -216,6 +218,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onFrameRequest.listen((_) async {
         if (!mounted) return;
+        
+        // Mostrar la cámara y reiniciar el temporizador de ocultación
+        setState(() => _showCameraPreview = true);
+        _hideCameraTimer?.cancel();
+        _hideCameraTimer = Timer(const Duration(seconds: 10), () {
+          if (mounted) setState(() => _showCameraPreview = false);
+        });
+
         final frame = await _captureFrame();
         if (frame != null) {
           _liveSession.sendFrame(frameBase64: frame);
@@ -411,6 +421,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _bargeInStartedAt = null;
     _agentSpeechStartedAt = null;
     _agentAudioActive = false;
+    _showCameraPreview = false;
+    _hideCameraTimer?.cancel();
     unawaited(_audio.stopRecording());
 
     for (final sub in _subs) {
@@ -642,18 +654,48 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildCameraPreview(Size size) {
-    return Center(
-      child: Container(
-        width: size.width * 0.92,
-        height: size.height * 0.62,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(32),
-          boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 20)],
+    return IgnorePointer(
+      ignoring: !_showCameraPreview,
+      child: AnimatedOpacity(
+        opacity: _showCameraPreview ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOut,
+        child: Center(
+          child: AnimatedScale(
+            scale: _showCameraPreview ? 1.0 : 0.85,
+            duration: const Duration(milliseconds: 600),
+            curve: Curves.easeOutBack,
+            child: Container(
+              width: size.width * 0.92,
+              height: size.height * 0.62,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    blurRadius: 30,
+                    spreadRadius: 10,
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized)
+                  ? CameraPreview(_cameraCtrl!)
+                  : Container(
+                      color: Colors.grey[900],
+                      child: const Icon(
+                        Icons.camera_alt,
+                        color: Colors.white24,
+                        size: 64,
+                      ),
+                    ),
+            ),
+          ),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized)
-            ? CameraPreview(_cameraCtrl!)
-            : Container(color: Colors.grey[900], child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64)),
       ),
     );
   }
