@@ -74,15 +74,23 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`Sesion Gemini Live lista para client=${client.id}`);
 
       session.on('audio', (audio) => {
-        const base64Audio = audio?.data as string | undefined;
-        const mimeType = (audio?.mimeType as string | undefined) ?? 'audio/pcm';
-        if (!base64Audio) return;
-        client.emit('audio_chunk', { data: base64Audio, mimeType });
+        try {
+          const base64Audio = audio?.data as string | undefined;
+          const mimeType = (audio?.mimeType as string | undefined) ?? 'audio/pcm';
+          if (!base64Audio) return;
+          client.emit('audio_chunk', { data: base64Audio, mimeType });
+        } catch (e) {
+          this.logger.error(`Error emitiendo audio_chunk: ${e.message}`);
+        }
       });
 
       session.on('transcription', (text) => {
-        this.logger.log(`Gemini -> Cliente [transcription]: ${text.length} chars`);
-        client.emit('transcription', { text });
+        try {
+          this.logger.log(`Gemini -> Cliente [transcription]: ${text.length} chars`);
+          client.emit('transcription', { text });
+        } catch (e) {
+          this.logger.error(`Error emitiendo transcription: ${e.message}`);
+        }
       });
 
       session.on('interruption', () => {
