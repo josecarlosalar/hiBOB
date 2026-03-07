@@ -478,7 +478,7 @@ export class AiService implements OnModuleInit {
       'true';
 
     this.logger.log(
-      `Live session settings: model=${modelId}, location=${liveLocation}, minimal=${minimalConfig}, disableTools=${disableTools}, disableSpeech=${disableSpeechConfig}, disableTranscriptions=${disableTranscriptions}, verbose=${verboseLogs}`,
+      `Live session settings: model=${modelId}, minimal=${minimalConfig}, disableTools=${disableTools}, disableSpeech=${disableSpeechConfig}, disableTranscriptions=${disableTranscriptions}, verbose=${verboseLogs}`,
     );
 
     const liveOptions: LiveSessionOptions = {
