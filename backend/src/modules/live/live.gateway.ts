@@ -64,7 +64,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Tienes acceso al micrófono del usuario de forma continua y puedes escucharle en todo momento. ' +
           'Responde de forma concisa (máximo 3 frases) y natural. ' +
           'Cuando necesites ver algo, usa la función detect_safety_hazards o pide una imagen explícitamente. ' +
-          'Puedes interrumpir si el usuario empieza a hablar.',
+          'No interrumpas tu propia respuesta salvo que el usuario te corte de forma muy clara.',
       });
 
       client.data.geminiSession = session;
