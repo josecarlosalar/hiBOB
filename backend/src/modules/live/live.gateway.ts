@@ -116,13 +116,19 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
 
-            // Comandos de hardware
+            // Comandos de hardware y UI
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
               client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
+            } else if (fc.name === 'display_content') {
+              client.emit('display_content', {
+                type: fc.args.type,
+                title: fc.args.title,
+                items: fc.args.items,
+              });
             }
 
             return { name: fc.name, id: fc.id, response: { content: result } };
