@@ -13,7 +13,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   await hiBOBBackgroundService.initialize();
-  runApp(const ProviderScope(child: MyApp()));
+  runApp(const ProviderScope(child: GeminiAgentApp()));
 }
 
 
