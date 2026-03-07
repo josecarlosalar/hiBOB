@@ -123,6 +123,34 @@ const SWITCH_CAMERA_FUNCTION: FunctionDeclaration = {
   },
 };
 
+const DISPLAY_CONTENT_FUNCTION: FunctionDeclaration = {
+  name: 'display_content',
+  description: 'Muestra un panel visual con información estructurada (listas, noticias, recetas, productos). Úsala cuando encuentres información que el usuario deba ver en pantalla.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      type: { type: Type.STRING, enum: ['list', 'detail'], description: 'El tipo de visualización' },
+      title: { type: Type.STRING, description: 'Título del panel' },
+      items: {
+        type: Type.ARRAY,
+        description: 'Lista de elementos a mostrar',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.STRING },
+            title: { type: Type.STRING },
+            description: { type: Type.STRING },
+            url: { type: Type.STRING, description: 'URL de la fuente original' },
+            imageUrl: { type: Type.STRING, description: 'URL de imagen opcional' },
+            metadata: { type: Type.OBJECT, description: 'Datos extra como ingredientes, pasos, precio, etc.' },
+          },
+        },
+      },
+    },
+    required: ['type', 'title', 'items'],
+  },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
@@ -135,6 +163,7 @@ const AGENT_TOOLS: Tool[] = [
       MARK_PLACE_FUNCTION,
       GET_DIRECTIONS_FUNCTION,
       SWITCH_CAMERA_FUNCTION,
+      DISPLAY_CONTENT_FUNCTION,
     ],
   },
 ];

@@ -19,6 +19,7 @@ class LiveSessionService {
   final _interruptionController = StreamController<void>.broadcast();
   final _doneController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
+  final _contentController = StreamController<Map<String, dynamic>>.broadcast();
   final _frameRequestController = StreamController<void>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
@@ -28,6 +29,7 @@ class LiveSessionService {
   Stream<void> get onInterruption => _interruptionController.stream;
   Stream<void> get onDone => _doneController.stream;
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
+  Stream<Map<String, dynamic>> get onDisplayContent => _contentController.stream;
   /// El backend solicita un frame de cámara (para herramientas visuales).
   Stream<void> get onFrameRequest => _frameRequestController.stream;
   Stream<String> get onError => _errorController.stream;
@@ -93,6 +95,9 @@ class LiveSessionService {
       ..on('command', (data) {
         _commandController.add(Map<String, dynamic>.from(data as Map));
       })
+      ..on('display_content', (data) {
+        _contentController.add(Map<String, dynamic>.from(data as Map));
+      })
       ..on('error', (data) {
         final message = (data as Map<String, dynamic>)['message'] as String? ?? 'Error desconocido';
         debugPrint('Backend Error: $message');
@@ -150,6 +155,7 @@ class LiveSessionService {
     _interruptionController.close();
     _doneController.close();
     _commandController.close();
+    _contentController.close();
     _frameRequestController.close();
     _errorController.close();
   }
