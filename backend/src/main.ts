@@ -7,13 +7,18 @@ import { writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-// Si viene el JSON de la SA como variable de entorno, lo escribe a disco
-// para que las librerías de Google (ADC) lo encuentren via GOOGLE_APPLICATION_CREDENTIALS
-if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON) {
+// En Cloud Run, ADC usa automáticamente la SA asociada al servicio.
+// Solo escribir el key file a disco si NO estamos en Cloud Run (desarrollo local)
+// y hay un JSON de SA en variable de entorno.
+if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON && !process.env.K_SERVICE) {
   const keyPath = join(tmpdir(), 'sa-key.json');
   writeFileSync(keyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON, 'utf8');
   process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
-  console.log(`SA key written to ${keyPath}`);
+  console.log(`SA key written to ${keyPath} (local dev)`);
+} else if (process.env.K_SERVICE) {
+  // Cloud Run: eliminar GOOGLE_APPLICATION_CREDENTIALS si existe para usar ADC nativo
+  delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  console.log(`Cloud Run detected (${process.env.K_SERVICE}), using native ADC`);
 }
 
 async function bootstrap() {
