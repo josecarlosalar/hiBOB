@@ -465,10 +465,13 @@ export class AiService implements OnModuleInit {
       );
     }
 
-    // Live API siempre usa Vertex AI con ADC (Service Account GCP).
-    // Esto permite modelos con visión (gemini-live-2.5-flash-preview).
-    // GEMINI_API_KEY se reserva solo para otros usos si fuera necesario.
-    const liveAi = new GoogleGenAI({ vertexai: true, project, location: liveLocation });
+    // Live API usa AI Studio (GEMINI_API_KEY) — verificado que
+    // gemini-2.5-flash-native-audio-latest acepta imágenes vía sendClientContent.
+    // Fallback a Vertex AI con ADC si no hay API key.
+    const geminiApiKey = this.configService.get<string>('GEMINI_API_KEY');
+    const liveAi = geminiApiKey
+      ? new GoogleGenAI({ apiKey: geminiApiKey })
+      : new GoogleGenAI({ vertexai: true, project, location: liveLocation });
     const minimalConfig =
       this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
       'true';
