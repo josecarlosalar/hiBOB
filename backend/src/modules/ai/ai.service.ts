@@ -447,31 +447,15 @@ export class AiService implements OnModuleInit {
     const defaultLocation = this.configService.get<string>('GCP_LOCATION', 'us-central1');
 
     // Modelo Live multimodal (audio + imagen) para la sesión en tiempo real.
-    // Evitar *native-audio* aquí porque no soporta visión.
     const modelId = this.configService.get<string>(
       'GEMINI_LIVE_MODEL',
-      'gemini-live-2.5-flash-preview',
+      'gemini-2.0-flash-live-001',
     );
-    const configuredLiveLocation = this.configService.get<string>('GCP_LIVE_LOCATION');
-    const modelNeedsUsCentral1 =
-      modelId.includes('gemini-2.0-flash-live-preview-04-09') ||
-      modelId.includes('gemini-live-2.5-flash-preview-native-audio');
-    const liveLocation =
-      configuredLiveLocation ??
-      (modelNeedsUsCentral1 ? 'us-central1' : defaultLocation);
-    if (!configuredLiveLocation && modelNeedsUsCentral1 && liveLocation !== defaultLocation) {
-      this.logger.warn(
-        `GCP_LIVE_LOCATION no definido. Usando "${liveLocation}" por compatibilidad del modelo live "${modelId}".`,
-      );
-    }
+    const liveLocation = this.configService.get<string>('GCP_LIVE_LOCATION', defaultLocation);
 
-    // Live API usa AI Studio (GEMINI_API_KEY) — verificado que
-    // gemini-2.5-flash-native-audio-latest acepta imágenes vía sendClientContent.
-    // Fallback a Vertex AI con ADC si no hay API key.
-    const geminiApiKey = this.configService.get<string>('GEMINI_API_KEY');
-    const liveAi = geminiApiKey
-      ? new GoogleGenAI({ apiKey: geminiApiKey })
-      : new GoogleGenAI({ vertexai: true, project, location: liveLocation });
+    // Live API usa Vertex AI con SA (ADC). Verificado que gemini-2.0-flash-live-001
+    // funciona en europe-west1 con visión (sendClientContent + imágenes) y audio.
+    const liveAi = new GoogleGenAI({ vertexai: true, project, location: liveLocation });
     const minimalConfig =
       this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
       'true';
