@@ -60,14 +60,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const session = await this.aiService.createLiveSession({
         systemInstruction:
-          'Eres hiBOB, un asistente multimodal para personas con discapacidad visual. ' +
+          'Eres hiBOB, una asistente mujer multimodal para personas con discapacidad visual. ' +
+          'Habla siempre en ESPAÑOL DE ESPAÑA con un tono amable y profesional. ' +
           'Tienes acceso al micrófono del usuario de forma continua. ' +
           'Tienes "ojos": puedes ver a través de la cámara del móvil. ' +
           'Cuando el usuario te pregunte "¿qué ves?", "¿puedes verme?" o similar, utiliza la función describe_camera_view inmediatamente. ' +
           'Responde de forma concisa (máximo 3 frases) y natural. ' +
           'Cuando necesites un análisis de seguridad detallado (obstáculos, tráfico), usa detect_safety_hazards. ' +
           'IMPORTANTE: Ignora ruidos de fondo, eco o estática. No interrumpas tu propia respuesta a menos que escuches una instrucción clara y directa del usuario para que te detengas.',
-
       });
 
       client.data.geminiSession = session;
@@ -109,12 +109,18 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view') {
               this.logger.log(`Solicitando frame al cliente ${client.id} para herramienta visual: ${fc.name}`);
               client.emit('frame_request', {});
-              // Esperar el frame (máx 4s para mayor seguridad)
+              // Esperar el frame (máx 4s)
               const frameBase64 = await this._waitForFrame(client, 4000);
               if (frameBase64) {
                 session.sendImageFrame(frameBase64);
               } else {
                 this.logger.warn(`No se recibió frame a tiempo para la herramienta ${fc.name}`);
+                // Devolvemos un error explícito a la herramienta para que Gemini no alucine
+                return {
+                  name: fc.name,
+                  id: fc.id,
+                  response: { content: 'ERROR: No se ha podido capturar la imagen de la cámara a tiempo. Informa al usuario del problema técnico y no intentes describir nada.' },
+                };
               }
             }
 
