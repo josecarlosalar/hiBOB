@@ -296,11 +296,11 @@ export class GeminiLiveSession extends EventEmitter {
         }
       }
       if (turnComplete) {
-        this.logger.log('Gemini Turn Complete');
+        this.logger.log(`[SDK] Turn Complete (msgs=${this.sdkMsgCount})`);
         this.emit('done');
       }
       if (interrupted) {
-        this.logger.warn('Gemini Interrupted');
+        this.logger.warn(`[SDK] Model Interrupted (msgs=${this.sdkMsgCount})`);
         this.emit('interruption');
       }
     }
