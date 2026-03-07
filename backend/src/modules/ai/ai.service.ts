@@ -450,17 +450,13 @@ export class AiService implements OnModuleInit {
     // Autenticación: si hay GEMINI_API_KEY usa AI Studio (más sencillo, sin IAM).
     // Si no hay key, usa Vertex AI con ADC (Service Account en Cloud Run).
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    let liveAi: GoogleGenAI;
-    if (apiKey) {
-      this.logger.log(`Live API: usando AI Studio key (model=${modelId})`);
-      liveAi = new GoogleGenAI({ apiKey });
-    } else {
-      const project = this.configService.get<string>('GCP_PROJECT_ID');
-      const defaultLocation = this.configService.get<string>('GCP_LOCATION', 'europe-west1');
-      const liveLocation = this.configService.get<string>('GCP_LIVE_LOCATION', defaultLocation);
-      this.logger.log(`Live API: usando Vertex AI ADC (project=${project}, location=${liveLocation}, model=${modelId})`);
-      liveAi = new GoogleGenAI({ vertexai: true, project, location: liveLocation });
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY no configurada. Se requiere para Live API con AI Studio.');
     }
+    this.logger.log(`Live API: usando AI Studio key (model=${modelId})`);
+    // Crear instancia separada sin vertexai ni project para evitar que el SDK
+    // ignore la apiKey en favor de ADC/Vertex.
+    const liveAi = new GoogleGenAI({ apiKey });
     const minimalConfig =
       this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
       'true';
