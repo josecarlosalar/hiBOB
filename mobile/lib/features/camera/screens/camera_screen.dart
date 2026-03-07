@@ -240,6 +240,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onError.listen((msg) {
         if (!mounted) return;
         _processingTimeout?.cancel();
+        // Si el error es de autenticación, cerrar sesión y volver al login
+        if (msg.contains('autenticacion') || msg.contains('token') || msg.contains('auth') || msg.contains('401') || msg.contains('403')) {
+          _stopSession();
+          ref.read(firebaseServiceProvider).signOut();
+          return;
+        }
         _showMessage('Asistente: $msg');
         _startListening();
       }),
@@ -1255,6 +1261,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
+  Future<void> _signOut() async {
+    _stopSession();
+    final firebase = ref.read(firebaseServiceProvider);
+    await firebase.signOut();
+  }
+
   Widget _buildTopOverlay() {
     return Positioned(
       top: 26,
@@ -1288,6 +1300,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 ? Icons.flashlight_on
                 : Icons.flashlight_off,
             onTap: _toggleFlashLocally,
+          ),
+          const SizedBox(width: 10),
+          _CircleButton(
+            icon: Icons.logout_rounded,
+            onTap: _signOut,
           ),
         ],
       ),
