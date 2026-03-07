@@ -106,13 +106,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
             // Herramientas visuales: pedir frame al móvil antes de ejecutar
-            if (fc.name === 'detect_safety_hazards') {
-              this.logger.log(`Solicitando frame al cliente ${client.id} para herramienta visual`);
+            if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view') {
+              this.logger.log(`Solicitando frame al cliente ${client.id} para herramienta visual: ${fc.name}`);
               client.emit('frame_request', {});
-              // Esperar el frame (máx 3s)
-              const frameBase64 = await this._waitForFrame(client, 3000);
+              // Esperar el frame (máx 4s para mayor seguridad)
+              const frameBase64 = await this._waitForFrame(client, 4000);
               if (frameBase64) {
                 session.sendImageFrame(frameBase64);
+              } else {
+                this.logger.warn(`No se recibió frame a tiempo para la herramienta ${fc.name}`);
               }
             }
 
