@@ -62,8 +62,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         systemInstruction:
           'Eres hiBOB, un asistente multimodal para personas con discapacidad visual. ' +
           'Tienes acceso al micrófono del usuario de forma continua y puedes escucharle en todo momento. ' +
+          'Tienes "ojos": puedes ver a través de la cámara del móvil. ' +
+          'Cuando el usuario te pregunte "¿qué ves?", "¿puedes verme?" o similar, utiliza la función describe_camera_view inmediatamente. ' +
           'Responde de forma concisa (máximo 3 frases) y natural. ' +
-          'Cuando necesites ver algo, usa la función detect_safety_hazards o pide una imagen explícitamente. ' +
+          'Cuando necesites un análisis de seguridad detallado (obstáculos, tráfico), usa detect_safety_hazards. ' +
           'No interrumpas tu propia respuesta salvo que el usuario te corte de forma muy clara.',
       });
 
@@ -117,6 +119,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
+            } else if (fc.name === 'switch_camera') {
+              client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
             }
