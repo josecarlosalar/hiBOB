@@ -151,6 +151,15 @@ const DISPLAY_CONTENT_FUNCTION: FunctionDeclaration = {
   },
 };
 
+const OBSERVE_SCREEN_FUNCTION: FunctionDeclaration = {
+  name: 'observe_screen',
+  description: 'Captura y analiza el contenido actual de la pantalla del móvil. Úsala cuando el usuario pida ayuda para configurar algo, encontrar un menú o leer lo que hay en pantalla.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {},
+  },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
@@ -164,6 +173,7 @@ const AGENT_TOOLS: Tool[] = [
       GET_DIRECTIONS_FUNCTION,
       SWITCH_CAMERA_FUNCTION,
       DISPLAY_CONTENT_FUNCTION,
+      OBSERVE_SCREEN_FUNCTION,
     ],
   },
 ];
