@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' show Amplitude;
@@ -224,17 +226,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         if (!mounted) return;
         _handleAgentSpeechEnded();
       }),
-      _liveSession.onFrameRequest.listen((_) async {
+      _liveSession.onFrameRequest.listen((data) async {
         if (!mounted) return;
         
-        // Mostrar la cámara y reiniciar el temporizador de ocultación
-        setState(() => _showCameraPreview = true);
-        _hideCameraTimer?.cancel();
-        _hideCameraTimer = Timer(const Duration(seconds: 10), () {
-          if (mounted) setState(() => _showCameraPreview = false);
-        });
+        final Map<String, dynamic>? payload = data as Map<String, dynamic>?;
+        final source = payload?['source'] as String? ?? 'camera';
 
-        final frame = await _captureFrame();
+        if (source == 'camera') {
+          // Mostrar la cámara y reiniciar el temporizador de ocultación
+          setState(() => _showCameraPreview = true);
+          _hideCameraTimer?.cancel();
+          _hideCameraTimer = Timer(const Duration(seconds: 10), () {
+            if (mounted) setState(() => _showCameraPreview = false);
+          });
+        } else {
+          // Si es pantalla, nos aseguramos de que el preview de cámara NO tape la captura
+          if (mounted) setState(() => _showCameraPreview = false);
+        }
+
+        final frame = await _captureFrame(source: source);
         if (frame != null) {
           _liveSession.sendFrame(frameBase64: frame);
         }
@@ -643,16 +653,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final colors = Theme.of(context).colorScheme;
     final size = MediaQuery.of(context).size;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          _buildGeminiAura(colors),
-          _buildTopOverlay(),
-          _buildCameraPreview(size),
-          if (_structuredContent != null) _buildStructuredPanel(size, colors),
-          _buildBottomControlBar(colors),
-        ],
+    return RepaintBoundary(
+      key: _screenCaptureKey,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
+          children: [
+            _buildGeminiAura(colors),
+            _buildTopOverlay(),
+            _buildCameraPreview(size),
+            if (_structuredContent != null) _buildStructuredPanel(size, colors),
+            _buildBottomControlBar(colors),
+          ],
+        ),
       ),
     );
   }
