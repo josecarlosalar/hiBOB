@@ -315,12 +315,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _agentSpeechStartedAt ??= DateTime.now();
     _agentAudioActive = true;
     // Reiniciar el timer cada vez que llega un chunk. Si no llega nada en
-    // 1500ms consideramos que el agente terminó de hablar. Este valor alto
-    // evita que el gap natural entre chunks PCM dispare un falso "fin de turno"
-    // que haría que el cliente enviara audio y Gemini se interrumpiera a sí mismo.
+    // 3000ms consideramos que el agente terminó de hablar. Este valor más
+    // alto nos hace resilientes a latencias de red y jitter sin que la
+    // interfaz se quede "congelada" en modo habla.
     _agentSpeechIdleTimer?.cancel();
     _agentSpeechIdleTimer = Timer(
-      const Duration(milliseconds: 1500),
+      const Duration(milliseconds: 3000),
       _handleAgentSpeechEnded,
     );
   }
