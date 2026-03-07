@@ -576,6 +576,11 @@ export class AiService implements OnModuleInit {
       return `Cámara cambiada a ${direction === 'front' ? 'frontal (selfie)' : 'trasera'} correctamente.`;
     }
 
+    if (name === 'display_content') {
+      const title = args['title'] as string;
+      return `Panel visual "${title}" mostrado correctamente en la pantalla del usuario.`;
+    }
+
     if (name === 'trigger_haptic_feedback') {
       return 'Vibración enviada al dispositivo.';
     }
