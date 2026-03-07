@@ -363,7 +363,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _handleHardwareCommand(Map<String, dynamic> cmd) async {
     final action = cmd['action'] as String?;
-    if (action == 'flashlight') {
+    } else if (action == 'flashlight') {
       final enabled = cmd['enabled'] as bool? ?? false;
       try {
         if (enabled) {
@@ -372,7 +372,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           await TorchLight.disableTorch();
         }
       } catch (_) {}
+    } else if (action == 'switch_camera') {
+      final direction = cmd['direction'] as String?;
+      if (direction == 'front') {
+        await _switchCamera(CameraLensDirection.front);
+      } else if (direction == 'back') {
+        await _switchCamera(CameraLensDirection.back);
+      }
     } else if (action == 'vibrate') {
+
       final pattern = cmd['pattern'] as String? ?? 'success';
       if (await Vibration.hasVibrator()) {
         if (pattern == 'success') Vibration.vibrate(duration: 100);
