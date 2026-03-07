@@ -54,8 +54,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   String _conversationProfile = 'Equilibrado';
 
   StreamSubscription<String>? _audioStreamSub;
+  StreamSubscription<Amplitude>? _amplitudeSub;
   final List<StreamSubscription<dynamic>> _subs = [];
   Timer? _locationTimer;
+  Timer? _agentSpeechIdleTimer;
+  DateTime? _lastVoiceDetectedAt;
+  DateTime? _bargeInStartedAt;
+  DateTime? _agentSpeechStartedAt;
+  bool _agentAudioActive = false;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -191,6 +197,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }),
       _liveSession.onAudioChunk.listen((audioChunk) {
         if (!mounted) return;
+        _markAgentSpeechActive();
         _setStateIfMounted(AssistantState.speaking);
         final base64Audio = audioChunk['data'] ?? '';
         final mimeType = audioChunk['mimeType'];
@@ -199,6 +206,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onInterruption.listen((_) {
         if (!mounted) return;
         _stopSpeaking();
+      }),
+      _liveSession.onDone.listen((_) {
+        if (!mounted) return;
+        _handleAgentSpeechEnded();
       }),
       _liveSession.onFrameRequest.listen((_) async {
         if (!mounted) return;
@@ -232,14 +243,95 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _startStreaming() {
     _setStateIfMounted(AssistantState.listening);
     _audioStreamSub?.cancel();
+    _amplitudeSub?.cancel();
+    _lastVoiceDetectedAt = null;
+    _bargeInStartedAt = null;
+    _agentSpeechStartedAt = null;
+    _agentAudioActive = false;
 
     unawaited(_audio.startStreamingRecording(intervalMs: 200));
 
+    _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
     _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-      if (_liveSession.state == LiveSessionState.connected) {
+      if (
+          _liveSession.state == LiveSessionState.connected &&
+          _shouldForwardAudioChunk()) {
         _liveSession.sendAudioChunk(audioBase64: base64Chunk);
       }
     });
+  }
+
+  void _handleAmplitudeSample(Amplitude amp) {
+    final now = DateTime.now();
+    final currentDb = amp.current;
+    final speechDetected = currentDb >= _vadThresholdDb;
+
+    if (speechDetected) {
+      _lastVoiceDetectedAt = now;
+    }
+
+    if (!_agentAudioActive) {
+      _bargeInStartedAt = null;
+      return;
+    }
+
+    final graceElapsed = _agentSpeechStartedAt != null &&
+        now.difference(_agentSpeechStartedAt!).inMilliseconds >=
+            _agentSpeechGraceMs;
+    final bargeInDetected = currentDb >= _bargeInThresholdDb;
+    if (!graceElapsed) {
+      _bargeInStartedAt = null;
+      return;
+    }
+
+    if (bargeInDetected) {
+      _bargeInStartedAt ??= now;
+      return;
+    }
+
+    _bargeInStartedAt = null;
+  }
+
+  bool _shouldForwardAudioChunk() {
+    final now = DateTime.now();
+    final recentVoiceWindow = Duration(milliseconds: _silenceMs);
+    final hasRecentVoice = _lastVoiceDetectedAt != null &&
+        now.difference(_lastVoiceDetectedAt!) <= recentVoiceWindow;
+
+    if (!_agentAudioActive) {
+      return hasRecentVoice;
+    }
+
+    if (_state != AssistantState.speaking) {
+      return hasRecentVoice;
+    }
+
+    final bargeInStartedAt = _bargeInStartedAt;
+    if (bargeInStartedAt == null) {
+      return false;
+    }
+
+    return now.difference(bargeInStartedAt).inMilliseconds >= _minBargeInMs;
+  }
+
+  void _markAgentSpeechActive() {
+    _agentSpeechStartedAt ??= DateTime.now();
+    _agentAudioActive = true;
+    _agentSpeechIdleTimer?.cancel();
+    _agentSpeechIdleTimer = Timer(
+      const Duration(milliseconds: 450),
+      _handleAgentSpeechEnded,
+    );
+  }
+
+  void _handleAgentSpeechEnded() {
+    _agentSpeechIdleTimer?.cancel();
+    _agentAudioActive = false;
+    _bargeInStartedAt = null;
+    _agentSpeechStartedAt = null;
+    if (_state != AssistantState.inactive) {
+      _setStateIfMounted(AssistantState.listening);
+    }
   }
 
   Future<void> _startLocationUpdates() async {
@@ -281,7 +373,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       } catch (_) {}
     } else if (action == 'vibrate') {
       final pattern = cmd['pattern'] as String? ?? 'success';
-      if (await Vibration.hasVibrator() ?? false) {
+      if (await Vibration.hasVibrator()) {
         if (pattern == 'success') Vibration.vibrate(duration: 100);
         if (pattern == 'warning') Vibration.vibrate(pattern: [0, 100, 50, 100]);
         if (pattern == 'error') Vibration.vibrate(pattern: [0, 500]);
@@ -309,16 +401,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _stopSpeaking() {
     _pcmAudio.stop();
-    if (_state != AssistantState.inactive) {
-      _setStateIfMounted(AssistantState.listening);
-    }
+    _handleAgentSpeechEnded();
   }
 
   void _stopSession() {
     _audioStreamSub?.cancel();
     _audioStreamSub = null;
+    _amplitudeSub?.cancel();
+    _amplitudeSub = null;
     _locationTimer?.cancel();
     _locationTimer = null;
+    _agentSpeechIdleTimer?.cancel();
+    _agentSpeechIdleTimer = null;
+    _lastVoiceDetectedAt = null;
+    _bargeInStartedAt = null;
+    _agentSpeechStartedAt = null;
+    _agentAudioActive = false;
     unawaited(_audio.stopRecording());
 
     for (final sub in _subs) {
@@ -945,7 +1043,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void dispose() {
     _audioStreamSub?.cancel();
+    _amplitudeSub?.cancel();
     _locationTimer?.cancel();
+    _agentSpeechIdleTimer?.cancel();
     for (final sub in _subs) {
       sub.cancel();
     }
