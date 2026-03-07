@@ -61,6 +61,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
+  double _lastAmplitudeDb = -160.0;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -265,6 +266,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _handleAmplitudeSample(Amplitude amp) {
     final now = DateTime.now();
     final currentDb = amp.current;
+    _lastAmplitudeDb = currentDb;
 
     if (!_agentAudioActive) {
       _bargeInStartedAt = null;
@@ -282,6 +284,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     if (bargeInDetected) {
       _bargeInStartedAt ??= now;
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= _minBargeInMs) {
+        if (_bargeInEnabled) {
+          debugPrint('[Camera] Barge-in sostenido detectado. Cortando agente.');
+          _stopSpeaking();
+        }
+      }
       return;
     }
 
@@ -289,11 +297,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   bool _shouldForwardAudioChunk() {
-    // Siempre enviamos audio continuo a Gemini para que su VAD interno funcione
-    // correctamente. Si filtramos aquí, Gemini no puede detectar cuándo el usuario
-    // empieza o termina de hablar, causando respuestas tardías o nulas.
-    // El barge-in de la UI (parar reproducción PCM) se gestiona en _handleAmplitudeSample.
-    return true;
+    // Si el agente no está hablando, siempre enviamos audio continuo
+    // para que el VAD de Gemini detecte cuándo empieza el usuario.
+    if (!_agentAudioActive) return true;
+
+    // Si el agente está hablando:
+    // 1. En perfil 'Interrupcion facil', enviamos todo para permitir barge-in nativo.
+    if (_conversationProfile == 'Interrupcion facil') return true;
+
+    // 2. En perfiles estables (Equilibrado, Evitar cortes, Mas rapido), 
+    // suprimimos el audio del micro mientras el agente habla. Esto evita que 
+    // el eco del altavoz dispare el VAD de Gemini y corte la respuesta.
+    return false;
   }
 
   void _markAgentSpeechActive() {
