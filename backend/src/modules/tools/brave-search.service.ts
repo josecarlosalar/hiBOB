@@ -29,7 +29,7 @@ export class BraveSearchService {
     if (!apiKey) {
       this.logger.warn('BRAVE_SEARCH_API_KEY no está configurada. La búsqueda web no funcionará.');
     }
-    this.apiKey = apiKey;
+    this.apiKey = apiKey ?? '';
   }
 
   async search(query: string, maxResults = 5): Promise<SearchResult[]> {
