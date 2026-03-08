@@ -98,10 +98,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.on('tool_call', async (toolCall) => {
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'observe_screen') {
-              const isScreen = fc.name === 'observe_screen';
+            if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'capture_device_screen') {
+              const isScreen = fc.name === 'capture_device_screen';
               this.logger.log(`Solicitando frame (${isScreen ? 'PANTALLA' : 'CÁMARA'}) para: ${fc.name}`);
               
+              if (isScreen) {
+                client.emit('command', { action: 'start_copilot_mode' });
+              }
+
               client.emit('frame_request', { source: isScreen ? 'screen' : 'camera' });
               const frameBase64 = await this._waitForFrame(client, 4000);
               
