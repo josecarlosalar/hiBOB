@@ -9,18 +9,17 @@ import {
   Type,
   Modality,
 } from '@google/genai';
-import { TavilyService } from '../tools/tavily.service';
+import { BraveSearchService } from '../tools/brave-search.service';
 import { LocationService } from '../tools/location.service';
-import { GoogleAuth } from 'google-auth-library';
+import { VirusTotalService } from '../tools/virustotal.service';
 import { EventEmitter } from 'events';
-import { inspect } from 'util';
 
 // ─── Definición de herramientas disponibles ──────────────────────────────────
 
 const WEB_SEARCH_FUNCTION: FunctionDeclaration = {
   name: 'web_search',
   description:
-    'Busca información actualizada en internet. Úsala cuando necesites datos recientes, noticias, precios, o cualquier información que puedas no tener en tu conocimiento.',
+    'Busca información actualizada en internet usando Brave Search. Úsala cuando necesites datos recientes, noticias, precios, o cualquier información que puedas no tener en tu conocimiento.',
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -37,16 +36,6 @@ const GET_LOCATION_FUNCTION: FunctionDeclaration = {
   name: 'get_current_location',
   description:
     'Obtiene la ubicación actual del usuario (calle, ciudad). Úsala para dar contexto sobre dónde se encuentra el usuario.',
-  parameters: {
-    type: Type.OBJECT,
-    properties: {},
-  },
-};
-
-const DETECT_HAZARDS_FUNCTION: FunctionDeclaration = {
-  name: 'detect_safety_hazards',
-  description:
-    'Realiza un escaneo de seguridad de alta prioridad sobre la imagen de la cámara. Úsala cuando el usuario camine, se mueva o pregunte si es seguro avanzar. Esta herramienta activa un análisis detallado de obstáculos, desniveles y tráfico.',
   parameters: {
     type: Type.OBJECT,
     properties: {},
@@ -160,12 +149,47 @@ const CAPTURE_SCREEN_FUNCTION: FunctionDeclaration = {
   },
 };
 
+const ANALYZE_SECURITY_URL_FUNCTION: FunctionDeclaration = {
+  name: 'analyze_security_url',
+  description: 'Analiza una URL sospechosa (de un SMS, web o mensaje) para detectar estafas, phishing o malware usando VirusTotal. Úsala siempre que el usuario te enseñe un enlace y sospeche de él.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      url: { type: Type.STRING, description: 'La URL completa a analizar' },
+    },
+    required: ['url'],
+  },
+};
+
+const SAVE_VISUAL_MEMORY_FUNCTION: FunctionDeclaration = {
+  name: 'save_visual_memory',
+  description: 'Guarda un recuerdo visual de un objeto o lugar (ej. "he dejado las llaves aquí", "he aparcado el coche"). Captura la foto y la ubicación GPS actual.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      label: { type: Type.STRING, description: 'Nombre del objeto o lugar (ej. "llaves", "coche", "puerta")' },
+    },
+    required: ['label'],
+  },
+};
+
+const GET_VISUAL_MEMORY_FUNCTION: FunctionDeclaration = {
+  name: 'get_visual_memory',
+  description: 'Recupera un recuerdo visual guardado anteriormente. Úsala cuando el usuario pregunte "¿dónde dejé...?" o "¿dónde está...?". Muestra la foto y la ubicación al usuario.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      label: { type: Type.STRING, description: 'Nombre del objeto o lugar a buscar' },
+    },
+    required: ['label'],
+  },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
       WEB_SEARCH_FUNCTION,
       GET_LOCATION_FUNCTION,
-      DETECT_HAZARDS_FUNCTION,
       DESCRIBE_VISION_FUNCTION,
       TOGGLE_FLASHLIGHT_FUNCTION,
       TRIGGER_HAPTIC_FEEDBACK_FUNCTION,
@@ -174,6 +198,9 @@ const AGENT_TOOLS: Tool[] = [
       SWITCH_CAMERA_FUNCTION,
       DISPLAY_CONTENT_FUNCTION,
       CAPTURE_SCREEN_FUNCTION,
+      ANALYZE_SECURITY_URL_FUNCTION,
+      SAVE_VISUAL_MEMORY_FUNCTION,
+      GET_VISUAL_MEMORY_FUNCTION,
     ],
   },
 ];
@@ -190,9 +217,6 @@ export interface LiveSessionOptions {
   verboseLogs?: boolean;
 }
 
-/**
- * Sesión Live con Gemini usando el SDK oficial @google/genai.
- */
 export class GeminiLiveSession extends EventEmitter {
   private session: any; 
   private readonly logger = new Logger(GeminiLiveSession.name);
@@ -220,13 +244,7 @@ export class GeminiLiveSession extends EventEmitter {
     const liveConfig: any = {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
       systemInstruction: {
-        parts: [
-          {
-            text:
-              this.options.systemInstruction ||
-              'Eres hiBOB, un asistente amable para personas con discapacidad visual. Responde de forma concisa y natural.',
-          },
-        ],
+        parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, un asistente multimodal.' }],
       },
     };
 
@@ -280,25 +298,17 @@ export class GeminiLiveSession extends EventEmitter {
     this.sdkMsgCount += 1;
     if (msg.serverContent) {
       const { modelTurn, turnComplete, interrupted, inputTranscription } = msg.serverContent;
-
-      if (inputTranscription?.text) {
-        this.emit('transcription', inputTranscription.text);
-      }
-
+      if (inputTranscription?.text) this.emit('transcription', inputTranscription.text);
       if (modelTurn?.parts) {
         for (const part of modelTurn.parts) {
           if (part.inlineData?.data) {
-            this.emit('audio', {
-              data: part.inlineData.data,
-              mimeType: part.inlineData.mimeType ?? null,
-            });
+            this.emit('audio', { data: part.inlineData.data, mimeType: part.inlineData.mimeType ?? null });
           }
         }
       }
       if (turnComplete) this.emit('done');
       if (interrupted) this.emit('interruption');
     }
-
     if (msg.toolCall) {
       this.logger.log(`Gemini Tool Call: ${JSON.stringify(msg.toolCall)}`);
       this.emit('tool_call', msg.toolCall);
@@ -352,8 +362,9 @@ export class AiService implements OnModuleInit {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly tavilyService: TavilyService,
+    private readonly braveSearchService: BraveSearchService,
     private readonly locationService: LocationService,
+    private readonly virusTotalService: VirusTotalService,
   ) { }
 
   onModuleInit() {
@@ -390,19 +401,36 @@ export class AiService implements OnModuleInit {
 
   private async executeTool(name: string, args: Record<string, unknown>, socketId?: string): Promise<string> {
     if (name === 'web_search') {
-      const results = await this.tavilyService.search(args['query'] as string);
+      const results = await this.braveSearchService.search(args['query'] as string);
       if (!results.length) return 'No se encontraron resultados.';
       return results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content}`).join('\n\n');
     }
+    if (name === 'analyze_security_url') {
+      const url = args['url'] as string;
+      const report = await this.virusTotalService.analyzeUrl(url);
+      return `REPORTE DE SEGURIDAD PARA ${url}:\nEstado: ${report.status.toUpperCase()}\nDetalles: ${report.details}`;
+    }
     if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
-    if (name === 'detect_safety_hazards') return 'SISTEMA DE SEGURIDAD ACTIVADO: Analiza la imagen buscando peligros.';
     if (name === 'describe_camera_view') return 'IMAGEN CAPTURADA: Describe lo que ves de forma natural.';
     if (name === 'toggle_flashlight') return `Linterna ${args['enabled'] ? 'encendida' : 'apagada'}.`;
     if (name === 'switch_camera') return `Cámara cambiada a ${args['direction'] === 'front' ? 'frontal' : 'trasera'}.`;
     if (name === 'display_content') return `Panel visual "${args['title']}" mostrado correctamente.`;
-    if (name === 'observe_screen') return 'PANTALLA CAPTURADA: Analiza la interfaz para guiar al usuario.';
-    if (name === 'trigger_haptic_feedback') return 'Vibración enviada.';
+    if (name === 'capture_device_screen') return 'PANTALLA CAPTURADA: Analiza la interfaz para guiar al usuario.';
     
+    if (name === 'save_visual_memory') {
+      const label = args['label'] as string;
+      const location = await this.locationService.getCurrentLocation(socketId);
+      this.memory.set(label.toLowerCase(), `Ubicación: ${location}. Guardado el ${new Date().toLocaleString()}`);
+      return `MEMORIA GUARDADA: He recordado la ubicación de "${label}".`;
+    }
+
+    if (name === 'get_visual_memory') {
+      const label = args['label'] as string;
+      const data = this.memory.get(label.toLowerCase());
+      if (!data) return `No tengo recuerdos de "${label}".`;
+      return `RECUERDO ENCONTRADO para "${label}": ${data}.`;
+    }
+
     return `Herramienta "${name}" no implementada.`;
   }
 
@@ -434,16 +462,13 @@ export class AiService implements OnModuleInit {
         parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
       }
     }
-
     const contents: Content[] = [...(history ?? []), { role: 'user' as const, parts }];
-
     try {
       const streamResult = await this.ai.models.generateContentStream({
         model: this.modelName,
         contents,
         config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS },
       });
-
       for await (const chunk of streamResult) {
         const text = chunk.text;
         if (text) onChunk(text);
