@@ -1,94 +1,23 @@
-# hiBOB — Gemini Live Agent Challenge
+# hiBOB — Tu Guardián y Memoria Inteligente
 
-Agente de IA multimodal que ve, escucha y habla en tiempo real usando **Gemini 2.5 Flash** en Google Cloud.
+hiBOB es una asistente multimodal de nueva generación diseñada para potenciar la seguridad digital, la memoria visual y la productividad del usuario mediante Inteligencia Artificial en tiempo real.
 
-## Demostración rápida
+## 🚀 Capacidades "WOW"
 
-| Función | Descripción |
-|---------|-------------|
-| 💬 Chat con streaming | Respuestas en tiempo real con historial persistido |
-| 🎙️ Voz a voz | Graba un audio → el agente transcribe y responde |
-| 📸 Visión puntual | Captura una foto y pregunta sobre ella |
-| 📷 Visión en directo | Modo live: el agente ve la cámara cada 3 s y responde por voz |
-| 🔍 Búsqueda web | Function calling con Tavily — busca en internet de forma autónoma |
+| Función | Descripción | Tecnología |
+|---------|-------------|------------|
+| **🛡️ Escudo Digital** | Analiza enlaces sospechosos y SMS en tiempo real para prevenir estafas y phishing. | VirusTotal API |
+| **📸 Memoria Visual** | Guarda recuerdos de dónde dejas tus objetos o lugares importantes con foto y GPS. | Gemini Vision + GPS |
+| **📱 Modo Copiloto** | Te guía paso a paso por los menús y configuraciones de tu móvil viendo tu pantalla. | Screen Capture + Gemini |
+| **🌐 Búsqueda Inteligente** | Realiza búsquedas avanzadas en la web para darte información precisa sobre lo que ves. | Brave Search API |
+| **✨ Interfaz Cristal** | Panel interactivo dinámico con efecto Glassmorphism para una experiencia premium. | Flutter Custom UI |
 
-## Stack tecnológico
+## 🛠️ Arquitectura
 
-```
-Flutter 3.24 (Android / iOS)
-  └── Riverpod · firebase_auth · socket_io_client · flutter_tts
-
-NestJS 11 (Cloud Run — europe-west1)
-  ├── Vertex AI Gemini 2.5 Flash (texto · imagen · audio · streaming)
-  ├── WebSocket /live (socket.io) — visión continua
-  ├── Tavily — búsqueda web via Function Calling
-  └── Firebase Admin — Firestore (historial) · Auth (tokens)
-```
-
-## Ejecutar en local
-
-### Backend
-
-```bash
-cd backend
-cp .env.example .env        # rellenar GCP_PROJECT_ID, TAVILY_API_KEY...
-npm install
-npm run start:dev           # http://localhost:3000
-```
-
-Requisitos:
-- Node 22+
-- `GOOGLE_APPLICATION_CREDENTIALS` apuntando al JSON del Service Account
-- API Key de Tavily en `TAVILY_API_KEY`
-
-### Flutter (emulador Android)
-
-```bash
-cd mobile
-flutter pub get
-flutter run                 # usa Cloud Run por defecto (API_BASE_URL del codigo)
-```
-
-## Arquitectura
-
-```
-Flutter App
-  ├── _AuthGate → Firebase Auth anónimo
-  ├── ChatScreen → POST /conversation/chat/stream (SSE)
-  ├── CameraScreen (foto) → POST /conversation/chat
-  ├── CameraScreen (live) → WS /live → frames cada 3 s → TTS
-  └── ConversationsScreen → GET /conversation
-
-NestJS Backend (Cloud Run)
-  ├── FirebaseAuthGuard → verifica Bearer token
-  ├── ConversationController (REST + SSE)
-  ├── LiveGateway (WebSocket /live)
-  ├── AiService → Gemini 2.5 Flash + agentic loop Function Calling
-  │   └── TavilyService → búsqueda web en tiempo real
-  └── Firebase Admin → Firestore + Auth
-```
-
-## Variables de entorno necesarias
-
-| Variable | Descripción |
-|----------|-------------|
-| `GCP_PROJECT_ID` | ID del proyecto GCP |
-| `GCP_LOCATION` | Región Vertex AI (ej. `europe-west1`) |
-| `GEMINI_MODEL` | Modelo a usar (`gemini-2.5-flash`) |
-| `GOOGLE_APPLICATION_CREDENTIALS` | Ruta al JSON del Service Account (solo local) |
-| `FIREBASE_PROJECT_ID` | ID del proyecto Firebase |
-| `TAVILY_API_KEY` | API Key de app.tavily.com |
-
-## CI/CD
-
-Cada push a `master` con cambios en `backend/` desencadena automáticamente:
-
-```
-GitHub Actions → Build Docker → Artifact Registry → Cloud Run (europe-west1)
-```
-
-Autenticación via Workload Identity Federation (sin key JSON en CI).
+- **Frontend**: Flutter (Android/iOS) con servicios en segundo plano para asistencia continua.
+- **Backend**: NestJS escalable desplegado en Cloud Run.
+- **IA**: Gemini 2.5 Flash para procesamiento multimodal (Voz, Vídeo, Pantalla).
+- **Seguridad**: Integración con VirusTotal para análisis de amenazas.
 
 ---
-
-Proyecto desarrollado para el **Gemini Live Agent Challenge** de Google.
+Proyecto desarrollado para el **Gemini Live Agent Challenge**.

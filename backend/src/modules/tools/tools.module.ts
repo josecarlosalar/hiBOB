@@ -1,9 +1,10 @@
 import { Module } from '@nestjs/common';
-import { TavilyService } from './tavily.service';
+import { BraveSearchService } from './brave-search.service';
 import { LocationService } from './location.service';
+import { VirusTotalService } from './virustotal.service';
 
 @Module({
-  providers: [TavilyService, LocationService],
-  exports: [TavilyService, LocationService],
+  providers: [BraveSearchService, LocationService, VirusTotalService],
+  exports: [BraveSearchService, LocationService, VirusTotalService],
 })
 export class ToolsModule { }

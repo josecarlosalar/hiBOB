@@ -20,18 +20,24 @@ interface BraveSearchResponse {
 }
 
 @Injectable()
-export class TavilyService {
-  private readonly logger = new Logger(TavilyService.name);
+export class BraveSearchService {
+  private readonly logger = new Logger(BraveSearchService.name);
   private readonly apiKey: string;
 
   constructor(private readonly configService: ConfigService) {
     const apiKey = this.configService.get<string>('BRAVE_SEARCH_API_KEY');
-    if (!apiKey) throw new Error('BRAVE_SEARCH_API_KEY no está configurada');
+    if (!apiKey) {
+      this.logger.warn('BRAVE_SEARCH_API_KEY no está configurada. La búsqueda web no funcionará.');
+    }
     this.apiKey = apiKey;
   }
 
   async search(query: string, maxResults = 5): Promise<SearchResult[]> {
-    this.logger.log(`Ejecutando WebSearch para: "${query}"`);
+    if (!this.apiKey) {
+      return [{ title: 'Error', url: '', content: 'Brave Search API Key no configurada.' }];
+    }
+
+    this.logger.log(`Ejecutando Brave Search para: "${query}"`);
     try {
       const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults}`;
       const response = await fetch(url, {
@@ -53,10 +59,10 @@ export class TavilyService {
         content: (r.description ?? '').substring(0, 800),
       }));
 
-      this.logger.log(`WebSearch finalizado: ${results.length} resultados encontrados.`);
+      this.logger.log(`Brave Search finalizado: ${results.length} resultados encontrados.`);
       return results;
     } catch (e) {
-      this.logger.error(`Error crítico en WebSearch: ${e.message}`);
+      this.logger.error(`Error crítico en Brave Search: ${e.message}`);
       return [];
     }
   }
