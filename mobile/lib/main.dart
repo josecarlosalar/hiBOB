@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -8,16 +7,13 @@ import 'core/providers/firebase_providers.dart';
 import 'features/auth/screens/login_screen.dart';
 import 'features/camera/screens/camera_screen.dart';
 import 'features/intro/screens/splash_screen.dart';
-import 'core/services/background_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  
-  // La aplicación arranca directamente
+
   runApp(const ProviderScope(child: GeminiAgentApp()));
 }
-
 
 class GeminiAgentApp extends StatelessWidget {
   const GeminiAgentApp({super.key});

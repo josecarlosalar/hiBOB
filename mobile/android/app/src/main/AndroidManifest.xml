@@ -42,8 +42,9 @@
 
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="microphone|mediaProjection"
-            android:exported="false" />
+            android:foregroundServiceType="microphone"
+            android:exported="true"
+            tools:replace="android:exported,android:foregroundServiceType" />
 
         <meta-data
             android:name="flutterEmbedding"
