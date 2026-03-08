@@ -84,7 +84,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _initCamera();
     unawaited(_loadConversationSettings());
     // Inicialización segura del servicio de fondo una vez cargada la UI
-    unawaited(hiBOBBackgroundService.initialize());
     
     _liveSession.onDisplayContent.listen((data) {
       if (mounted) setState(() => _structuredContent = data);
