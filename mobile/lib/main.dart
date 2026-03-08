@@ -14,9 +14,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
   
-  // Inicializamos el servicio de fondo, pero no bloqueamos el arranque de la UI
-  unawaited(hiBOBBackgroundService.initialize());
-  
+  // La aplicación arranca directamente
   runApp(const ProviderScope(child: GeminiAgentApp()));
 }
 

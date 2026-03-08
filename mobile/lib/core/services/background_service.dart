@@ -15,8 +15,8 @@ class hiBOBBackgroundService {
           autoStart: false,
           isForegroundMode: true,
           notificationChannelId: 'hibob_foreground',
-          initialNotificationTitle: 'hiBOB activo',
-          initialNotificationContent: 'Te estoy acompañando en segundo plano',
+          initialNotificationTitle: 'hiBOB en guardia',
+          initialNotificationContent: 'Estoy protegiendo tu navegación',
           foregroundServiceTypes: [
             AndroidForegroundType.microphone,
           ],
@@ -28,14 +28,27 @@ class hiBOBBackgroundService {
         ),
       );
     } catch (e) {
-      debugPrint('[BackgroundService] Failed to initialize: $e');
+      debugPrint('[BackgroundService] Error: $e');
     }
+  }
+
+  static Future<void> startForeground() async {
+    final service = FlutterBackgroundService();
+    if (!await service.isRunning()) {
+      await service.startService();
+    }
+    service.invoke('setAsForeground');
+  }
+
+  static Future<void> stop() async {
+    final service = FlutterBackgroundService();
+    service.invoke('stopService');
   }
 
   @pragma('vm:entry-point')
   static void onStart(ServiceInstance service) async {
     DartPluginRegistrant.ensureInitialized();
-
+    
     if (service is AndroidServiceInstance) {
       service.on('setAsForeground').listen((event) {
         service.setAsForegroundService();
@@ -50,16 +63,11 @@ class hiBOBBackgroundService {
       service.stopSelf();
     });
 
-    // Mantener el servicio vivo
-    Timer.periodic(const Duration(seconds: 1), (timer) async {
-      if (service is AndroidServiceInstance) {
-        if (await service.isForegroundService()) {
-          service.setForegroundNotificationInfo(
-            title: "hiBOB te escucha",
-            content: "Dime qué necesitas configurar",
-          );
-        }
-      }
-    });
+    if (service is AndroidServiceInstance) {
+      service.setForegroundNotificationInfo(
+        title: "hiBOB Escudo Activo",
+        content: "Te escucho en segundo plano",
+      );
+    }
   }
 }
