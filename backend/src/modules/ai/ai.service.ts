@@ -445,7 +445,7 @@ export class AiService implements OnModuleInit {
       });
 
       for await (const chunk of streamResult) {
-        const text = chunk.text();
+        const text = chunk.text;
         if (text) onChunk(text);
       }
     } catch (error) {
