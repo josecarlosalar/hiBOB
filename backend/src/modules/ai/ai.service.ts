@@ -407,8 +407,14 @@ export class AiService implements OnModuleInit {
     }
     if (name === 'analyze_security_url') {
       const url = args['url'] as string;
-      const report = await this.virusTotalService.analyzeUrl(url);
-      return `REPORTE DE SEGURIDAD PARA ${url}:\nEstado: ${report.status.toUpperCase()}\nDetalles: ${report.details}`;
+      if (!url || url.length < 5) return 'ERROR: No se ha detectado una URL válida en la pantalla. Por favor, asegúrate de que el enlace sea visible.';
+      this.logger.log(`Analizando seguridad para: ${url}`);
+      try {
+        const report = await this.virusTotalService.analyzeUrl(url);
+        return `REPORTE DE SEGURIDAD PARA ${url}:\nEstado: ${report.status.toUpperCase()}\nDetalles: ${report.details}\nNivel de riesgo: ${report.positives}/${report.total} motores detectaron amenazas.`;
+      } catch (e) {
+        return `ERROR TÉCNICO: El servicio de VirusTotal no ha respondido. Reintenta en unos segundos.`;
+      }
     }
     if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
     if (name === 'describe_camera_view') return 'IMAGEN CAPTURADA: Describe lo que ves de forma natural.';
