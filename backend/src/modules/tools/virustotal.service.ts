@@ -15,7 +15,7 @@ export class VirusTotalService {
   private readonly apiKey: string;
 
   constructor(private configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('VIRUSTOTAL_API_KEY');
+    this.apiKey = this.configService.get<string>('VIRUSTOTAL_API_KEY') ?? '';
   }
 
   async analyzeUrl(url: string): Promise<VirusTotalReport> {
