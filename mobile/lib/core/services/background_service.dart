@@ -19,7 +19,6 @@ class hiBOBBackgroundService {
           initialNotificationContent: 'Te estoy acompañando en segundo plano',
           foregroundServiceTypes: [
             AndroidForegroundType.microphone,
-            AndroidForegroundType.mediaProjection,
           ],
         ),
         iosConfiguration: IosConfiguration(
