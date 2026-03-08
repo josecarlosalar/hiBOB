@@ -394,6 +394,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       } else if (direction == 'back') {
         await _switchCamera(CameraLensDirection.back);
       }
+    } else if (action == 'start_copilot_mode') {
+      // Forzar que el servicio de segundo plano se ponga en modo foreground
+      FlutterBackgroundService().invoke('setAsForeground');
+      _showMessage('Modo Copiloto activado. Puedes minimizar la app.');
     } else if (action == 'vibrate') {
       final pattern = cmd['pattern'] as String? ?? 'success';
       if (await Vibration.hasVibrator()) {
