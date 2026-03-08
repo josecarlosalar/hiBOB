@@ -9,6 +9,7 @@ import { HealthModule } from './modules/health/health.module';
 import { AiModule } from './modules/ai/ai.module';
 import { ConversationModule } from './modules/conversation/conversation.module';
 import { LiveModule } from './modules/live/live.module';
+import { FirebaseAuthGuard } from './common/guards/firebase-auth.guard';
 
 @Module({
   imports: [
@@ -24,7 +25,11 @@ import { LiveModule } from './modules/live/live.module';
     LiveModule,
   ],
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: FirebaseAuthGuard },
+  ],
 })
 export class AppModule implements OnModuleInit {
   private readonly logger = new Logger(AppModule.name);

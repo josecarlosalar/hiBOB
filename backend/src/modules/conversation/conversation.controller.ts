@@ -6,17 +6,14 @@ import {
   Post,
   Req,
   Res,
-  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { FirebaseAuthGuard } from '../../common/guards/firebase-auth.guard';
 import { ConversationService } from './conversation.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
 type AuthRequest = Request & { user: { uid: string } };
 
 @Controller('conversation')
-@UseGuards(FirebaseAuthGuard)
 export class ConversationController {
   constructor(private readonly conversationService: ConversationService) {}
 
