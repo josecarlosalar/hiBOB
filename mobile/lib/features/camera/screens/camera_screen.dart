@@ -13,10 +13,9 @@ import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
-import 'package:flutter_background_service/flutter_background_service.dart';
-
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
+import '../../../core/services/background_service.dart';
 import '../../../core/services/live_session_service.dart';
 import '../../../core/services/pcm_audio_service.dart';
 
@@ -84,6 +83,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _initAnimations();
     _initCamera();
     unawaited(_loadConversationSettings());
+    // Inicialización segura del servicio de fondo una vez cargada la UI
+    unawaited(hiBOBBackgroundService.initialize());
+    
     _liveSession.onDisplayContent.listen((data) {
       if (mounted) setState(() => _structuredContent = data);
     });
@@ -209,14 +211,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     ]);
 
     // Arrancar el servicio foreground para que Android no mate el proceso al minimizar
-    try {
-      final bgService = FlutterBackgroundService();
-      final isRunning = await bgService.isRunning();
-      if (!isRunning) await bgService.startService();
-      bgService.invoke('setAsForeground');
-    } catch (e) {
-      debugPrint('[BackgroundService] No se pudo arrancar: $e');
-    }
+    await hiBOBBackgroundService.startForeground();
 
     await _liveSession.connect(token);
     unawaited(_startLocationUpdates());
@@ -284,7 +279,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final direction = cmd['direction'] as String?;
       await _switchCamera(direction == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'start_copilot_mode') {
-      FlutterBackgroundService().invoke('setAsForeground');
+      unawaited(hiBOBBackgroundService.startForeground());
       _showMessage('Modo Copiloto activado. Puedes minimizar.');
     } else if (action == 'vibrate') {
       if (await Vibration.hasVibrator()) Vibration.vibrate(duration: 100);
@@ -322,8 +317,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _pcmAudio.stop();
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
-    // Detener el servicio foreground al acabar la sesión
-    try { FlutterBackgroundService().invoke('stopService'); } catch (_) {}
+    unawaited(hiBOBBackgroundService.stop());
   }
 
   void _setStateIfMounted(AssistantState newState) {
