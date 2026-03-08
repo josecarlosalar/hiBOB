@@ -20,7 +20,7 @@ class LiveSessionService {
   final _doneController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _contentController = StreamController<Map<String, dynamic>>.broadcast();
-  final _frameRequestController = StreamController<void>.broadcast();
+  final _frameRequestController = StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
   Stream<LiveSessionState> get onStateChange => _stateController.stream;
@@ -30,8 +30,8 @@ class LiveSessionService {
   Stream<void> get onDone => _doneController.stream;
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
   Stream<Map<String, dynamic>> get onDisplayContent => _contentController.stream;
-  /// El backend solicita un frame de cámara (para herramientas visuales).
-  Stream<void> get onFrameRequest => _frameRequestController.stream;
+  /// El backend solicita un frame; el payload incluye `source` ('camera' o 'screen').
+  Stream<Map<String, dynamic>> get onFrameRequest => _frameRequestController.stream;
   Stream<String> get onError => _errorController.stream;
   LiveSessionState get state => _state;
 
@@ -88,9 +88,10 @@ class LiveSessionService {
       ..on('done', (_) {
         _doneController.add(null);
       })
-      ..on('frame_request', (_) {
-        // El backend necesita un frame para procesar una herramienta visual
-        _frameRequestController.add(null);
+      ..on('frame_request', (data) {
+        // El backend necesita un frame, con el campo source ('camera' o 'screen')
+        final payload = (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+        _frameRequestController.add(payload);
       })
       ..on('command', (data) {
         _commandController.add(Map<String, dynamic>.from(data as Map));
