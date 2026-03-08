@@ -422,6 +422,38 @@ export class AiService implements OnModuleInit {
     return response.text ?? '';
   }
 
+  async generateContentStream(
+    prompt: string,
+    onChunk: (text: string) => void,
+    imageBase64List?: string[],
+    history?: Content[],
+  ): Promise<void> {
+    const parts: Part[] = [{ text: prompt }];
+    if (imageBase64List?.length) {
+      for (const base64 of imageBase64List) {
+        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
+      }
+    }
+
+    const contents: Content[] = [...(history ?? []), { role: 'user' as const, parts }];
+
+    try {
+      const streamResult = await this.ai.models.generateContentStream({
+        model: this.modelName,
+        contents,
+        config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS },
+      });
+
+      for await (const chunk of streamResult.stream) {
+        const text = chunk.text();
+        if (text) onChunk(text);
+      }
+    } catch (error) {
+      this.logger.error(`Error en generateContentStream: ${error.message}`);
+      throw error;
+    }
+  }
+
   async processAudio(audioBase64: string, mimeType: string): Promise<string> {
     const response = await this.ai.models.generateContent({
       model: this.modelName,
