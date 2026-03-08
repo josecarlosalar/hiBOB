@@ -100,26 +100,30 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.on('tool_call', async (toolCall) => {
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
+            // Herramientas visuales: pedir frame al móvil, enviarlo a Gemini y responder
             if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'capture_device_screen') {
               const isScreen = fc.name === 'capture_device_screen';
               this.logger.log(`Solicitando frame (${isScreen ? 'PANTALLA' : 'CÁMARA'}) para: ${fc.name}`);
-              
-              if (isScreen) {
-                client.emit('command', { action: 'start_copilot_mode' });
-              }
 
               client.emit('frame_request', { source: isScreen ? 'screen' : 'camera' });
-              const frameBase64 = await this._waitForFrame(client, 4000);
-              
-              if (frameBase64) {
-                session.sendImageFrame(frameBase64);
-              } else {
+              const frameBase64 = await this._waitForFrame(client, 5000);
+
+              if (!frameBase64) {
                 return {
                   name: fc.name,
                   id: fc.id,
-                  response: { content: 'ERROR: Imagen no recibida. Informa al usuario de que necesitas que esté en la pantalla correcta.' },
+                  response: { content: 'ERROR: Imagen no recibida. Pide al usuario que abra la app.' },
                 };
               }
+
+              // Enviar la imagen al stream de Gemini para que la procese
+              session.sendImageFrame(frameBase64, isScreen ? 'image/png' : 'image/jpeg');
+
+              // Responder el tool call con confirmación para que Gemini analice la imagen
+              const confirmMsg = isScreen
+                ? 'PANTALLA CAPTURADA: Analiza la interfaz visible y guía al usuario paso a paso.'
+                : 'IMAGEN CAPTURADA: Describe lo que ves de forma natural y detallada.';
+              return { name: fc.name, id: fc.id, response: { content: confirmMsg } };
             }
 
             const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);

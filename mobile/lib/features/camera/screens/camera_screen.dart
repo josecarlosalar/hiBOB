@@ -92,6 +92,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     debugPrint('[Lifecycle] Cambio a: $state');
+    // No pausar nada al ir a background; el servicio foreground mantiene el proceso vivo.
+    // Si la sesión estaba activa y vuelve al primer plano, no hace falta reiniciar nada.
   }
 
   void _initAnimations() {
@@ -187,8 +189,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onDone.listen((_) { if (mounted) _handleAgentSpeechEnded(); }),
       _liveSession.onFrameRequest.listen((data) async {
         if (!mounted) return;
-        final payload = data as Map<String, dynamic>?;
-        final source = payload?['source'] as String? ?? 'camera';
+        final source = data['source'] as String? ?? 'camera';
 
         if (source == 'camera') {
           setState(() => _showCameraPreview = true);
@@ -206,6 +207,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _liveSession.onCommand.listen((cmd) { if (mounted) _handleHardwareCommand(cmd); }),
       _liveSession.onError.listen((msg) { _showMessage('Asistente: $msg'); }),
     ]);
+
+    // Arrancar el servicio foreground para que Android no mate el proceso al minimizar
+    try {
+      final bgService = FlutterBackgroundService();
+      final isRunning = await bgService.isRunning();
+      if (!isRunning) await bgService.startService();
+      bgService.invoke('setAsForeground');
+    } catch (e) {
+      debugPrint('[BackgroundService] No se pudo arrancar: $e');
+    }
 
     await _liveSession.connect(token);
     unawaited(_startLocationUpdates());
@@ -311,6 +322,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _pcmAudio.stop();
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
+    // Detener el servicio foreground al acabar la sesión
+    try { FlutterBackgroundService().invoke('stopService'); } catch (_) {}
   }
 
   void _setStateIfMounted(AssistantState newState) {
