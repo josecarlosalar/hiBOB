@@ -157,24 +157,22 @@ const OBSERVE_SCREEN_FUNCTION: FunctionDeclaration = {
   parameters: {
     type: Type.OBJECT,
     properties: {},
-  const AGENT_TOOLS: Tool[] = [
-    {
-      functionDeclarations: [
-        WEB_SEARCH_FUNCTION,
-        GET_LOCATION_FUNCTION,
-        DETECT_HAZARDS_FUNCTION,
-        DESCRIBE_VISION_FUNCTION,
-        TOGGLE_FLASHLIGHT_FUNCTION,
-        TRIGGER_HAPTIC_FEEDBACK_FUNCTION,
-        MARK_PLACE_FUNCTION,
-        GET_DIRECTIONS_FUNCTION,
-        SWITCH_CAMERA_FUNCTION,
-        DISPLAY_CONTENT_FUNCTION,
-        OBSERVE_SCREEN_FUNCTION,
-      ],
-    },
-  ];
+  },
+};
 
+const AGENT_TOOLS: Tool[] = [
+  {
+    functionDeclarations: [
+      WEB_SEARCH_FUNCTION,
+      GET_LOCATION_FUNCTION,
+      DETECT_HAZARDS_FUNCTION,
+      DESCRIBE_VISION_FUNCTION,
+      TOGGLE_FLASHLIGHT_FUNCTION,
+      TRIGGER_HAPTIC_FEEDBACK_FUNCTION,
+      MARK_PLACE_FUNCTION,
+      GET_DIRECTIONS_FUNCTION,
+      SWITCH_CAMERA_FUNCTION,
+      DISPLAY_CONTENT_FUNCTION,
       OBSERVE_SCREEN_FUNCTION,
     ],
   },
@@ -194,10 +192,9 @@ export interface LiveSessionOptions {
 
 /**
  * Sesión Live con Gemini usando el SDK oficial @google/genai.
- * Usa g.live.connect() que gestiona internamente el protocolo WebSocket.
  */
 export class GeminiLiveSession extends EventEmitter {
-  private session: any; // LiveSession del SDK
+  private session: any; 
   private readonly logger = new Logger(GeminiLiveSession.name);
   private closed = false;
   private lastErrorMessage: string | null = null;
@@ -248,10 +245,6 @@ export class GeminiLiveSession extends EventEmitter {
       liveConfig.tools = AGENT_TOOLS;
     }
 
-    this.logger.log(
-      `Live config: minimal=${useMinimal}, tools=${includeTools}, speech=${includeSpeechConfig}, transcriptions=${includeTranscriptions}`,
-    );
-
     this.session = await this.ai.live.connect({
       model: this.modelId,
       config: liveConfig,
@@ -263,28 +256,18 @@ export class GeminiLiveSession extends EventEmitter {
           const message = err?.message || err?.error || String(err);
           this.lastErrorMessage = message;
           this.logger.error(`Error en Gemini: ${message}`);
-          if (this.options.verboseLogs ?? false) {
-            this.logger.error(`Error en Gemini (raw): ${inspect(err, { depth: 6 })}`);
-          }
           if (!this.closed) this.emit('error', new Error(message));
         },
         onclose: (...args: any[]) => {
           if (this.lastErrorMessage == null && args.length > 0) {
             const first = args[0];
-            const closeReason =
-              first?.reason ??
-              first?.message ??
-              (typeof first === 'string' ? first : null);
-            if (closeReason) {
-              this.lastErrorMessage = String(closeReason);
-            }
+            const closeReason = first?.reason ?? first?.message ?? (typeof first === 'string' ? first : null);
+            if (closeReason) this.lastErrorMessage = String(closeReason);
           }
-          this.logger.warn(
-            `Gemini Live SDK: loop cerrado${this.lastErrorMessage != null ? ` (${this.lastErrorMessage})` : ''}`,
-          );
+          this.logger.warn(`Gemini Live SDK: loop cerrado${this.lastErrorMessage != null ? ` (${this.lastErrorMessage})` : ''}`);
           if (!this.closed) {
             this.closed = true;
-            this.session = null; // Liberar referencia
+            this.session = null;
             this.emit('close', this.lastErrorMessage);
           }
         }
@@ -295,36 +278,16 @@ export class GeminiLiveSession extends EventEmitter {
 
   private _handleSdkMessage(msg: any) {
     this.sdkMsgCount += 1;
-    const keys = Object.keys(msg).join(',');
-    if (this.options.verboseLogs ?? false) {
-      this.logger.log(
-        `[SDK MSG #${this.sdkMsgCount}] Keys: ${keys} | raw: ${JSON.stringify(msg).substring(0, 200)}`,
-      );
-    } else {
-      this.logger.log(`[SDK MSG #${this.sdkMsgCount}] Keys: ${keys}`);
-    }
-
     if (msg.serverContent) {
-      const { modelTurn, turnComplete, interrupted, outputTranscription, inputTranscription } = msg.serverContent;
+      const { modelTurn, turnComplete, interrupted, inputTranscription } = msg.serverContent;
 
-      // Transcripción del audio del usuario (lo que dijo el usuario)
       if (inputTranscription?.text) {
-        this.logger.log(`Input Transcription: ${inputTranscription.text}`);
         this.emit('transcription', inputTranscription.text);
-      }
-
-      // Transcripción de la respuesta de Gemini (para logs, no se envía al móvil como texto)
-      if (outputTranscription?.text) {
-        this.logger.log(`Output Transcription: ${outputTranscription.text}`);
       }
 
       if (modelTurn?.parts) {
         for (const part of modelTurn.parts) {
-          // Audio de respuesta (PCM 24kHz del modelo nativo)
           if (part.inlineData?.data) {
-            if (this.options.verboseLogs ?? false) {
-              this.logger.log(`Gemini Audio Part: ${part.inlineData.data.length} bytes`);
-            }
             this.emit('audio', {
               data: part.inlineData.data,
               mimeType: part.inlineData.mimeType ?? null,
@@ -332,17 +295,10 @@ export class GeminiLiveSession extends EventEmitter {
           }
         }
       }
-      if (turnComplete) {
-        this.logger.log(`[SDK] Turn Complete (msgs=${this.sdkMsgCount})`);
-        this.emit('done');
-      }
-      if (interrupted) {
-        this.logger.warn(`[SDK] Model Interrupted (msgs=${this.sdkMsgCount})`);
-        this.emit('interruption');
-      }
+      if (turnComplete) this.emit('done');
+      if (interrupted) this.emit('interruption');
     }
 
-    // toolCall: llamadas a herramientas del agente
     if (msg.toolCall) {
       this.logger.log(`Gemini Tool Call: ${JSON.stringify(msg.toolCall)}`);
       this.emit('tool_call', msg.toolCall);
@@ -352,21 +308,16 @@ export class GeminiLiveSession extends EventEmitter {
   sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
     if (!this.session || this.closed) return;
     try {
-      this.session.sendRealtimeInput({
-        audio: { data: base64Audio, mimeType },
-      });
+      this.session.sendRealtimeInput({ audio: { data: base64Audio, mimeType } });
     } catch (err) {
       this.logger.error(`Error en sendAudioFrame: ${err.message}`);
     }
   }
 
-  /** Envía un frame de imagen via sendRealtimeInput (no interrumpe el flujo de audio). */
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (!this.session || this.closed) return;
     try {
-      this.session.sendRealtimeInput({
-        video: { data: base64Image, mimeType },
-      });
+      this.session.sendRealtimeInput({ video: { data: base64Image, mimeType } });
     } catch (err) {
       this.logger.error(`Error en sendImageFrame: ${err.message}`);
     }
@@ -385,10 +336,6 @@ export class GeminiLiveSession extends EventEmitter {
   isClosed(): boolean {
     return this.closed;
   }
-
-  getLastErrorMessage(): string | null {
-    return this.lastErrorMessage;
-  }
 }
 
 // ─── Servicio ─────────────────────────────────────────────────────────────────
@@ -401,8 +348,7 @@ export class AiService implements OnModuleInit {
   private fallbackModelName: string;
   private maxOutputTokens: number;
   private temperature: number;
-  private auth: GoogleAuth;
-  private memory: Map<string, string> = new Map(); // Memoria persistente simple para lugares
+  private memory: Map<string, string> = new Map();
 
   constructor(
     private readonly configService: ConfigService,
@@ -414,363 +360,79 @@ export class AiService implements OnModuleInit {
     const project = this.configService.get<string>('GCP_PROJECT_ID');
     const location = this.configService.get<string>('GCP_LOCATION', 'us-central1');
     this.modelName = this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash');
-    this.fallbackModelName = this.configService.get<string>(
-      'GEMINI_FALLBACK_MODEL',
-      'gemini-2.5-flash',
-    );
-    this.maxOutputTokens = parseInt(
-      this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '8192'),
-    );
-    this.temperature = parseFloat(
-      this.configService.get<string>('GEMINI_TEMPERATURE', '1.0'),
-    );
+    this.fallbackModelName = this.configService.get<string>('GEMINI_FALLBACK_MODEL', 'gemini-2.5-flash');
+    this.maxOutputTokens = parseInt(this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '8192'));
+    this.temperature = parseFloat(this.configService.get<string>('GEMINI_TEMPERATURE', '1.0'));
 
     this.ai = new GoogleGenAI({ vertexai: true, project, location });
-    this.auth = new GoogleAuth({
-      scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-    });
-
-    this.logger.log(
-      `Google GenAI inicializado: proyecto=${project}, modelo=${this.modelName}, fallback=${this.fallbackModelName}`,
-    );
-  }
-
-  private isModelNotFoundError(error: unknown): boolean {
-    const msg =
-      error instanceof Error
-        ? error.message
-        : typeof error === 'string'
-          ? error
-          : JSON.stringify(error);
-    return (
-      msg.includes('Publisher Model') &&
-      msg.includes('NOT_FOUND') &&
-      (msg.includes('"code":404') || msg.includes('"code": 404'))
-    );
+    this.logger.log(`Google GenAI inicializado: proyecto=${project}, modelo=${this.modelName}`);
   }
 
   private async generateContentWithModelFallback(request: any): Promise<any> {
     try {
       return await this.ai.models.generateContent(request);
     } catch (error) {
-      if (
-        !this.isModelNotFoundError(error) ||
-        request.model === this.fallbackModelName
-      ) {
-        throw error;
-      }
-
-      this.logger.warn(
-        `Modelo no disponible en Vertex (${request.model}). Reintentando con fallback=${this.fallbackModelName}`,
-      );
-      this.modelName = this.fallbackModelName;
-      return await this.ai.models.generateContent({
-        ...request,
-        model: this.fallbackModelName,
-      });
+      this.logger.warn(`Error en generación, reintentando con fallback: ${error.message}`);
+      return await this.ai.models.generateContent({ ...request, model: this.fallbackModelName });
     }
   }
-
-  private async generateContentStreamWithModelFallback(
-    request: any,
-  ): Promise<any> {
-    try {
-      return await this.ai.models.generateContentStream(request);
-    } catch (error) {
-      if (
-        !this.isModelNotFoundError(error) ||
-        request.model === this.fallbackModelName
-      ) {
-        throw error;
-      }
-
-      this.logger.warn(
-        `Modelo stream no disponible en Vertex (${request.model}). Reintentando con fallback=${this.fallbackModelName}`,
-      );
-      this.modelName = this.fallbackModelName;
-      return await this.ai.models.generateContentStream({
-        ...request,
-        model: this.fallbackModelName,
-      });
-    }
-  }
-
-  // ─── Live Session ──────────────────────────────────────────────────────────
 
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
-    // Modelo Live multimodal (audio + imagen) para la sesión en tiempo real.
-    const modelId = this.configService.get<string>(
-      'GEMINI_LIVE_MODEL',
-      'gemini-2.5-flash-native-audio-latest',
-    );
-
-    // Autenticación: si hay GEMINI_API_KEY usa AI Studio (más sencillo, sin IAM).
-    // Si no hay key, usa Vertex AI con ADC (Service Account en Cloud Run).
+    const modelId = this.configService.get<string>('GEMINI_LIVE_MODEL', 'gemini-2.5-flash-native-audio-latest');
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY no configurada. Se requiere para Live API con AI Studio.');
-    }
-    this.logger.log(`Live API: usando AI Studio key (model=${modelId})`);
-    // Crear instancia separada sin vertexai ni project para evitar que el SDK
-    // ignore la apiKey en favor de ADC/Vertex.
+    if (!apiKey) throw new Error('GEMINI_API_KEY no configurada.');
+
     const liveAi = new GoogleGenAI({ apiKey });
-    const minimalConfig =
-      this.configService.get<string>('GEMINI_LIVE_MINIMAL_CONFIG', 'false') ===
-      'true';
-    const disableTools =
-      this.configService.get<string>('GEMINI_LIVE_DISABLE_TOOLS', 'false') ===
-      'true';
-    const disableSpeechConfig =
-      this.configService.get<string>('GEMINI_LIVE_DISABLE_SPEECH_CONFIG', 'false') ===
-      'true';
-    const disableTranscriptions =
-      this.configService.get<string>('GEMINI_LIVE_DISABLE_TRANSCRIPTIONS', 'false') ===
-      'true';
-    const verboseLogs =
-      this.configService.get<string>('GEMINI_LIVE_DEBUG_VERBOSE', 'false') ===
-      'true';
-
-    this.logger.log(
-      `Live session settings: model=${modelId}, minimal=${minimalConfig}, disableTools=${disableTools}, disableSpeech=${disableSpeechConfig}, disableTranscriptions=${disableTranscriptions}, verbose=${verboseLogs}`,
-    );
-
-    const liveOptions: LiveSessionOptions = {
-      ...options,
-      minimalConfig,
-      disableTools,
-      disableSpeechConfig,
-      disableTranscriptions,
-      verboseLogs,
-    };
-
-    const session = new GeminiLiveSession(liveAi, modelId, liveOptions);
+    const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
     return session;
   }
 
-  // ─── Llamada a herramienta ─────────────────────────────────────────────────
-
-  private async executeTool(
-    name: string,
-    args: Record<string, unknown>,
-    socketId?: string,
-  ): Promise<string> {
+  private async executeTool(name: string, args: Record<string, unknown>, socketId?: string): Promise<string> {
     if (name === 'web_search') {
-      const query = args['query'] as string;
-      const results = await this.tavilyService.search(query);
+      const results = await this.tavilyService.search(args['query'] as string);
       if (!results.length) return 'No se encontraron resultados.';
-      return results
-        .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content}`)
-        .join('\n\n');
+      return results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.content}`).join('\n\n');
     }
-
-    if (name === 'get_current_location') {
-      return await this.locationService.getCurrentLocation(socketId);
-    }
-
-    if (name === 'detect_safety_hazards') {
-      this.logger.log('Ejecutando escaneo de seguridad detallado...');
-      return 'SISTEMA DE SEGURIDAD ACTIVADO: Analiza cada píxel de la imagen actual. Busca específicamente: 1) Obstáculos a nivel del suelo, 2) Bordes o escaleras hacia abajo, 3) Objetos en movimiento (coches, bicis), 4) Altura de techos o ramas. Responde con un aviso de seguridad crítico si encuentras algo, o confirma que el camino parece despejado.';
-    }
-
-    if (name === 'describe_camera_view') {
-      this.logger.log('Solicitando descripción de cámara...');
-      return 'IMAGEN CAPTURADA: Analiza la imagen que acabas de recibir y describe qué hay delante de forma natural para el usuario.';
-    }
-
-    if (name === 'toggle_flashlight') {
-      const enabled = args['enabled'] as boolean;
-      return `Linterna ${enabled ? 'encendida' : 'apagada'} correctamente.`;
-    }
-
-    if (name === 'switch_camera') {
-      const direction = args['direction'] as string;
-      return `Cámara cambiada a ${direction === 'front' ? 'frontal (selfie)' : 'trasera'} correctamente.`;
-    }
-
-    if (name === 'display_content') {
-      const title = args['title'] as string;
-      return `Panel visual "${title}" mostrado correctamente en la pantalla del usuario.`;
-    }
-
-    if (name === 'trigger_haptic_feedback') {
-      return 'Vibración enviada al dispositivo.';
-    }
-
-    if (name === 'mark_place') {
-      const label = args['label'] as string;
-      const location = await this.locationService.getCurrentLocation();
-      this.memory.set(label.toLowerCase(), location);
-      return `He recordado que "${label}" está en ${location}.`;
-    }
-
-    if (name === 'get_navigation_directions') {
-      const destination = args['destination'] as string;
-      const origin = await this.locationService.getCurrentLocation(socketId);
-      return `Ruta desde tu posición actual (${origin}) hacia "${destination}". Guía al usuario paso a paso usando la cámara para confirmar los puntos de referencia que vayas describiendo.`;
-    }
-
+    if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
+    if (name === 'detect_safety_hazards') return 'SISTEMA DE SEGURIDAD ACTIVADO: Analiza la imagen buscando peligros.';
+    if (name === 'describe_camera_view') return 'IMAGEN CAPTURADA: Describe lo que ves de forma natural.';
+    if (name === 'toggle_flashlight') return `Linterna ${args['enabled'] ? 'encendida' : 'apagada'}.`;
+    if (name === 'switch_camera') return `Cámara cambiada a ${args['direction'] === 'front' ? 'frontal' : 'trasera'}.`;
+    if (name === 'display_content') return `Panel visual "${args['title']}" mostrado correctamente.`;
+    if (name === 'observe_screen') return 'PANTALLA CAPTURADA: Analiza la interfaz para guiar al usuario.';
+    if (name === 'trigger_haptic_feedback') return 'Vibración enviada.';
+    
     return `Herramienta "${name}" no implementada.`;
   }
 
-  // ─── generateContent con agentic loop ─────────────────────────────────────
-
-  async generateContent(
-    prompt: string,
-    imageBase64List?: string[],
-    history?: Content[],
-  ): Promise<string> {
+  async generateContent(prompt: string, imageBase64List?: string[], history?: Content[]): Promise<string> {
     const parts: Part[] = [{ text: prompt }];
     if (imageBase64List?.length) {
       for (const base64 of imageBase64List) {
         parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
       }
     }
-
-    const contents: Content[] = [
-      ...(history ?? []),
-      { role: 'user' as const, parts },
-    ];
-
-    // Agentic loop: hasta 5 iteraciones de tool use
-    for (let i = 0; i < 5; i++) {
-      const response = await this.generateContentWithModelFallback({
-        model: this.modelName,
-        contents,
-        config: {
-          maxOutputTokens: this.maxOutputTokens,
-          temperature: this.temperature,
-          tools: AGENT_TOOLS,
-        },
-      });
-
-      const candidate = response.candidates?.[0];
-      const responseParts = candidate?.content?.parts ?? [];
-
-      // Si hay function calls, ejecutarlas y continuar
-      const functionCalls = responseParts.filter((p) => p.functionCall);
-      if (!functionCalls.length) {
-        return response.text ?? '';
-      }
-
-      // Añadir respuesta del modelo al historial
-      contents.push({ role: 'model' as const, parts: responseParts });
-
-      // Ejecutar todas las tools y añadir resultados
-      const toolResultParts: Part[] = await Promise.all(
-        functionCalls.map(async (p) => {
-          const { name, args } = p.functionCall!;
-          const toolName = name ?? 'unknown';
-          this.logger.log(`Function call: ${toolName}(${JSON.stringify(args)})`);
-          const result = await this.executeTool(toolName, args as Record<string, unknown>);
-          return {
-            functionResponse: {
-              name: toolName,
-              response: { content: result },
-            },
-          } as Part;
-        }),
-      );
-
-      contents.push({ role: 'user' as const, parts: toolResultParts });
-    }
-
-    return '';
+    const contents: Content[] = [...(history ?? []), { role: 'user' as const, parts }];
+    const response = await this.generateContentWithModelFallback({
+      model: this.modelName,
+      contents,
+      config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS },
+    });
+    return response.text ?? '';
   }
-
-  // ─── generateContentStream con agentic loop ────────────────────────────────
-
-  async generateContentStream(
-    prompt: string,
-    onChunk: (text: string) => void,
-    imageBase64List?: string[],
-    history?: Content[],
-  ): Promise<void> {
-    const parts: Part[] = [{ text: prompt }];
-    if (imageBase64List?.length) {
-      for (const base64 of imageBase64List) {
-        parts.push({ inlineData: { mimeType: 'image/jpeg', data: base64 } });
-      }
-    }
-
-    const contents: Content[] = [
-      ...(history ?? []),
-      { role: 'user' as const, parts },
-    ];
-
-    const callConfig = {
-      maxOutputTokens: this.maxOutputTokens,
-      temperature: this.temperature,
-      tools: AGENT_TOOLS,
-    };
-
-    // Agentic loop con streaming en la respuesta final
-    for (let i = 0; i < 5; i++) {
-      // Primero hacemos llamada no-stream para detectar function calls
-      const response = await this.generateContentWithModelFallback({
-        model: this.modelName,
-        contents,
-        config: callConfig,
-      });
-
-      const candidate = response.candidates?.[0];
-      const responseParts = candidate?.content?.parts ?? [];
-      const functionCalls = responseParts.filter((p) => p.functionCall);
-
-      if (!functionCalls.length) {
-        // Sin tool calls: hacer streaming de la respuesta final
-        const streamResult = await this.generateContentStreamWithModelFallback({
-          model: this.modelName,
-          contents,
-          config: callConfig,
-        });
-        for await (const chunk of streamResult) {
-          const text = chunk.text ?? '';
-          if (text) onChunk(text);
-        }
-        return;
-      }
-
-      // Notificar al cliente que se está buscando
-      onChunk('[Buscando información…]');
-
-      contents.push({ role: 'model' as const, parts: responseParts });
-
-      const toolResultParts: Part[] = await Promise.all(
-        functionCalls.map(async (p) => {
-          const { name, args } = p.functionCall!;
-          const toolName = name ?? 'unknown';
-          this.logger.log(`Function call: ${toolName}(${JSON.stringify(args)})`);
-          const result = await this.executeTool(toolName, args as Record<string, unknown>);
-          return {
-            functionResponse: {
-              name: toolName,
-              response: { content: result },
-            },
-          } as Part;
-        }),
-      );
-
-      contents.push({ role: 'user' as const, parts: toolResultParts });
-    }
-  }
-
-  // ─── processAudio ──────────────────────────────────────────────────────────
 
   async processAudio(audioBase64: string, mimeType: string): Promise<string> {
-    const response = await this.generateContentWithModelFallback({
+    const response = await this.ai.models.generateContent({
       model: this.modelName,
       contents: [{
         role: 'user' as const,
         parts: [
-          {
-            text: 'Transcribe el audio exactamente. Devuelve solo el texto transcrito, sin prefijos ni explicaciones.',
-          },
+          { text: 'Transcribe el audio exactamente.' },
           { inlineData: { mimeType, data: audioBase64 } },
         ],
       }],
     });
-
     return response.text ?? '';
   }
 }
