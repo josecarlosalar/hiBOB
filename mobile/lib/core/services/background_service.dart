@@ -14,11 +14,12 @@ class hiBOBBackgroundService {
           onStart: onStart,
           autoStart: false,
           isForegroundMode: true,
-          notificationChannelId: 'hibob_foreground',
+          notificationChannelId: 'hibob_service', // Canal único
           initialNotificationTitle: 'hiBOB en guardia',
-          initialNotificationContent: 'Estoy protegiendo tu navegación',
+          initialNotificationContent: 'Te estoy acompañando',
           foregroundServiceTypes: [
             AndroidForegroundType.microphone,
+            AndroidForegroundType.mediaProjection,
           ],
         ),
         iosConfiguration: IosConfiguration(
@@ -64,8 +65,10 @@ class hiBOBBackgroundService {
     });
 
     if (service is AndroidServiceInstance) {
+      // Forzamos la actualización de la notificación inmediatamente
+      // para evitar el error de "Bad notification"
       service.setForegroundNotificationInfo(
-        title: "hiBOB Escudo Activo",
+        title: "hiBOB Activo",
         content: "Te escucho en segundo plano",
       );
     }
