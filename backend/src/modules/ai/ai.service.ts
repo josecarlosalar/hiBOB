@@ -444,7 +444,7 @@ export class AiService implements OnModuleInit {
         config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS },
       });
 
-      for await (const chunk of streamResult.stream) {
+      for await (const chunk of streamResult) {
         const text = chunk.text();
         if (text) onChunk(text);
       }
