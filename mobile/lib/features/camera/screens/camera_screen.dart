@@ -213,6 +213,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final token = await firebase.getIdToken();
       if (token == null) { _showMessage('No se pudo autenticar'); return; }
 
+      // Pedir permiso de MediaProjection ANTES de conectar el socket
+      // para que el diálogo de permiso no interrumpa la conexión
+      await _initMediaProjection();
+
       await _pcmAudio.init();
 
       _subs.addAll([
@@ -245,12 +249,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
 
-          // Mostrar preview de cámara si se solicita cámara, o si se solicita pantalla
-          // pero MediaProjection no está activo (fallback a cámara)
-          final bool usesCameraPreview = source == 'camera' ||
-              !(await DeviceScreenshot.instance.checkMediaProjectionService());
-
-          if (usesCameraPreview) {
+          if (source == 'camera') {
             setState(() => _showCameraPreview = true);
             _hideCameraTimer?.cancel();
             _hideCameraTimer = Timer(const Duration(seconds: 10), () {
@@ -338,8 +337,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await _switchCamera(direction == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'start_copilot_mode') {
       unawaited(hiBOBBackgroundService.startForeground());
-      // Iniciar MediaProjection proactivamente para que las capturas de pantalla estén listas
-      _initMediaProjection();
       _showMessage('Modo Copiloto activado. Puedes minimizar.');
     } else if (action == 'vibrate') {
       if (await Vibration.hasVibrator()) Vibration.vibrate(duration: 100);
@@ -424,7 +421,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
     unawaited(hiBOBBackgroundService.stop());
-    DeviceScreenshot.instance.stopMediaProjectionService();
+    try { DeviceScreenshot.instance.stopMediaProjectionService(); } catch (_) {}
   }
 
   void _setStateIfMounted(AssistantState newState) {
