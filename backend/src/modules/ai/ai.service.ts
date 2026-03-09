@@ -164,22 +164,30 @@ export class GeminiLiveSession extends EventEmitter {
 
   sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
     if (this.closed || !this.session) return;
-    try { this.session.send({ realtimeInput: { mediaChunks: [{ data: base64Audio, mimeType }] } }); } catch (e) { this.logger.error(`Error enviando audio: ${e.message}`); }
+    try {
+      const buffer = Buffer.from(base64Audio, 'base64');
+      const blob = new Blob([buffer], { type: mimeType });
+      this.session.sendRealtimeInput({ audio: blob });
+    } catch (e) { this.logger.error(`Error enviando audio: ${e.message}`); }
   }
 
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (this.closed || !this.session) return;
-    try { this.session.send({ realtimeInput: { mediaChunks: [{ data: base64Image, mimeType }] } }); } catch (e) { this.logger.error(`Error enviando imagen: ${e.message}`); }
+    try {
+      const buffer = Buffer.from(base64Image, 'base64');
+      const blob = new Blob([buffer], { type: mimeType });
+      this.session.sendRealtimeInput({ video: blob });
+    } catch (e) { this.logger.error(`Error enviando imagen: ${e.message}`); }
   }
 
   sendClientContent(parts: any[], turnComplete = true) {
     if (this.closed || !this.session) return;
-    try { this.session.send({ clientContent: { turns: [{ role: 'user', parts }], turnComplete } }); } catch (e) { this.logger.error(`Error enviando client content: ${e.message}`); }
+    try { this.session.sendClientContent({ turns: [{ role: 'user', parts }], turnComplete }); } catch (e) { this.logger.error(`Error enviando client content: ${e.message}`); }
   }
 
   sendToolResponse(toolResponses: any[]) {
     if (this.closed || !this.session) return;
-    try { this.session.send({ toolResponse: { functionResponses: toolResponses } }); } catch (e) { this.logger.error(`Error enviando tool response: ${e.message}`); }
+    try { this.session.sendToolResponse({ functionResponses: toolResponses }); } catch (e) { this.logger.error(`Error enviando tool response: ${e.message}`); }
   }
 
   close() { this.closed = true; this.session?.close(); }
