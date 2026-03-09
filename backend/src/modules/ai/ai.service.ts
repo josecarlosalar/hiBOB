@@ -315,27 +315,25 @@ export class GeminiLiveSession extends EventEmitter {
     }
   }
 
-  sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
-    if (!this.session || this.closed) return;
-    try {
-      this.session.sendRealtimeInput({ audio: { data: base64Audio, mimeType } });
-    } catch (err) {
-      this.logger.error(`Error en sendAudioFrame: ${err.message}`);
-    }
-  }
-
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (!this.session || this.closed) return;
     try {
-      // Usar mediaChunks para enviar el frame como una parte de entrada multimedia en tiempo real
-      this.session.sendRealtimeInput({
-        mediaChunks: [{
-          data: base64Image,
-          mimeType: mimeType
-        }]
-      });
+      // En el SDK v1.0+, sendRealtimeInput suele esperar un array de partes (chunks)
+      this.session.sendRealtimeInput([{ data: base64Image, mimeType }]);
     } catch (err) {
       this.logger.error(`Error en sendImageFrame: ${err.message}`);
+    }
+  }
+
+  sendClientContent(parts: any[], turnComplete = true) {
+    if (!this.session || this.closed) return;
+    try {
+      this.session.sendClientContent({
+        turns: [{ role: 'user' as const, parts }],
+        turnComplete,
+      });
+    } catch (err) {
+      this.logger.error(`Error en sendClientContent: ${err.message}`);
     }
   }
 
