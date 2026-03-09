@@ -315,6 +315,16 @@ export class GeminiLiveSession extends EventEmitter {
     }
   }
 
+  sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
+    if (!this.session || this.closed) return;
+    try {
+      // En el SDK v1.0+, sendRealtimeInput suele esperar un array de partes (chunks)
+      this.session.sendRealtimeInput([{ data: base64Audio, mimeType }]);
+    } catch (err) {
+      this.logger.error(`Error en sendAudioFrame: ${err.message}`);
+    }
+  }
+
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (!this.session || this.closed) return;
     try {
