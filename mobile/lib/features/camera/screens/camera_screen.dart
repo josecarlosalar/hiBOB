@@ -245,14 +245,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
 
-          if (source == 'camera') {
+          // Mostrar preview de cámara si se solicita cámara, o si se solicita pantalla
+          // pero MediaProjection no está activo (fallback a cámara)
+          final bool usesCameraPreview = source == 'camera' ||
+              !(await DeviceScreenshot.instance.checkMediaProjectionService());
+
+          if (usesCameraPreview) {
             setState(() => _showCameraPreview = true);
             _hideCameraTimer?.cancel();
             _hideCameraTimer = Timer(const Duration(seconds: 10), () {
               if (mounted) setState(() => _showCameraPreview = false);
             });
-          } else {
-            if (mounted) setState(() => _showCameraPreview = false);
           }
 
           final frame = await _captureFrame(source: source);
@@ -364,39 +367,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (source == 'screen') {
       try {
         debugPrint('[CameraScreen] Solicitando captura de pantalla...');
-        bool isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
+        final isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
         if (!isRunning) {
-          debugPrint('[CameraScreen] Iniciando servicio de proyección...');
-          await _initMediaProjection();
-          isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
-          if (!isRunning) {
-            debugPrint('[CameraScreen] MediaProjection no se inició');
-            return null;
-          }
+          // MediaProjection no está activo — usar cámara como fallback
+          // No intentar iniciar MediaProjection aquí porque el diálogo de permiso
+          // causa que la app pase a background y se desconecte el socket
+          debugPrint('[CameraScreen] MediaProjection no activo, usando cámara como fallback');
+          return _captureCameraFrame();
         }
 
         final uri = await DeviceScreenshot.instance.takeScreenshot();
         if (uri == null) {
-          debugPrint('[CameraScreen] takeScreenshot devolvió null');
-          return null;
+          debugPrint('[CameraScreen] takeScreenshot devolvió null, usando cámara como fallback');
+          return _captureCameraFrame();
         }
-        
+
         final path = uri.toFilePath();
         final file = File(path);
-        
+
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
           debugPrint('[CameraScreen] Captura realizada: ${bytes.length} bytes');
           return base64Encode(bytes);
         } else {
           debugPrint('[CameraScreen] El archivo de captura no existe en: $path');
-          return null;
+          return _captureCameraFrame();
         }
       } catch (e) {
-        debugPrint('[CameraScreen] Error crítico en captura de pantalla: $e');
-        return null;
+        debugPrint('[CameraScreen] Error en captura de pantalla: $e');
+        return _captureCameraFrame();
       }
     }
+    return _captureCameraFrame();
+  }
+
+  Future<String?> _captureCameraFrame() async {
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
     try {
       final file = await _cameraCtrl!.takePicture();
