@@ -101,27 +101,35 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // Herramientas visuales: pedir frame al móvil, enviarlo a Gemini y responder
             if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'capture_device_screen') {
               const isScreen = fc.name === 'capture_device_screen';
-              this.logger.log(`Solicitando frame (${isScreen ? 'PANTALLA' : 'CÁMARA'}) para: ${fc.name}`);
+              this.logger.log(`[Tool] Ejecutando ${fc.name}. Solicitando frame a cliente ${client.id}...`);
 
               client.emit('frame_request', { source: isScreen ? 'screen' : 'camera' });
-              const frameBase64 = await this._waitForFrame(client, 5000);
+              
+              // Aumentamos timeout a 10s para dar tiempo a la captura de pantalla de Android
+              const frameBase64 = await this._waitForFrame(client, 10000);
 
               if (!frameBase64) {
+                this.logger.warn(`[Tool] Timeout esperando frame de ${client.id} para ${fc.name}`);
                 return {
                   name: fc.name,
                   id: fc.id,
-                  response: { content: 'ERROR: Imagen no recibida. Pide al usuario que abra la app.' },
+                  response: { content: 'ERROR: No he recibido la imagen a tiempo. Asegúrate de estar en la pantalla que quieres que vea y que la app tenga los permisos necesarios.' },
                 };
               }
 
-              // Enviar la imagen al stream de Gemini para que la procese
-              session.sendImageFrame(frameBase64, isScreen ? 'image/png' : 'image/jpeg');
-
-              // Responder el tool call con confirmación para que Gemini analice la imagen
-              const confirmMsg = isScreen
-                ? 'PANTALLA CAPTURADA: Analiza la interfaz visible y guía al usuario paso a paso.'
-                : 'IMAGEN CAPTURADA: Describe lo que ves de forma natural y detallada.';
-              return { name: fc.name, id: fc.id, response: { content: confirmMsg } };
+              this.logger.log(`[Tool] Frame recibido (${frameBase64.length} bytes). Enviando a Gemini...`);
+              
+              // Enviar la imagen como un turno de usuario formal
+              (session as any).sendClientContent([
+                { text: "Aquí tienes la captura de mi pantalla actual. Analízala para ayudarme." },
+                { inlineData: { data: frameBase64, mimeType: isScreen ? 'image/png' : 'image/jpeg' } }
+              ]);
+              
+              return { 
+                name: fc.name, 
+                id: fc.id, 
+                response: { content: 'Captura procesada con éxito. Ya puedes ver el contenido.' } 
+              };
             }
 
             const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
