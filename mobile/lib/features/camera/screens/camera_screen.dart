@@ -31,46 +31,8 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
-  // ... (existing variables)
+  
   bool _isAppInForeground = true;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    // ...
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    // ...
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    debugPrint('[CameraScreen] Lifecycle changed to: $state');
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _isAppInForeground = false;
-      // SI estamos en una sesión activa, enviamos un frame de pantalla proactivo al minimizar
-      if (_state != AssistantState.inactive && _liveSession.state == LiveSessionState.connected) {
-        debugPrint('[CameraScreen] App minimizada. Enviando captura de pantalla proactiva...');
-        _sendProactiveScreenFrame();
-      }
-    } else if (state == AppLifecycleState.resumed) {
-      _isAppInForeground = true;
-    }
-  }
-
-  Future<void> _sendProactiveScreenFrame() async {
-    // Esperamos un instante a que la app termine de ocultarse para ver lo que hay debajo
-    await Future.delayed(const Duration(milliseconds: 500));
-    final frame = await _captureFrame(source: 'screen');
-    if (frame != null && _liveSession.state == LiveSessionState.connected) {
-      _liveSession.sendFrame(frameBase64: frame);
-    }
-  }
   static const String _settingsFileName = 'conversation_settings.json';
   final GlobalKey _screenCaptureKey = GlobalKey();
   
@@ -124,7 +86,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _initAnimations();
     _initCamera();
     unawaited(_loadConversationSettings());
-    // Inicialización segura del servicio de fondo una vez cargada la UI
     
     _liveSession.onDisplayContent.listen((data) {
       if (mounted) setState(() => _structuredContent = data);
@@ -132,10 +93,42 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pulseCtrl.dispose();
+    _waveCtrl.dispose();
+    _cameraCtrl?.dispose();
+    _audio.dispose();
+    _pcmAudio.dispose();
+    _locationTimer?.cancel();
+    _agentSpeechIdleTimer?.cancel();
+    _hideCameraTimer?.cancel();
+    for (final sub in _subs) sub.cancel();
+    super.dispose();
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    debugPrint('[Lifecycle] Cambio a: $state');
-    // No pausar nada al ir a background; el servicio foreground mantiene el proceso vivo.
-    // Si la sesión estaba activa y vuelve al primer plano, no hace falta reiniciar nada.
+    debugPrint('[CameraScreen] Lifecycle changed to: $state');
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isAppInForeground = false;
+      // SI estamos en una sesión activa, enviamos un frame de pantalla proactivo al minimizar
+      if (_state != AssistantState.inactive && _liveSession.state == LiveSessionState.connected) {
+        debugPrint('[CameraScreen] App minimizada. Enviando captura de pantalla proactiva...');
+        _sendProactiveScreenFrame();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      _isAppInForeground = true;
+    }
+  }
+
+  Future<void> _sendProactiveScreenFrame() async {
+    // Esperamos un instante a que la app termine de ocultarse para ver lo que hay debajo
+    await Future.delayed(const Duration(milliseconds: 500));
+    final frame = await _captureFrame(source: 'screen');
+    if (frame != null && _liveSession.state == LiveSessionState.connected) {
+      _liveSession.sendFrame(frameBase64: frame);
+    }
   }
 
   void _initAnimations() {
@@ -262,9 +255,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onError.listen((msg) { _showMessage('Asistente: $msg'); }),
       ]);
 
-      // Arrancar el servicio foreground para que Android no mate el proceso al minimizar
       await hiBOBBackgroundService.startForeground();
-
       await _liveSession.connect(token);
       unawaited(_startLocationUpdates());
     } catch (e) {
@@ -351,7 +342,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         if (!isRunning) {
           debugPrint('[CameraScreen] Iniciando servicio de proyección...');
           DeviceScreenshot.instance.requestMediaProjection();
-          // Aumentamos a 2 segundos para dar tiempo al usuario y al sistema
           await Future.delayed(const Duration(milliseconds: 2000));
         }
 
@@ -361,7 +351,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           return null;
         }
         
-        // Convertir Uri a path de forma segura
         final path = uri.toFilePath();
         final file = File(path);
         
