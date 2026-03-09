@@ -37,28 +37,25 @@ class AudioService {
     );
   }
 
-  /// Inicia grabación continua enviando chunks PCM cada [intervalMs] ms.
-  /// Los chunks se emiten como base64 en [audioChunkStream].
+  /// Inicia grabación continua enviando chunks PCM vía Stream.
   Future<void> startStreamingRecording({int intervalMs = 200}) async {
     _chunkTimer?.cancel();
-    int lastOffset = 0;
+    
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        numChannels: 1,
+        sampleRate: 16000,
+        echoCancel: true,
+        noiseSuppress: true,
+        autoGain: true,
+      ),
+    );
 
-    await startRecording();
-
-    _chunkTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) async {
-      final path = _currentPath;
-      if (path == null) return;
-      try {
-        final file = File(path);
-        if (!await file.exists()) return;
-        final bytes = await file.readAsBytes();
-        if (bytes.length <= lastOffset) return;
-        final chunk = bytes.sublist(lastOffset);
-        lastOffset = bytes.length;
-        if (chunk.isNotEmpty && !_chunkController.isClosed) {
-          _chunkController.add(base64Encode(chunk));
-        }
-      } catch (_) {}
+    stream.listen((data) {
+      if (!_chunkController.isClosed) {
+        _chunkController.add(base64Encode(data));
+      }
     });
   }
 
