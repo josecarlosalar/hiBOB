@@ -8,6 +8,17 @@ allprojects {
 rootProject.buildDir = "../build"
 subprojects {
     project.buildDir = "${rootProject.buildDir}/${project.name}"
+    
+    // Inyectar namespace para plugins antiguos que no lo tienen (como device_screenshot 0.0.8)
+    afterEvaluate { project ->
+        if (project.hasProperty('android') && project.name == 'device_screenshot') {
+            project.android {
+                if (namespace == null) {
+                    namespace 'com.flutter.device_screenshot'
+                }
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")
