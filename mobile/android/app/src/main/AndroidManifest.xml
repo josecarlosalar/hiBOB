@@ -46,6 +46,12 @@
             android:exported="true"
             tools:replace="android:exported,android:foregroundServiceType" />
 
+        <service
+            android:name="com.isvisoft.device_screenshot.ScreenshotService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

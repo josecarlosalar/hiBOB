@@ -391,9 +391,14 @@ export class AiService implements OnModuleInit {
   async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
     const modelId = this.configService.get<string>('GEMINI_LIVE_MODEL', 'gemini-2.5-flash-native-audio-latest');
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
-    if (!apiKey) throw new Error('GEMINI_API_KEY no configurada.');
+    
+    // Si no hay API KEY, intentamos usar Vertex AI (this.ai ya inicializado en onModuleInit)
+    const liveAi = apiKey ? new GoogleGenAI({ apiKey }) : this.ai;
+    
+    if (!apiKey && !this.ai) {
+      throw new Error('Ni GEMINI_API_KEY ni Vertex AI están configurados.');
+    }
 
-    const liveAi = new GoogleGenAI({ apiKey });
     const session = new GeminiLiveSession(liveAi, modelId, options);
     await session.connect();
     return session;

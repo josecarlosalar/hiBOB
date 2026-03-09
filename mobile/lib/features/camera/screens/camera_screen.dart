@@ -13,13 +13,14 @@ import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
+import 'package:device_screenshot/device_screenshot.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/background_service.dart';
 import '../../../core/services/live_session_service.dart';
 import '../../../core/services/pcm_audio_service.dart';
 
-enum AssistantState { inactive, listening, speaking }
+enum AssistantState { inactive, connecting, listening, speaking }
 
 class CameraScreen extends ConsumerStatefulWidget {
   const CameraScreen({super.key});
@@ -164,56 +165,73 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _startSession() async {
-    final hasPerm = await _audio.hasPermission;
-    if (!hasPerm) { _showMessage('Necesito permiso de microfono'); return; }
+    try {
+      final hasPerm = await _audio.hasPermission;
+      if (!hasPerm) { _showMessage('Necesito permiso de microfono'); return; }
 
-    final firebase = ref.read(firebaseServiceProvider);
-    final token = await firebase.getIdToken();
-    if (token == null) { _showMessage('No se pudo autenticar'); return; }
+      final firebase = ref.read(firebaseServiceProvider);
+      final token = await firebase.getIdToken();
+      if (token == null) { _showMessage('No se pudo autenticar'); return; }
 
-    await _pcmAudio.init();
+      await _pcmAudio.init();
 
-    _subs.addAll([
-      _liveSession.onStateChange.listen((s) {
-        if (!mounted) return;
-        if (s == LiveSessionState.connected) _startStreaming();
-        else if (s == LiveSessionState.error) { _stopSession(); _showMessage('Error de conexion'); }
-        else if (s == LiveSessionState.disconnected && _state != AssistantState.inactive) _stopSession();
-      }),
-      _liveSession.onAudioChunk.listen((audioChunk) {
-        if (!mounted) return;
-        _markAgentSpeechActive();
-        _setStateIfMounted(AssistantState.speaking);
-        _pcmAudio.feedBase64(audioChunk['data'] ?? '', mimeType: audioChunk['mimeType']);
-      }),
-      _liveSession.onInterruption.listen((_) { if (mounted) _stopSpeaking(); }),
-      _liveSession.onDone.listen((_) { if (mounted) _handleAgentSpeechEnded(); }),
-      _liveSession.onFrameRequest.listen((data) async {
-        if (!mounted) return;
-        final source = data['source'] as String? ?? 'camera';
+      _subs.addAll([
+        _liveSession.onStateChange.listen((s) {
+          debugPrint('[CameraScreen] LiveSessionState: $s');
+          if (!mounted) return;
+          if (s == LiveSessionState.connecting) {
+            _setStateIfMounted(AssistantState.connecting);
+          } else if (s == LiveSessionState.connected) {
+            _startStreaming();
+          } else if (s == LiveSessionState.error) {
+            _stopSession();
+            _showMessage('Error de conexión con el servidor');
+          } else if (s == LiveSessionState.disconnected) {
+            if (_state != AssistantState.inactive) {
+              _stopSession();
+              _showMessage('Sesión finalizada por el servidor');
+            }
+          }
+        }),
+        _liveSession.onAudioChunk.listen((audioChunk) {
+          if (!mounted) return;
+          _markAgentSpeechActive();
+          _setStateIfMounted(AssistantState.speaking);
+          _pcmAudio.feedBase64(audioChunk['data'] ?? '', mimeType: audioChunk['mimeType']);
+        }),
+        _liveSession.onInterruption.listen((_) { if (mounted) _stopSpeaking(); }),
+        _liveSession.onDone.listen((_) { if (mounted) _handleAgentSpeechEnded(); }),
+        _liveSession.onFrameRequest.listen((data) async {
+          if (!mounted) return;
+          final source = data['source'] as String? ?? 'camera';
 
-        if (source == 'camera') {
-          setState(() => _showCameraPreview = true);
-          _hideCameraTimer?.cancel();
-          _hideCameraTimer = Timer(const Duration(seconds: 10), () {
+          if (source == 'camera') {
+            setState(() => _showCameraPreview = true);
+            _hideCameraTimer?.cancel();
+            _hideCameraTimer = Timer(const Duration(seconds: 10), () {
+              if (mounted) setState(() => _showCameraPreview = false);
+            });
+          } else {
             if (mounted) setState(() => _showCameraPreview = false);
-          });
-        } else {
-          if (mounted) setState(() => _showCameraPreview = false);
-        }
+          }
 
-        final frame = await _captureFrame(source: source);
-        if (frame != null) _liveSession.sendFrame(frameBase64: frame);
-      }),
-      _liveSession.onCommand.listen((cmd) { if (mounted) _handleHardwareCommand(cmd); }),
-      _liveSession.onError.listen((msg) { _showMessage('Asistente: $msg'); }),
-    ]);
+          final frame = await _captureFrame(source: source);
+          if (frame != null) _liveSession.sendFrame(frameBase64: frame);
+        }),
+        _liveSession.onCommand.listen((cmd) { if (mounted) _handleHardwareCommand(cmd); }),
+        _liveSession.onError.listen((msg) { _showMessage('Asistente: $msg'); }),
+      ]);
 
-    // Arrancar el servicio foreground para que Android no mate el proceso al minimizar
-    await hiBOBBackgroundService.startForeground();
+      // Arrancar el servicio foreground para que Android no mate el proceso al minimizar
+      await hiBOBBackgroundService.startForeground();
 
-    await _liveSession.connect(token);
-    unawaited(_startLocationUpdates());
+      await _liveSession.connect(token);
+      unawaited(_startLocationUpdates());
+    } catch (e) {
+      debugPrint('[CameraScreen] Error starting session: $e');
+      _stopSession();
+      _showMessage('Error al iniciar: $e');
+    }
   }
 
   void _startStreaming() {
@@ -288,12 +306,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<String?> _captureFrame({String source = 'camera'}) async {
     if (source == 'screen') {
       try {
-        final boundary = _screenCaptureKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-        if (boundary == null) return null;
-        final image = await boundary.toImage(pixelRatio: 1.0);
-        final byteData = await image.toByteData(format: ImageByteFormat.png);
-        return base64Encode(byteData!.buffer.asUint8List());
-      } catch (e) { return null; }
+        // device_screenshot permite captura real de todo el sistema (Android)
+        final uri = await DeviceScreenshot.takeScreenshot();
+        if (uri == null) return null;
+        
+        final bytes = await File(uri).readAsBytes();
+        // Limpiar archivo temporal si fuera necesario, aunque el plugin suele gestionarlo
+        return base64Encode(bytes);
+      } catch (e) {
+        debugPrint('[CameraScreen] Error en captura de pantalla: $e');
+        return null;
+      }
     }
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
     try {
@@ -425,14 +448,55 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildAiActionButton(ColorScheme colors) {
-    final isActive = _state != AssistantState.inactive;
-    return GestureDetector(onTap: isActive ? _stopSession : _startSession, child: Container(width: 56, height: 56, decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: [colors.primary, colors.secondary])), child: Icon(isActive ? Icons.stop_rounded : Icons.auto_awesome, color: Colors.white, size: 28)));
+    final isInactive = _state == AssistantState.inactive;
+    final isConnecting = _state == AssistantState.connecting;
+
+    return GestureDetector(
+      onTap: isInactive ? _startSession : _stopSession,
+      child: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: isConnecting
+                ? [Colors.grey[700]!, Colors.grey[600]!]
+                : [colors.primary, colors.secondary],
+          ),
+        ),
+        child: isConnecting
+            ? const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(
+                  strokeWidth: 3,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(
+                isInactive ? Icons.auto_awesome : Icons.stop_rounded,
+                color: Colors.white,
+                size: 28,
+              ),
+      ),
+    );
   }
 
   Widget _buildStateSpecificContent(ColorScheme colors) {
-    if (_state == AssistantState.listening) return ScaleTransition(scale: _pulseAnim, child: const Icon(Icons.hearing_rounded, color: Colors.white70, size: 30));
-    if (_state == AssistantState.speaking) return _SpeakingWave(anim: _waveAnim, colors: colors);
-    return const Icon(Icons.keyboard_voice_rounded, color: Colors.white54, size: 24);
+    if (_state == AssistantState.connecting) {
+      return const Text('Conectando…',
+          style: TextStyle(color: Colors.white54, fontSize: 14));
+    }
+    if (_state == AssistantState.listening) {
+      return ScaleTransition(
+          scale: _pulseAnim,
+          child: const Icon(Icons.hearing_rounded,
+              color: Colors.white70, size: 30));
+    }
+    if (_state == AssistantState.speaking) {
+      return _SpeakingWave(anim: _waveAnim, colors: colors);
+    }
+    return const Icon(Icons.keyboard_voice_rounded,
+        color: Colors.white54, size: 24);
   }
 
   Widget _buildStructuredPanel(Size size, ColorScheme colors) {
@@ -494,7 +558,36 @@ class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.state});
   @override
   Widget build(BuildContext context) {
-    return Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white10)), child: Center(child: Icon(state == AssistantState.listening ? Icons.hearing : (state == AssistantState.speaking ? Icons.graphic_eq : Icons.power_settings_new), color: Colors.white, size: 20)));
+    IconData icon;
+    Color color = Colors.white;
+
+    switch (state) {
+      case AssistantState.inactive:
+        icon = Icons.power_settings_new;
+        break;
+      case AssistantState.connecting:
+        icon = Icons.sync;
+        color = Colors.orangeAccent;
+        break;
+      case AssistantState.listening:
+        icon = Icons.hearing;
+        color = Colors.greenAccent;
+        break;
+      case AssistantState.speaking:
+        icon = Icons.graphic_eq;
+        color = Colors.cyanAccent;
+        break;
+    }
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+          color: Colors.black45,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white10)),
+      child: Center(child: Icon(icon, color: color, size: 20)),
+    );
   }
 }
 
