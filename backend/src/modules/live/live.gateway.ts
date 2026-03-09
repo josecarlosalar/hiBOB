@@ -34,7 +34,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  private readonly logger = new Logger('LiveGateway-V2.6');
+  private readonly logger = new Logger('LiveGateway-V2.8');
 
   constructor(
     private readonly aiService: AiService,
@@ -57,13 +57,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const session = await this.aiService.createLiveSession({
         systemInstruction:
           'Eres hiBOB, una asistente mujer multimodal de nueva generación. ' +
-          'Responde siempre de forma breve y natural en español. ' +
-          'Si el usuario te enseña su pantalla, analízala inmediatamente.',
+          'TU MISIÓN: Ser el Guardián Digital y Copiloto del usuario. ' +
+          'MODO COPILOTO: Ayuda al usuario viendo su pantalla con capture_device_screen. ' +
+          'MODO SEGURIDAD: Analiza URLs con analyze_security_url. ' +
+          'Responde siempre de forma breve y natural en español.',
       });
 
       client.data.geminiSession = session;
 
-      // --- Monitor de Mensajes Salientes (Gemini -> Cliente) ---
       session.on('audio', (audio) => {
         if (!client.connected) return;
         client.emit('audio_chunk', { data: audio.data, mimeType: audio.mimeType || 'audio/pcm' });
@@ -75,7 +76,6 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
       session.on('interruption', () => {
-        this.logger.log(`[Gemini] Interrupción detectada`);
         if (client.connected) client.emit('interruption', {});
       });
 
@@ -84,23 +84,41 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
       session.on('error', (err) => {
-        this.logger.error(`[Gemini] Error: ${err.message}`);
-        if (client.connected) client.emit('error', { message: err.message });
+        this.logger.error(`[Gemini] Error: ${err.message || err}`);
+        if (client.connected) client.emit('error', { message: err.message || 'Error de IA' });
       });
 
       session.on('tool_call', async (toolCall) => {
         this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
-        // (Lógica de tools mantenida igual que en V2.5 para brevedad...)
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
+            // Manejo de herramientas visuales reactivas
             if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view') {
               client.emit('frame_request', { source: fc.name === 'capture_device_screen' ? 'screen' : 'camera' });
               const frame = await this._waitForFrame(client, 10000);
-              if (!frame) return { name: fc.name, id: fc.id, response: { content: 'ERROR: No imagen' } };
-              session.sendClientContent([{ inlineData: { data: frame, mimeType: 'image/jpeg' } }], false);
-              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida' } };
+              if (!frame) return { name: fc.name, id: fc.id, response: { content: 'ERROR: No se pudo obtener la imagen.' } };
+              
+              session.sendClientContent([
+                { text: fc.name === 'capture_device_screen' ? "Aquí tienes la captura de mi pantalla." : "Aquí tienes la imagen de mi cámara." },
+                { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+              ]);
+              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y procesada.' } };
             }
-            const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
+
+            // Ejecución de herramientas estándar
+            const result = await this.aiService.executeTool(fc.name, fc.args, client.id);
+
+            // Emisión de comandos al móvil
+            if (fc.name === 'toggle_flashlight') {
+              client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
+            } else if (fc.name === 'switch_camera') {
+              client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
+            } else if (fc.name === 'trigger_haptic_feedback') {
+              client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
+            } else if (fc.name === 'display_content') {
+              client.emit('display_content', { type: fc.args.type, title: fc.args.title, items: fc.args.items });
+            }
+
             return { name: fc.name, id: fc.id, response: { content: result } };
           }),
         );
@@ -108,7 +126,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
     } catch (err) {
-      this.logger.error(`Error en conexión: ${err.message}`);
+      this.logger.error(`Error en handleConnection: ${err.message}`);
       client.disconnect();
     }
   }
@@ -116,15 +134,16 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleDisconnect(client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
     session?.close();
+    this.locationService.removeClientLocation(client.id);
     this.logger.log(`Cliente desconectado: ${client.id}`);
   }
 
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<string | null> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => resolve(null), timeoutMs);
-      client.once('frame', (p: FramePayload) => {
+      client.once('frame', (payload: FramePayload) => {
         clearTimeout(timer);
-        resolve(p?.frameBase64 || p?.frame || null);
+        resolve(payload?.frameBase64 || payload?.frame || null);
       });
     });
   }
@@ -133,8 +152,6 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleAudioChunk(@MessageBody() payload: AudioChunkPayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
     if (session && !session.isClosed() && payload?.audioBase64) {
-      // Log cada 20 paquetes para no inundar el log, pero confirmar que llega audio
-      if (Math.random() < 0.05) this.logger.debug(`Recibiendo audio de ${client.id}...`);
       session.sendAudioFrame(payload.audioBase64, payload.mimeType || 'audio/pcm;rate=16000');
     }
   }
@@ -144,8 +161,22 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const session = client.data.geminiSession as GeminiLiveSession;
     const frame = payload?.frameBase64 || payload?.frame;
     if (session && !session.isClosed() && frame) {
-      this.logger.log(`[Visión] Frame proactivo de ${client.id}`);
-      session.sendClientContent([{ inlineData: { data: frame, mimeType: 'image/png' } }], false);
+      this.logger.log(`[Visión] Captura proactiva de ${client.id}`);
+      session.sendClientContent([
+        { text: "El usuario ha minimizado la app. Esta es su pantalla actual." },
+        { inlineData: { data: frame, mimeType: 'image/png' } }
+      ], false);
+    }
+  }
+
+  @SubscribeMessage('update_location')
+  handleUpdateLocation(@MessageBody() payload: any, @ConnectedSocket() client: Socket) {
+    if (payload?.latitude != null && payload?.longitude != null) {
+      this.locationService.setClientLocation(client.id, {
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        accuracy: payload.accuracy,
+      });
     }
   }
 }
