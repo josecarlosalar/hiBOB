@@ -20,7 +20,7 @@ interface AudioChunkPayload {
 
 interface FramePayload {
   frameBase64?: string;
-  frame?: string; // Soporte para formato alternativo
+  frame?: string;
   prompt?: string;
 }
 
@@ -34,7 +34,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  private readonly logger = new Logger(LiveGateway.name);
+  private readonly logger = new Logger('LiveGateway-V2.5');
 
   constructor(
     private readonly aiService: AiService,
@@ -59,11 +59,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Eres hiBOB, una asistente mujer multimodal de nueva generación. ' +
           'TU MISIÓN: Ser el Guardián Digital y Copiloto del usuario. ' +
           'REGLA DE IDIOMA: Responde siempre en el idioma del usuario (español por defecto). ' +
-          'MODO SEGURIDAD (ESCUDO DIGITAL): Si el usuario menciona SMS sospechosos, enlaces, links, mensajes extraños o posibles virus, utiliza SIEMPRE capture_device_screen para ver el contenido. NUNCA pidas que te lo lea ni uses la cámara para ver el software. Una vez capturada la pantalla, identifica la URL y utiliza analyze_security_url para dar un veredicto técnico basado en VirusTotal. ' +
-          'MODO COPILOTO: Ayuda al usuario a navegar por su móvil. Si el usuario está perdido en los ajustes o una app, usa capture_device_screen para ver su pantalla y dale instrucciones paso a paso (ej. "Pulsa en el icono del engranaje que ves arriba a la derecha"). ' +
-          'MEMORIA VISUAL: Guarda objetos/lugares con save_visual_memory ("hiBOB, recuerda donde dejo esto") y recupéralos con get_visual_memory. ' +
-          'INTERRUPCIONES: Eres una asistente en vivo; si el usuario te interrumpe, deja de hablar inmediatamente y escucha. ' +
-          'VISIÓN: Cuando uses describe_camera_view o capture_device_screen, sé descriptiva y natural. Si no recibes la imagen, di: "No he podido capturar la imagen, ¿puedes asegurarte de que estoy en primer plano y volver a intentarlo?".',
+          'MODO SEGURIDAD (ESCUDO DIGITAL): Si el usuario menciona SMS sospechosos o enlaces extraños, usa capture_device_screen para ver el contenido. Luego usa analyze_security_url. ' +
+          'MODO COPILOTO: Ayuda al usuario a navegar por su móvil viendo su pantalla con capture_device_screen. ' +
+          'INTERRUPCIONES: Si el usuario te interrumpe, deja de hablar inmediatamente. ' +
+          'VISIÓN: Al recibir una captura de pantalla o imagen de cámara, descríbela de forma natural y proactiva.',
       });
 
       client.data.geminiSession = session;
@@ -98,43 +97,35 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       session.on('tool_call', async (toolCall) => {
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            // Herramientas visuales: pedir frame al móvil, enviarlo a Gemini y responder
             if (fc.name === 'detect_safety_hazards' || fc.name === 'describe_camera_view' || fc.name === 'capture_device_screen') {
               const isScreen = fc.name === 'capture_device_screen';
-              this.logger.log(`[Tool] Ejecutando ${fc.name}. Solicitando frame a cliente ${client.id}...`);
+              this.logger.log(`[ToolCall] Solicitando imagen para ${fc.name}...`);
 
               client.emit('frame_request', { source: isScreen ? 'screen' : 'camera' });
               
-              // Aumentamos timeout a 10s para dar tiempo a la captura de pantalla de Android
               const frameBase64 = await this._waitForFrame(client, 10000);
 
               if (!frameBase64) {
-                this.logger.warn(`[Tool] Timeout esperando frame de ${client.id} para ${fc.name}`);
+                this.logger.warn(`[ToolCall] No se recibió imagen a tiempo para ${fc.name}`);
                 return {
                   name: fc.name,
                   id: fc.id,
-                  response: { content: 'ERROR: No he recibido la imagen a tiempo. Asegúrate de estar en la pantalla que quieres que vea y que la app tenga los permisos necesarios.' },
+                  response: { content: 'ERROR: No puedo ver tu pantalla. Asegúrate de que no estoy minimizado y vuelve a intentarlo.' },
                 };
               }
 
-              this.logger.log(`[Tool] Frame recibido (${frameBase64.length} bytes). Enviando a Gemini...`);
+              this.logger.log(`[ToolCall] Imagen recibida (${frameBase64.length} bytes). Enviando como turno visual.`);
               
-              // Enviar la imagen como un turno de usuario formal
               (session as any).sendClientContent([
-                { text: "Aquí tienes la captura de mi pantalla actual. Analízala para ayudarme." },
+                { text: isScreen ? "Aquí tienes la captura de mi pantalla actual." : "Aquí tienes la imagen de mi cámara." },
                 { inlineData: { data: frameBase64, mimeType: isScreen ? 'image/png' : 'image/jpeg' } }
               ]);
               
-              return { 
-                name: fc.name, 
-                id: fc.id, 
-                response: { content: 'Captura procesada con éxito. Ya puedes ver el contenido.' } 
-              };
+              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida. Analizando contenido...' } };
             }
 
             const result = await (this.aiService as any).executeTool(fc.name, fc.args, client.id);
 
-            // Comandos de hardware y UI
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
@@ -205,7 +196,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const session = client.data.geminiSession as GeminiLiveSession;
       const frame = payload?.frameBase64 || payload?.frame;
       if (session && !session.isClosed() && frame) {
-        session.sendImageFrame(frame);
+        this.logger.log(`[Frame] Recibida captura proactiva de ${client.id} (${frame.length} bytes)`);
+        // Enviar como turno formal para que Gemini ya lo tenga en memoria
+        (session as any).sendClientContent([
+          { text: "El usuario ha minimizado la app. Aquí tienes lo que está viendo ahora mismo." },
+          { inlineData: { data: frame, mimeType: 'image/png' } }
+        ], false); // turnComplete = false para que no empiece a hablar solo
       }
     } catch (e) {
       this.logger.error(`Error procesando frame: ${e.message}`);
