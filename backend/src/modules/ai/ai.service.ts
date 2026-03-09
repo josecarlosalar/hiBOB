@@ -165,18 +165,14 @@ export class GeminiLiveSession extends EventEmitter {
   sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
     if (this.closed || !this.session) return;
     try {
-      const buffer = Buffer.from(base64Audio, 'base64');
-      const blob = new Blob([buffer], { type: mimeType });
-      this.session.sendRealtimeInput({ audio: blob });
+      this.session.sendRealtimeInput({ audio: { mimeType, data: base64Audio } as any });
     } catch (e) { this.logger.error(`Error enviando audio: ${e.message}`); }
   }
 
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (this.closed || !this.session) return;
     try {
-      const buffer = Buffer.from(base64Image, 'base64');
-      const blob = new Blob([buffer], { type: mimeType });
-      this.session.sendRealtimeInput({ video: blob });
+      this.session.sendRealtimeInput({ video: { mimeType, data: base64Image } as any });
     } catch (e) { this.logger.error(`Error enviando imagen: ${e.message}`); }
   }
 
