@@ -62,7 +62,8 @@ export class ConversationController {
   @Get(':conversationId/messages')
   async getMessages(
     @Param('conversationId') conversationId: string,
+    @Req() req: AuthRequest,
   ): Promise<unknown[]> {
-    return this.conversationService.getMessages(conversationId);
+    return this.conversationService.getMessages(conversationId, req.user.uid);
   }
 }
