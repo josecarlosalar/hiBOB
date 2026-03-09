@@ -318,7 +318,6 @@ export class GeminiLiveSession extends EventEmitter {
   sendAudioFrame(base64Audio: string, mimeType = 'audio/pcm;rate=16000') {
     if (!this.session || this.closed) return;
     try {
-      // En el SDK v1.0+, sendRealtimeInput suele esperar un array de partes (chunks)
       this.session.sendRealtimeInput([{ data: base64Audio, mimeType }]);
     } catch (err) {
       this.logger.error(`Error en sendAudioFrame: ${err.message}`);
@@ -328,7 +327,6 @@ export class GeminiLiveSession extends EventEmitter {
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (!this.session || this.closed) return;
     try {
-      // En el SDK v1.0+, sendRealtimeInput suele esperar un array de partes (chunks)
       this.session.sendRealtimeInput([{ data: base64Image, mimeType }]);
     } catch (err) {
       this.logger.error(`Error en sendImageFrame: ${err.message}`);
@@ -406,7 +404,6 @@ export class AiService implements OnModuleInit {
     const modelId = this.configService.get<string>('GEMINI_LIVE_MODEL', 'gemini-2.5-flash-native-audio-latest');
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     
-    // Si no hay API KEY, intentamos usar Vertex AI (this.ai ya inicializado en onModuleInit)
     const liveAi = apiKey ? new GoogleGenAI({ apiKey }) : this.ai;
     
     if (!apiKey && !this.ai) {

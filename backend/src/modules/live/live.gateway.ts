@@ -116,7 +116,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
               this.logger.log(`[ToolCall] Imagen recibida (${frameBase64.length} bytes). Enviando como turno visual.`);
               
-              (session as any).sendClientContent([
+              session.sendClientContent([
                 { text: isScreen ? "Aquí tienes la captura de mi pantalla actual." : "Aquí tienes la imagen de mi cámara." },
                 { inlineData: { data: frameBase64, mimeType: isScreen ? 'image/png' : 'image/jpeg' } }
               ]);
@@ -198,7 +198,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (session && !session.isClosed() && frame) {
         this.logger.log(`[Frame] Recibida captura proactiva de ${client.id} (${frame.length} bytes)`);
         // Enviar como turno formal para que Gemini ya lo tenga en memoria
-        (session as any).sendClientContent([
+        session.sendClientContent([
           { text: "El usuario ha minimizado la app. Aquí tienes lo que está viendo ahora mismo." },
           { inlineData: { data: frame, mimeType: 'image/png' } }
         ], false); // turnComplete = false para que no empiece a hablar solo
