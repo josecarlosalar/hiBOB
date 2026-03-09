@@ -306,21 +306,35 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<String?> _captureFrame({String source = 'camera'}) async {
     if (source == 'screen') {
       try {
-        // Asegurar que el servicio de captura esté activo (esto pide permiso al usuario la primera vez)
-        bool? isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
-        if (isRunning != true) {
-          await DeviceScreenshot.instance.startMediaProjectionService();
-          // Esperar un poco a que el usuario acepte el diálogo de sistema
-          await Future.delayed(const Duration(milliseconds: 500));
+        debugPrint('[CameraScreen] Solicitando captura de pantalla...');
+        bool isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
+        if (!isRunning) {
+          debugPrint('[CameraScreen] Iniciando servicio de proyección...');
+          DeviceScreenshot.instance.requestMediaProjection();
+          // Aumentamos a 2 segundos para dar tiempo al usuario y al sistema
+          await Future.delayed(const Duration(milliseconds: 2000));
         }
 
-        final path = await DeviceScreenshot.instance.takeScreenshot();
-        if (path == null) return null;
+        final uri = await DeviceScreenshot.instance.takeScreenshot();
+        if (uri == null) {
+          debugPrint('[CameraScreen] takeScreenshot devolvió null');
+          return null;
+        }
         
-        final bytes = await File(path).readAsBytes();
-        return base64Encode(bytes);
+        // Convertir Uri a path de forma segura
+        final path = uri.toFilePath();
+        final file = File(path);
+        
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          debugPrint('[CameraScreen] Captura realizada: ${bytes.length} bytes');
+          return base64Encode(bytes);
+        } else {
+          debugPrint('[CameraScreen] El archivo de captura no existe en: $path');
+          return null;
+        }
       } catch (e) {
-        debugPrint('[CameraScreen] Error en captura de pantalla (0.0.8): $e');
+        debugPrint('[CameraScreen] Error crítico en captura de pantalla: $e');
         return null;
       }
     }
@@ -346,7 +360,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
     unawaited(hiBOBBackgroundService.stop());
-    unawaited(DeviceScreenshot.instance.stopMediaProjectionService());
+    DeviceScreenshot.instance.stopMediaProjectionService();
   }
 
   void _setStateIfMounted(AssistantState newState) {
