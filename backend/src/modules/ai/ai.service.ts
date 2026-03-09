@@ -327,7 +327,13 @@ export class GeminiLiveSession extends EventEmitter {
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {
     if (!this.session || this.closed) return;
     try {
-      this.session.sendRealtimeInput({ video: { data: base64Image, mimeType } });
+      // Usar mediaChunks para enviar el frame como una parte de entrada multimedia en tiempo real
+      this.session.sendRealtimeInput({
+        mediaChunks: [{
+          data: base64Image,
+          mimeType: mimeType
+        }]
+      });
     } catch (err) {
       this.logger.error(`Error en sendImageFrame: ${err.message}`);
     }
