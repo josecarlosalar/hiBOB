@@ -306,15 +306,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<String?> _captureFrame({String source = 'camera'}) async {
     if (source == 'screen') {
       try {
-        // device_screenshot permite captura real de todo el sistema (Android)
-        final uri = await DeviceScreenshot.takeScreenshot();
-        if (uri == null) return null;
+        // Asegurar que el servicio de captura esté activo (esto pide permiso al usuario la primera vez)
+        bool? isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
+        if (isRunning != true) {
+          await DeviceScreenshot.instance.startMediaProjectionService();
+          // Esperar un poco a que el usuario acepte el diálogo de sistema
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
+
+        final path = await DeviceScreenshot.instance.takeScreenshot();
+        if (path == null) return null;
         
-        final bytes = await File(uri).readAsBytes();
-        // Limpiar archivo temporal si fuera necesario, aunque el plugin suele gestionarlo
+        final bytes = await File(path).readAsBytes();
         return base64Encode(bytes);
       } catch (e) {
-        debugPrint('[CameraScreen] Error en captura de pantalla: $e');
+        debugPrint('[CameraScreen] Error en captura de pantalla (0.0.8): $e');
         return null;
       }
     }
@@ -340,6 +346,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
     unawaited(hiBOBBackgroundService.stop());
+    unawaited(DeviceScreenshot.instance.stopMediaProjectionService());
   }
 
   void _setStateIfMounted(AssistantState newState) {
