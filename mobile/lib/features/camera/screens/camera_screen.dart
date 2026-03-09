@@ -107,18 +107,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     super.dispose();
   }
 
+  bool _isRequestingMediaProjection = false;
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     debugPrint('[CameraScreen] Lifecycle changed to: $state');
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _isAppInForeground = false;
-      // SI estamos en una sesión activa, enviamos un frame de pantalla proactivo al minimizar
+      // No enviar frame proactivo si estamos en proceso de pedir permiso de MediaProjection
+      if (_isRequestingMediaProjection) {
+        debugPrint('[CameraScreen] Ignorando pausa: solicitando permiso de MediaProjection');
+        return;
+      }
       if (_state != AssistantState.inactive && _liveSession.state == LiveSessionState.connected) {
         debugPrint('[CameraScreen] App minimizada. Enviando captura de pantalla proactiva...');
         _sendProactiveScreenFrame();
       }
     } else if (state == AppLifecycleState.resumed) {
       _isAppInForeground = true;
+      _isRequestingMediaProjection = false;
     }
   }
 
@@ -328,9 +335,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await _switchCamera(direction == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'start_copilot_mode') {
       unawaited(hiBOBBackgroundService.startForeground());
+      // Iniciar MediaProjection proactivamente para que las capturas de pantalla estén listas
+      _initMediaProjection();
       _showMessage('Modo Copiloto activado. Puedes minimizar.');
     } else if (action == 'vibrate') {
       if (await Vibration.hasVibrator()) Vibration.vibrate(duration: 100);
+    }
+  }
+
+  Future<void> _initMediaProjection() async {
+    try {
+      final isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
+      if (isRunning) return;
+      _isRequestingMediaProjection = true;
+      DeviceScreenshot.instance.requestMediaProjection();
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (await DeviceScreenshot.instance.checkMediaProjectionService()) break;
+      }
+      _isRequestingMediaProjection = false;
+    } catch (e) {
+      debugPrint('[CameraScreen] Error iniciando MediaProjection: $e');
+      _isRequestingMediaProjection = false;
     }
   }
 
@@ -341,8 +367,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         bool isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
         if (!isRunning) {
           debugPrint('[CameraScreen] Iniciando servicio de proyección...');
-          DeviceScreenshot.instance.requestMediaProjection();
-          await Future.delayed(const Duration(milliseconds: 2000));
+          await _initMediaProjection();
+          isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
+          if (!isRunning) {
+            debugPrint('[CameraScreen] MediaProjection no se inició');
+            return null;
+          }
         }
 
         final uri = await DeviceScreenshot.instance.takeScreenshot();
