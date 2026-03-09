@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
 import { AiService } from '../ai/ai.service';
 import { CreateMessageDto, MessageRole } from './dto/create-message.dto';
@@ -26,6 +26,26 @@ export class ConversationService {
 
   constructor(private readonly aiService: AiService) {}
 
+  // ─── Validación de ownership ────────────────────────────────────────────
+
+  private async assertOwnership(
+    conversationId: string,
+    uid: string,
+  ): Promise<void> {
+    const ref = this.db.collection('conversations').doc(conversationId);
+    const snap = await ref.get();
+
+    if (snap.exists) {
+      const data = snap.data();
+      if (data?.userId !== uid) {
+        this.logger.warn(
+          `User ${uid} attempted to access conversation ${conversationId} owned by ${data?.userId}`,
+        );
+        throw new ForbiddenException('No tienes acceso a esta conversación');
+      }
+    }
+  }
+
   // ─── Upsert documento raíz ───────────────────────────────────────────────
 
   private async ensureConversation(
@@ -43,6 +63,10 @@ export class ConversationService {
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     } else {
+      const data = snap.data();
+      if (data?.userId !== uid) {
+        throw new ForbiddenException('No tienes acceso a esta conversación');
+      }
       await ref.update({
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -125,7 +149,11 @@ export class ConversationService {
 
   // ─── Mensajes ────────────────────────────────────────────────────────────
 
-  async getMessages(conversationId: string): Promise<Message[]> {
+  async getMessages(conversationId: string, uid?: string): Promise<Message[]> {
+    if (uid) {
+      await this.assertOwnership(conversationId, uid);
+    }
+
     const snapshot = await this.db
       .collection('conversations')
       .doc(conversationId)
