@@ -31,6 +31,46 @@ class CameraScreen extends ConsumerStatefulWidget {
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
+  // ... (existing variables)
+  bool _isAppInForeground = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // ...
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // ...
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('[CameraScreen] Lifecycle changed to: $state');
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _isAppInForeground = false;
+      // SI estamos en una sesión activa, enviamos un frame de pantalla proactivo al minimizar
+      if (_state != AssistantState.inactive && _liveSession.state == LiveSessionState.connected) {
+        debugPrint('[CameraScreen] App minimizada. Enviando captura de pantalla proactiva...');
+        _sendProactiveScreenFrame();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      _isAppInForeground = true;
+    }
+  }
+
+  Future<void> _sendProactiveScreenFrame() async {
+    // Esperamos un instante a que la app termine de ocultarse para ver lo que hay debajo
+    await Future.delayed(const Duration(milliseconds: 500));
+    final frame = await _captureFrame(source: 'screen');
+    if (frame != null && _liveSession.state == LiveSessionState.connected) {
+      _liveSession.sendFrame(frameBase64: frame);
+    }
+  }
   static const String _settingsFileName = 'conversation_settings.json';
   final GlobalKey _screenCaptureKey = GlobalKey();
   
