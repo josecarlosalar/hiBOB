@@ -213,10 +213,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final token = await firebase.getIdToken();
       if (token == null) { _showMessage('No se pudo autenticar'); return; }
 
-      // Pedir permiso de MediaProjection ANTES de conectar el socket
-      // para que el diálogo de permiso no interrumpa la conexión
-      await _initMediaProjection();
-
       await _pcmAudio.init();
 
       _subs.addAll([
@@ -265,6 +261,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ]);
 
       await hiBOBBackgroundService.startForeground();
+      // Pedir MediaProjection DESPUÉS del foreground service pero ANTES del socket
+      await _initMediaProjection();
       await _liveSession.connect(token);
       unawaited(_startLocationUpdates());
     } catch (e) {
