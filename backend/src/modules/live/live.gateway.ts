@@ -140,11 +140,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<string | null> {
     return new Promise((resolve) => {
-      const timer = setTimeout(() => resolve(null), timeoutMs);
-      client.once('frame', (payload: FramePayload) => {
+      const timer = setTimeout(() => {
+        client.data.pendingFrameResolve = null;
+        resolve(null);
+      }, timeoutMs);
+      client.data.pendingFrameResolve = (frame: string | null) => {
         clearTimeout(timer);
-        resolve(payload?.frameBase64 || payload?.frame || null);
-      });
+        client.data.pendingFrameResolve = null;
+        resolve(frame);
+      };
     });
   }
 
@@ -160,13 +164,21 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleFrame(@MessageBody() payload: FramePayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
     const frame = payload?.frameBase64 || payload?.frame;
-    if (session && !session.isClosed() && frame) {
-      this.logger.log(`[Visión] Captura proactiva de ${client.id}`);
-      session.sendClientContent([
-        { text: "El usuario ha minimizado la app. Esta es su pantalla actual." },
-        { inlineData: { data: frame, mimeType: 'image/png' } }
-      ], false);
+    if (!session || session.isClosed() || !frame) return;
+
+    // Si hay una solicitud de frame pendiente (tool call), resolver esa promesa
+    if (client.data.pendingFrameResolve) {
+      this.logger.log(`[Visión] Frame recibido para tool call de ${client.id}`);
+      client.data.pendingFrameResolve(frame);
+      return;
     }
+
+    // Si no hay solicitud pendiente, es un frame proactivo (app minimizada)
+    this.logger.log(`[Visión] Captura proactiva de ${client.id}`);
+    session.sendClientContent([
+      { text: "El usuario ha minimizado la app. Esta es su pantalla actual." },
+      { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+    ], false);
   }
 
   @SubscribeMessage('update_location')
