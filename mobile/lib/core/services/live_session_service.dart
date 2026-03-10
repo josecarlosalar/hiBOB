@@ -119,11 +119,14 @@ class LiveSessionService {
     });
   }
 
-  /// Envía un frame de cámara (solo cuando el backend lo pide o hay herramienta visual).
-  void sendFrame({required String frameBase64}) {
+  /// Envía un frame de cámara o pantalla (manual o solicitado).
+  void sendFrame({required String frameBase64, String? prompt}) {
     if (_state != LiveSessionState.connected) return;
-    debugPrint('[LiveSessionService] Sending frame: ${frameBase64.length} chars');
-    _socket?.emit('frame', {'frameBase64': frameBase64});
+    debugPrint('[LiveSessionService] Sending frame (${frameBase64.length} chars) with prompt: $prompt');
+    _socket?.emit('frame', {
+      'frameBase64': frameBase64,
+      if (prompt != null) 'prompt': prompt,
+    });
   }
 
   /// Envía las coordenadas GPS del dispositivo al backend.
