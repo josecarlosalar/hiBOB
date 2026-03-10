@@ -61,7 +61,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'FLUJO DE SEGURIDAD: Cuando el usuario te muestre una captura de pantalla o foto, tu prioridad absoluta es identificar URLs, enlaces o mensajes sospechosos. ' +
           'Si ves una URL, utiliza SIEMPRE la herramienta analyze_security_url para verificarla con VirusTotal y dar un veredicto técnico. ' +
           'MODO COPILOTO: Si el usuario te pide ayuda con su móvil, guía sus pasos de forma natural. ' +
-          'Responde de forma breve, proactiva y profesional.',
+          'RESPUESTAS CORTAS: Responde siempre en 1-3 frases máximo. Nunca repitas números ni datos que ya aparecen en pantalla. Tras un análisis VirusTotal, da solo el veredicto final en una frase.',
       });
 
       client.data.geminiSession = session;
@@ -148,6 +148,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                         : data.positives <= 3 ? 'suspicious'
                         : data.positives <= 10 ? 'dangerous'
                         : 'critical';
+                    const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
                     client.emit('display_content', {
                         type: 'vt_report',
@@ -159,12 +160,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                             harmless: data.harmless ?? 0,
                             suspicious: data.suspicious ?? 0,
                             malicious: data.malicious ?? 0,
-                            undetected: data.undetected ?? (data.total - data.positives),
+                            undetected: data.undetected ?? Math.max(0, data.total - data.positives - (data.harmless ?? 0)),
                             threatLevel,
                             isDanger,
+                            scanDate,
                         }
                     });
-                    result = `REPORTE TÉCNICO: La URL ${data.url} ha sido analizada. ${data.positives} de ${data.total} motores la marcan como sospechosa. He mostrado los detalles en pantalla.`;
+                    // Instrucción concisa al agente para que no se extienda
+                    result = `VT_RESULT:${isDanger ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto mostrado en pantalla. Da un veredicto en 1-2 frases, sin repetir los números.`;
                 } catch (e) {
                     client.emit('display_content', {
                         type: 'vt_report',
