@@ -140,14 +140,12 @@ export class GeminiLiveSession extends EventEmitter {
     this.logger.log(`Conectando a Live API con modelo: ${this.modelId}`);
     
     // En @google/genai >= 1.0.0, speechConfig e inputAudioTranscription 
-    // deben estar en el nivel superior de LiveConnectConfig, no dentro de generationConfig.
+    // deben estar en el nivel superior de LiveConnectConfig.
+    // inputAudioTranscription DEBE ser un objeto vacío {} para habilitarse.
     const liveConfig: any = {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
       systemInstruction: { parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.' }] },
       tools: AGENT_TOOLS,
-      generationConfig: {
-        // Configuraciones de generación generales (temperature, etc.) pueden ir aquí
-      },
       speechConfig: {
         voiceConfig: {
           prebuiltVoiceConfig: {
@@ -155,7 +153,7 @@ export class GeminiLiveSession extends EventEmitter {
           },
         },
       },
-      inputAudioTranscription: { enabled: true },
+      inputAudioTranscription: {}, 
     };
 
     try {
