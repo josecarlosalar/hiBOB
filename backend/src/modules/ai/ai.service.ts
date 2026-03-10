@@ -120,6 +120,7 @@ const AGENT_TOOLS: Tool[] = [
 export interface LiveSessionOptions {
   systemInstruction?: string;
   responseModalities?: Modality[];
+  voiceName?: string;
 }
 
 export class GeminiLiveSession extends EventEmitter {
@@ -141,6 +142,16 @@ export class GeminiLiveSession extends EventEmitter {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
       systemInstruction: { parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.' }] },
       tools: AGENT_TOOLS,
+      generationConfig: {
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: this.options.voiceName || 'Aoede',
+            },
+          },
+        },
+      },
+      inputAudioTranscription: { enabled: true },
     };
 
     this.session = await this.ai.live.connect({
