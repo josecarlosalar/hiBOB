@@ -295,7 +295,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_selectedGalleryImage == null) return;
     try {
       final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
-      _liveSession.sendFrame(frameBase64: base64Encode(bytes));
+      _liveSession.sendFrame(
+        frameBase64: base64Encode(bytes),
+        prompt: 'El usuario ha seleccionado esta captura de su galería para que la analices. Busca URLs sospechosas, estafas o contenido importante.',
+      );
       _showMessage('Imagen enviada a hiBOB...');
       setState(() => _selectedGalleryImage = null);
     } catch (e) { _showMessage('Error enviando imagen: $e'); }
@@ -306,7 +309,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     try {
       final file = await _cameraCtrl!.takePicture();
       final bytes = await File(file.path).readAsBytes();
-      return base64Encode(bytes);
+      final base64 = base64Encode(bytes);
+      
+      // Si el backend pidió un frame, se lo enviamos con un prompt contextual
+      if (source == 'camera') {
+        _liveSession.sendFrame(
+          frameBase64: base64,
+          prompt: 'Esta es la imagen actual de mi cámara. Descríbela de forma natural.',
+        );
+      }
+      return base64;
     } catch (e) { return null; }
   }
 
