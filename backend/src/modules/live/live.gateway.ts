@@ -32,7 +32,7 @@ interface FramePayload {
 })
 export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   private readonly logger = new Logger('LiveGateway-V2.8');
 
@@ -58,9 +58,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         systemInstruction:
           'Eres hiBOB, una asistente mujer multimodal de nueva generación. ' +
           'TU MISIÓN: Ser el Guardián Digital y Copiloto del usuario. ' +
-          'MODO COPILOTO: Ayuda al usuario viendo su pantalla con capture_device_screen. ' +
-          'MODO SEGURIDAD: Analiza URLs con analyze_security_url. ' +
-          'Responde siempre de forma breve y natural en español.',
+          'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. Si el usuario te habla en inglés, responde en inglés; si te habla en español, en español, etc. ' +
+          'FLUJO DE SEGURIDAD: Cuando el usuario te muestre una captura de pantalla o foto, tu prioridad absoluta es identificar URLs, enlaces o mensajes sospechosos. ' +
+          'Si ves una URL, utiliza SIEMPRE la herramienta analyze_security_url para verificarla con VirusTotal y dar un veredicto técnico. ' +
+          'MODO COPILOTO: Si el usuario te pide ayuda con su móvil, guía sus pasos de forma natural. ' +
+          'Responde de forma breve, proactiva y profesional.',
       });
 
       client.data.geminiSession = session;
@@ -128,7 +130,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
     } catch (err) {
-      this.logger.error(`Error en handleConnection: ${err.message}`);
+      this.logger.error(`Error en handleConnection: ${err instanceof Error ? err.message : err}`);
       client.disconnect();
     }
   }
