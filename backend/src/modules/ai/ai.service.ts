@@ -90,6 +90,12 @@ const GET_VISUAL_MEMORY_FUNCTION: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: { label: { type: Type.STRING } }, required: ['label'] },
 };
 
+const OPEN_GALLERY_FUNCTION: FunctionDeclaration = {
+  name: 'open_gallery',
+  description: 'Abre la galería de imágenes del dispositivo para que el usuario seleccione una captura de pantalla o foto.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
@@ -104,6 +110,7 @@ const AGENT_TOOLS: Tool[] = [
       ANALYZE_SECURITY_URL_FUNCTION,
       SAVE_VISUAL_MEMORY_FUNCTION,
       GET_VISUAL_MEMORY_FUNCTION,
+      OPEN_GALLERY_FUNCTION,
     ],
   },
 ];

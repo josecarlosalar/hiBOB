@@ -115,6 +115,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
+            } else if (fc.name === 'open_gallery') {
+              client.emit('command', { action: 'open_gallery' });
             } else if (fc.name === 'display_content') {
               client.emit('display_content', { type: fc.args.type, title: fc.args.title, items: fc.args.items });
             }
