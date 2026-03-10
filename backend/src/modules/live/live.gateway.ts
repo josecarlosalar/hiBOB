@@ -39,7 +39,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly aiService: AiService,
     private readonly locationService: LocationService,
-  ) {}
+  ) { }
 
   async handleConnection(client: Socket) {
     try {
@@ -56,8 +56,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const session = await this.aiService.createLiveSession({
         systemInstruction:
-          'Eres hiBOB, una asistente mujer multimodal de nueva generación. ' +
-          'TU MISIÓN: Ser el Guardián Digital y Copiloto del usuario. ' +
+          'Eres BOB, un agente de seguridad experto en ciberseguridad. Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. Siempre que el usuario mencione problemas con bancos, SMS o enlaces, tu prioridad es evitar que el usuario interactúe con ellos. Si el usuario te menciona una posible amenaza, ofrécele inmediatamente analizarla mediante una imagen (captura de pantalla) para verificar la URL. Usa tus herramientas de búsqueda y análisis para confirmar tus sospechas.' +
           'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. Si el usuario te habla en inglés, responde en inglés; si te habla en español, en español, etc. ' +
           'FLUJO DE SEGURIDAD: Cuando el usuario te muestre una captura de pantalla o foto, tu prioridad absoluta es identificar URLs, enlaces o mensajes sospechosos. ' +
           'Si ves una URL, utiliza SIEMPRE la herramienta analyze_security_url para verificarla con VirusTotal y dar un veredicto técnico. ' +
@@ -99,7 +98,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('frame_request', { source: fc.name === 'capture_device_screen' ? 'screen' : 'camera' });
               const frame = await this._waitForFrame(client, 10000);
               if (!frame) return { name: fc.name, id: fc.id, response: { content: 'ERROR: No se pudo obtener la imagen.' } };
-              
+
               session.sendClientContent([
                 { text: fc.name === 'capture_device_screen' ? "Aquí tienes la captura de mi pantalla." : "Aquí tienes la imagen de mi cámara." },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
