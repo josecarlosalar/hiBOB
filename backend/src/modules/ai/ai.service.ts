@@ -312,7 +312,8 @@ export class AiService implements OnModuleInit {
     }
     if (name === 'analyze_security_url') {
       const rep = await this.virusTotalService.analyzeUrl(args.url);
-      return `REPORTE: ${rep.status}. Riesgo: ${rep.positives}/${rep.total} motores.`;
+      // Devolvemos los detalles completos para que el gateway pueda parsearlos
+      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, url: args.url });
     }
     if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
     if (name === 'save_visual_memory') { this.memory.set(args.label.toLowerCase(), `Guardado el ${new Date().toLocaleString()}`); return 'Memoria guardada.'; }
