@@ -62,10 +62,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
+  bool _isVibrating = false;
   bool _showCameraPreview = false;
   Timer? _hideCameraTimer;
   Map<String, dynamic>? _structuredContent;
   Map<String, dynamic>? _selectedItem;
+
+  bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
   // Para la nueva funcionalidad de galería
   XFile? _selectedGalleryImage;
@@ -188,18 +191,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     unawaited(_audio.startStreamingRecording(intervalMs: 200));
     _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
     _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-      if (_liveSession.state == LiveSessionState.connected) _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+      if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
+        _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+      }
     });
   }
 
+  bool _shouldForwardAudioChunk() {
+    // Si el dispositivo está vibrando o el agente está hablando (en perfil "Evitar cortes"),
+    // bloqueamos el envío de audio para evitar auto-interrupciones accidentales.
+    if (_isVibrating) return false;
+    if (_agentAudioActive && _conversationProfile == 'Evitar cortes') return false;
+    return true;
+  }
+
   void _handleAmplitudeSample(Amplitude amp) {
-    if (!_agentAudioActive) return;
+    if (!_agentAudioActive || _isVibrating) return;
     final now = DateTime.now();
     final graceElapsed = _agentSpeechStartedAt != null && now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs;
     if (!graceElapsed) return;
     if (amp.current >= _bargeInThresholdDb) {
       _bargeInStartedAt ??= now;
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 900) _stopSpeaking();
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 900 && _bargeInEnabled) _stopSpeaking();
     } else { _bargeInStartedAt = null; }
   }
 
@@ -231,7 +244,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } else if (action == 'switch_camera') {
       await _switchCamera(cmd['direction'] == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'vibrate') {
-      if (await Vibration.hasVibrator()) Vibration.vibrate(duration: 100);
+      if (await Vibration.hasVibrator()) {
+        setState(() => _isVibrating = true);
+        Vibration.vibrate(duration: 100);
+        Future.delayed(const Duration(milliseconds: 250), () {
+          if (mounted) setState(() => _isVibrating = false);
+        });
+      }
     } else if (action == 'open_gallery') {
       _openGalleryPicker();
     }
@@ -393,6 +412,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return Positioned(top: 40, left: 20, right: 20, child: Row(children: [
       _StatusBadge(state: _state), 
       const Spacer(),
+      _CircleButton(icon: Icons.tune_rounded, onTap: _openFineTuningPanel),
+      const SizedBox(width: 10),
       _CircleButton(icon: Icons.photo_library_rounded, onTap: _openGalleryPicker),
       const SizedBox(width: 10),
       _CircleButton(icon: _cameraCtrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off, onTap: _toggleFlashLocally),
@@ -466,9 +487,43 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _applyConversationProfile(String profile) {
     _conversationProfile = profile;
-    if (profile == 'Evitar cortes') { _vadThresholdDb = -66; }
-    else if (profile == 'Interrupcion facil') { _vadThresholdDb = -68; }
-    else { _vadThresholdDb = _defaultVadThresholdDb; }
+    if (profile == 'Evitar cortes') { 
+      _vadThresholdDb = -66; 
+      _agentSpeechGraceMs = 1500;
+    } else if (profile == 'Interrupcion facil') { 
+      _vadThresholdDb = -68; 
+      _bargeInThresholdDb = -18;
+      _agentSpeechGraceMs = 600;
+    } else { 
+      _vadThresholdDb = _defaultVadThresholdDb; 
+      _bargeInThresholdDb = _defaultBargeInThresholdDb;
+      _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
+    }
+  }
+
+  void _openFineTuningPanel() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      isScrollControlled: true,
+      builder: (context) {
+        return StatefulBuilder(builder: (context, modalSetState) {
+          void updateSettings(VoidCallback update) { modalSetState(update); setState(() {}); unawaited(_persistConversationSettings()); }
+          return SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(20, 20, 20, 28), child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Ajuste de Conversación', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              _CalibrationChip(label: 'Equilibrado', isSelected: _conversationProfile == 'Equilibrado', onTap: () => updateSettings(() => _applyConversationProfile('Equilibrado'))),
+              _CalibrationChip(label: 'Evitar cortes', isSelected: _conversationProfile == 'Evitar cortes', onTap: () => updateSettings(() => _applyConversationProfile('Evitar cortes'))),
+              _CalibrationChip(label: 'Interrupción fácil', isSelected: _conversationProfile == 'Interrupcion facil', onTap: () => updateSettings(() => _applyConversationProfile('Interrupcion facil'))),
+            ]),
+            const SizedBox(height: 24),
+            _SettingSlider(label: 'Sensibilidad VAD', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: -30, divisions: 50, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
+            _SettingSlider(label: 'Umbral Interrupción', valueLabel: '${_bargeInThresholdDb.toInt()} dB', value: _bargeInThresholdDb, min: -50, max: 0, divisions: 50, onChanged: (v) => updateSettings(() => _bargeInThresholdDb = v)),
+          ])));
+        });
+      },
+    );
   }
 
   Future<File> _settingsFile() async { final dir = await getApplicationSupportDirectory(); return File('${dir.path}/$_settingsFileName'); }
@@ -477,23 +532,40 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final file = await _settingsFile();
       if (!await file.exists()) return;
       final json = jsonDecode(await file.readAsString());
-      setState(() { _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; _vadThresholdDb = json['vadThresholdDb'] ?? _defaultVadThresholdDb; });
+      setState(() { 
+        _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; 
+        _vadThresholdDb = (json['vadThresholdDb'] ?? _defaultVadThresholdDb).toDouble(); 
+        _bargeInThresholdDb = (json['bargeInThresholdDb'] ?? _defaultBargeInThresholdDb).toDouble();
+      });
     } catch (_) {}
   }
   Future<void> _persistConversationSettings() async {
-    try { await (await _settingsFile()).writeAsString(jsonEncode({'conversationProfile': _conversationProfile, 'vadThresholdDb': _vadThresholdDb})); } catch (_) {}
+    try { await (await _settingsFile()).writeAsString(jsonEncode({
+      'conversationProfile': _conversationProfile, 
+      'vadThresholdDb': _vadThresholdDb,
+      'bargeInThresholdDb': _bargeInThresholdDb,
+    })); } catch (_) {}
   }
 }
 
-class _SpeakingWave extends StatelessWidget {
-  final Animation<double> anim; final ColorScheme colors;
-  const _SpeakingWave({required this.anim, required this.colors});
+class _CalibrationChip extends StatelessWidget {
+  final String label; final bool isSelected; final VoidCallback onTap;
+  const _CalibrationChip({required this.label, required this.isSelected, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(animation: anim, builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: List.generate(5, (i) {
-      final height = 10.0 + 20.0 * ((sin(anim.value * pi + (i / 4.0 * pi)) + 1) / 2);
-      return Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: Container(width: 4, height: height, decoration: BoxDecoration(color: colors.secondary, borderRadius: BorderRadius.circular(2))));
-    })));
+    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: isSelected ? Colors.white12 : Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? Colors.white70 : Colors.white12)), child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 12))));
+  }
+}
+
+class _SettingSlider extends StatelessWidget {
+  final String label, valueLabel; final double value, min, max; final int divisions; final ValueChanged<double> onChanged;
+  const _SettingSlider({required this.label, required this.valueLabel, required this.value, required this.min, required this.max, required this.divisions, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14))), Text(valueLabel, style: const TextStyle(color: Colors.white70, fontSize: 12))]),
+      Slider(value: value.clamp(min, max), min: min, max: max, divisions: divisions, onChanged: onChanged, activeColor: Colors.white70, inactiveColor: Colors.white12),
+    ]);
   }
 }
 
@@ -502,15 +574,17 @@ class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.state});
   @override
   Widget build(BuildContext context) {
-    IconData icon;
-    Color color = Colors.white;
-    switch (state) {
-      case AssistantState.inactive: icon = Icons.power_settings_new; break;
-      case AssistantState.connecting: icon = Icons.sync; color = Colors.orangeAccent; break;
-      case AssistantState.listening: icon = Icons.hearing; color = Colors.greenAccent; break;
-      case AssistantState.speaking: icon = Icons.graphic_eq; color = Colors.cyanAccent; break;
-    }
-    return Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white10)), child: Center(child: Icon(icon, color: color, size: 20)));
+    final (label, color) = switch (state) {
+      AssistantState.inactive => ('Inactivo', Colors.white38),
+      AssistantState.connecting => ('Conectando…', Colors.amber),
+      AssistantState.listening => ('Escuchando', Colors.greenAccent),
+      AssistantState.speaking => ('Hablando', Colors.cyanAccent),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(16), border: Border.all(color: color.withValues(alpha: 0.4))),
+      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+    );
   }
 }
 
@@ -519,6 +593,31 @@ class _CircleButton extends StatelessWidget {
   const _CircleButton({required this.icon, required this.onTap});
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(onTap: onTap, child: Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white24)), child: Icon(icon, color: Colors.white, size: 22)));
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 40, height: 40,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black.withValues(alpha: 0.4)),
+        child: Icon(icon, color: Colors.white70, size: 20),
+      ),
+    );
+  }
+}
+
+class _SpeakingWave extends StatelessWidget {
+  final Animation<double> anim; final ColorScheme colors;
+  const _SpeakingWave({required this.anim, required this.colors});
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: anim,
+      builder: (context, child) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(5, (i) {
+          final h = 8.0 + 14.0 * ((anim.value + i * 0.2) % 1.0);
+          return Container(width: 4, height: h, margin: const EdgeInsets.symmetric(horizontal: 1.5), decoration: BoxDecoration(color: colors.primary.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(2)));
+        }),
+      ),
+    );
   }
 }
