@@ -69,6 +69,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Map<String, dynamic>? _structuredContent;
   Map<String, dynamic>? _selectedItem;
 
+  // Captura manual con cámara trasera
+  bool _awaitingManualCapture = false;
+  Completer<String?>? _manualCaptureCompleter;
+  Timer? _manualCaptureTimer;
+  int _manualCaptureCountdown = 30;
+
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
   // Para la nueva funcionalidad de galería
@@ -168,12 +174,32 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
           if (source == 'camera') {
-            setState(() => _showCameraPreview = true);
-            _hideCameraTimer?.cancel();
-            _hideCameraTimer = Timer(const Duration(seconds: 10), () { if (mounted) setState(() => _showCameraPreview = false); });
+            // Cambiar a cámara trasera, mostrar preview y esperar captura manual
+            await _switchCamera(CameraLensDirection.back);
+            setState(() {
+              _showCameraPreview = true;
+              _awaitingManualCapture = true;
+              _manualCaptureCountdown = 30;
+            });
+            _manualCaptureCompleter = Completer<String?>();
+            // Countdown de 30s
+            _manualCaptureTimer?.cancel();
+            _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+              if (!mounted) { t.cancel(); return; }
+              setState(() => _manualCaptureCountdown--);
+              if (_manualCaptureCountdown <= 0) {
+                t.cancel();
+                _cancelManualCapture();
+              }
+            });
+            final frame = await _manualCaptureCompleter!.future;
+            // Volver a cámara frontal tras capturar
+            unawaited(_switchCamera(CameraLensDirection.front));
+            if (frame != null) _liveSession.sendFrame(frameBase64: frame);
+          } else {
+            final frame = await _captureFrame(source: source);
+            if (frame != null) _liveSession.sendFrame(frameBase64: frame);
           }
-          final frame = await _captureFrame(source: source);
-          if (frame != null) _liveSession.sendFrame(frameBase64: frame);
         }),
         _liveSession.onCommand.listen((cmd) { if (mounted) _handleHardwareCommand(cmd); }),
         _liveSession.onError.listen((msg) { _showMessage('Asistente: $msg'); }),
@@ -340,6 +366,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (e) { return null; }
   }
 
+  Future<void> _triggerManualCapture() async {
+    if (!_awaitingManualCapture || _manualCaptureCompleter == null) return;
+    _manualCaptureTimer?.cancel();
+    final frame = await _captureFrame(source: 'camera');
+    setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
+    if (!_manualCaptureCompleter!.isCompleted) _manualCaptureCompleter!.complete(frame);
+  }
+
+  void _cancelManualCapture() {
+    _manualCaptureTimer?.cancel();
+    setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
+    if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+      _manualCaptureCompleter!.complete(null);
+    }
+  }
+
   void _stopSpeaking() { _pcmAudio.stop(); _handleAgentSpeechEnded(); }
 
   void _stopSession() {
@@ -399,12 +441,70 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildCameraPreview(Size size) {
-    return IgnorePointer(ignoring: !_showCameraPreview, child: AnimatedOpacity(opacity: _showCameraPreview ? 1.0 : 0.0, duration: const Duration(milliseconds: 600), child: Center(child: AnimatedScale(scale: _showCameraPreview ? 1.0 : 0.85, duration: const Duration(milliseconds: 600), child: Container(
-      width: size.width * 0.92, height: size.height * 0.62,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white24, width: 2), boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 30)]),
-      clipBehavior: Clip.antiAlias,
-      child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized) ? CameraPreview(_cameraCtrl!) : Container(color: Colors.grey[900], child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64)),
-    )))));
+    return IgnorePointer(
+      ignoring: !_showCameraPreview,
+      child: AnimatedOpacity(
+        opacity: _showCameraPreview ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 600),
+        child: Center(
+          child: AnimatedScale(
+            scale: _showCameraPreview ? 1.0 : 0.85,
+            duration: const Duration(milliseconds: 600),
+            child: Stack(
+              alignment: Alignment.bottomCenter,
+              children: [
+                Container(
+                  width: size.width * 0.92, height: size.height * 0.62,
+                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white24, width: 2), boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 30)]),
+                  clipBehavior: Clip.antiAlias,
+                  child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized) ? CameraPreview(_cameraCtrl!) : Container(color: Colors.grey[900], child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64)),
+                ),
+                if (_awaitingManualCapture)
+                  Positioned(
+                    bottom: 20,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('Enfoca y captura · $_manualCaptureCountdown s', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        const SizedBox(height: 10),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            GestureDetector(
+                              onTap: _cancelManualCapture,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24)),
+                                child: const Text('Cancelar', style: TextStyle(color: Colors.white60, fontSize: 14)),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            GestureDetector(
+                              onTap: _triggerManualCapture,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.camera_alt, color: Colors.black, size: 20),
+                                    SizedBox(width: 8),
+                                    Text('Capturar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildTopOverlay() {

@@ -21,7 +21,7 @@ export class VirusTotalService {
   }
 
   private notConfigured(): VirusTotalReport {
-    return { status: 'unknown', positives: 0, total: 0, details: 'Servicio de seguridad no configurado.' };
+    return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'API key de VirusTotal no configurada.' }) };
   }
 
   private buildStats(stats: any, extra: Record<string, any> = {}): VirusTotalReport {
@@ -53,26 +53,21 @@ export class VirusTotalService {
       });
       this.logger.log(`[VT] Scan enviado, analysisId: ${scanRes.data?.data?.id}`);
       const analysisId = scanRes.data.data.id;
-      // Esperar a que el análisis esté listo (hasta 3 intentos con 2s de pausa)
-      for (let i = 0; i < 3; i++) {
+      // Esperar a que el análisis esté listo (hasta 6 intentos con 3s de pausa = 18s máx)
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 3000));
         const reportRes = await axios.get(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, {
           headers: this.baseHeaders,
         });
         const status = reportRes.data.data.attributes.status;
-        this.logger.log(`[VT] Análisis estado: ${status} (intento ${i + 1}/3)`);
+        this.logger.log(`[VT] Análisis estado: ${status} (intento ${i + 1}/6)`);
         if (status === 'completed') {
           const stats = reportRes.data.data.attributes.stats;
           return this.buildStats(stats, { url });
         }
-        if (i < 2) await new Promise(r => setTimeout(r, 2000));
       }
-      // Si no completó, intentar obtener resultados del objeto URL directamente
-      const urlId = Buffer.from(url).toString('base64url');
-      const urlRes = await axios.get(`https://www.virustotal.com/api/v3/urls/${urlId}`, {
-        headers: this.baseHeaders,
-      });
-      const stats = urlRes.data.data.attributes.last_analysis_stats ?? {};
-      return this.buildStats(stats, { url });
+      // Si no completó tras los intentos, devolver resultado parcial indicando que está en proceso
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ pending: true, url, message: 'El análisis está en cola en VirusTotal. Inténtalo de nuevo en unos segundos.' }) };
     } catch (e) {
       this.logger.error(`Error VT URL: ${e.message} | status: ${e.response?.status} | data: ${JSON.stringify(e.response?.data)}`);
       return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo completar el análisis.', url }) };
