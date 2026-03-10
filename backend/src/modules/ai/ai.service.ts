@@ -138,31 +138,50 @@ export class GeminiLiveSession extends EventEmitter {
 
   async connect(): Promise<void> {
     this.logger.log(`Conectando a Live API con modelo: ${this.modelId}`);
+    
+    // En @google/genai >= 1.0.0, speechConfig e inputAudioTranscription 
+    // deben estar en el nivel superior de LiveConnectConfig, no dentro de generationConfig.
     const liveConfig: any = {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
       systemInstruction: { parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.' }] },
       tools: AGENT_TOOLS,
       generationConfig: {
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: this.options.voiceName || 'Aoede',
-            },
+        // Configuraciones de generación generales (temperature, etc.) pueden ir aquí
+      },
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: this.options.voiceName || 'Aoede',
           },
         },
       },
       inputAudioTranscription: { enabled: true },
     };
 
-    this.session = await this.ai.live.connect({
-      model: this.modelId,
-      config: liveConfig,
-      callbacks: {
-        onmessage: (msg: any) => this._handleSdkMessage(msg),
-        onerror: (err: any) => { this.logger.error(`Error de Gemini: ${err.message || err}`); this.emit('error', err); },
-        onclose: () => { this.logger.warn('Sesión cerrada'); this.closed = true; this.emit('close'); }
-      },
-    });
+    try {
+      this.session = await this.ai.live.connect({
+        model: this.modelId,
+        config: liveConfig,
+        callbacks: {
+          onmessage: (msg: any) => this._handleSdkMessage(msg),
+          onerror: (err: any) => { 
+            this.logger.error(`Error de Gemini Live API: ${err.message || JSON.stringify(err)}`); 
+            this.emit('error', err); 
+          },
+          onclose: (event?: any) => { 
+            const reason = event?.reason || 'Cierre normal o desconocido';
+            const code = event?.code || 'No code';
+            this.logger.warn(`Sesión cerrada (Code: ${code}, Reason: ${reason})`); 
+            this.closed = true; 
+            this.emit('close'); 
+          }
+        },
+      });
+      this.logger.log('Conexión con Gemini Live API establecida con éxito');
+    } catch (error) {
+      this.logger.error(`Fallo crítico al conectar con Gemini Live: ${error.message}`);
+      throw error;
+    }
   }
 
   private _handleSdkMessage(msg: any) {
@@ -237,13 +256,32 @@ export class AiService implements OnModuleInit {
     this.logger.log(`AiService inicializado con Vertex AI: ${project}`);
   }
 
-  async createLiveSession(options?: LiveSessionOptions): Promise<GeminiLiveSession> {
+  createLiveSession(options?: LiveSessionOptions): GeminiLiveSession {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     const modelId = this.configService.get<string>('GEMINI_LIVE_MODEL', 'gemini-2.0-flash-exp');
-    const liveAi = apiKey ? new GoogleGenAI({ apiKey }) : this.ai;
-    const session = new GeminiLiveSession(liveAi, modelId, options);
-    await session.connect();
-    return session;
+    
+    let liveAi: GoogleGenAI;
+    if (apiKey) {
+      this.logger.log(`Preparando sesión Live con Google AI Studio (API Key)`);
+      liveAi = new GoogleGenAI({ apiKey });
+    } else {
+      this.logger.log(`Preparando sesión Live con Vertex AI (GCP ADC)`);
+      liveAi = this.ai;
+    }
+
+    // Mapeo de modelos específicos entre AI Studio y Vertex AI (Marzo 2026)
+    let effectiveModelId = modelId;
+    if (!apiKey) {
+      if (modelId === 'gemini-2.5-flash-native-audio-latest') {
+        effectiveModelId = 'gemini-live-2.5-flash-native-audio';
+        this.logger.log(`[Mapeo Vertex] ${modelId} -> ${effectiveModelId}`);
+      } else if (modelId === 'gemini-2.5-flash-preview') {
+        effectiveModelId = 'gemini-live-2.5-flash-preview';
+        this.logger.log(`[Mapeo Vertex] ${modelId} -> ${effectiveModelId}`);
+      }
+    }
+
+    return new GeminiLiveSession(liveAi, effectiveModelId, options);
   }
 
   async generateContent(prompt: string, imageBase64List?: string[], history?: Content[]): Promise<string> {

@@ -54,7 +54,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.data.uid = decoded.uid;
       this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid})`);
 
-      const session = await this.aiService.createLiveSession({
+      const session = this.aiService.createLiveSession({
         systemInstruction:
           'Eres BOB, un agente de seguridad experto en ciberseguridad. Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. Siempre que el usuario mencione problemas con bancos, SMS o enlaces, tu prioridad es evitar que el usuario interactúe con ellos. Si el usuario te menciona una posible amenaza, ofrécele inmediatamente analizarla mediante una imagen (captura de pantalla) para verificar la URL. Usa tus herramientas de búsqueda y análisis para confirmar tus sospechas.' +
           'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. Si el usuario te habla en inglés, responde en inglés; si te habla en español, en español, etc. ' +
@@ -85,8 +85,13 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
       session.on('error', (err) => {
-        this.logger.error(`[Gemini] Error: ${err.message || err}`);
+        this.logger.error(`[Gemini] Error en sesión: ${err.message || err}`);
         if (client.connected) client.emit('error', { message: err.message || 'Error de IA' });
+      });
+
+      session.on('close', () => {
+        this.logger.warn(`[Gemini] Sesión cerrada para cliente ${client.id}`);
+        // No desconectamos el socket automáticamente, permitimos reconexión de sesión si fuera necesario
       });
 
       session.on('tool_call', async (toolCall) => {
@@ -127,6 +132,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         );
         session.sendToolResponse(results);
       });
+
+      // Conectar después de haber configurado todos los listeners
+      await session.connect();
 
     } catch (err) {
       this.logger.error(`Error en handleConnection: ${err instanceof Error ? err.message : err}`);
