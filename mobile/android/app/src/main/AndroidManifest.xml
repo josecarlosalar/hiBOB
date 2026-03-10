@@ -46,13 +46,6 @@
             android:exported="true"
             tools:replace="android:exported,android:foregroundServiceType" />
 
-        <service
-            android:name="com.flutter.device_screenshot.src.MediaProjectionService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection"
-            android:stopWithTask="false" />
-
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
