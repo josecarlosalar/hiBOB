@@ -765,6 +765,10 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
                         Text('ANÁLISIS VIRUSTOTAL', style: TextStyle(color: _threatColor.withValues(alpha: 0.7), fontSize: 10, letterSpacing: 2.5, fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
                         Text(label, style: TextStyle(color: _threatColor, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                        if (widget.vtData?['scanDate'] != null) ...[
+                          const SizedBox(height: 3),
+                          Text(widget.vtData!['scanDate'] as String, style: const TextStyle(color: Colors.white30, fontSize: 10)),
+                        ],
                       ],
                     ),
                   ),
@@ -779,18 +783,29 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
 
   Widget _buildUrlBar(Map<String, dynamic> vt) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.link_rounded, color: Colors.white38, size: 16),
-          const SizedBox(width: 8),
-          Expanded(child: Text(vt['url'] as String? ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: 'monospace'), maxLines: 2, overflow: TextOverflow.ellipsis)),
+          Row(children: [
+            const Icon(Icons.link_rounded, color: Colors.white38, size: 14),
+            const SizedBox(width: 6),
+            const Text('URL ANALIZADA', style: TextStyle(color: Colors.white30, fontSize: 9, letterSpacing: 1.5)),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: const Color(0xFF1565C0).withValues(alpha: 0.4), borderRadius: BorderRadius.circular(4)),
+              child: const Text('VirusTotal API v3', style: TextStyle(color: Color(0xFF64B5F6), fontSize: 8, fontWeight: FontWeight.w600)),
+            ),
+          ]),
+          const SizedBox(height: 5),
+          Text(vt['url'] as String? ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11, fontFamily: 'monospace'), maxLines: 2, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -860,20 +875,34 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
     final positives = (vt['positives'] as num?)?.toInt() ?? 0;
     final total = (vt['total'] as num?)?.toInt() ?? 0;
     final harmless = (vt['harmless'] as num?)?.toInt() ?? 0;
+    final suspicious = (vt['suspicious'] as num?)?.toInt() ?? 0;
+    final malicious = (vt['malicious'] as num?)?.toInt() ?? 0;
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
+      child: Column(
         children: [
-          _StatPill(label: 'MOTORES', value: '$total', icon: Icons.memory_rounded, color: Colors.white54),
-          _StatPill(label: 'AMENAZAS', value: '$positives', icon: Icons.bug_report_rounded, color: _threatColor),
-          _StatPill(label: 'VERIFICADOS', value: '$harmless', icon: Icons.check_circle_outline_rounded, color: const Color(0xFF00E676)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _StatPill(label: 'MOTORES', value: '$total', icon: Icons.memory_rounded, color: Colors.white54),
+              _StatPill(label: 'DETECTADO', value: '$positives', icon: Icons.bug_report_rounded, color: _threatColor),
+              _StatPill(label: 'LIMPIO', value: '$harmless', icon: Icons.check_circle_outline_rounded, color: const Color(0xFF00E676)),
+            ],
+          ),
+          if (suspicious > 0 || malicious > 0) ...[
+            const Divider(color: Colors.white12, height: 16),
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (malicious > 0) _MiniTag(label: '$malicious maliciosos', color: const Color(0xFFFF1744)),
+              if (malicious > 0 && suspicious > 0) const SizedBox(width: 8),
+              if (suspicious > 0) _MiniTag(label: '$suspicious sospechosos', color: const Color(0xFFFFD600)),
+            ]),
+          ],
         ],
       ),
     );
@@ -959,6 +988,21 @@ class _GaugePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GaugePainter old) => old.ratio != ratio || old.color != color;
+}
+
+class _MiniTag extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _MiniTag({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6), border: Border.all(color: color.withValues(alpha: 0.4))),
+      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+    );
+  }
 }
 
 class _StatPill extends StatelessWidget {
