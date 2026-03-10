@@ -324,20 +324,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<String?> _captureFrame({String source = 'camera'}) async {
-    if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
     try {
+      if (source == 'gallery') {
+        final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+        if (image == null) return null;
+        final bytes = await File(image.path).readAsBytes();
+        return base64Encode(bytes);
+      }
+
+      if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
       final file = await _cameraCtrl!.takePicture();
       final bytes = await File(file.path).readAsBytes();
-      final base64 = base64Encode(bytes);
-      
-      // Si el backend pidió un frame, se lo enviamos con un prompt contextual
-      if (source == 'camera') {
-        _liveSession.sendFrame(
-          frameBase64: base64,
-          prompt: 'Esta es la imagen actual de mi cámara. Descríbela de forma natural.',
-        );
-      }
-      return base64;
+      return base64Encode(bytes);
     } catch (e) { return null; }
   }
 
@@ -387,7 +385,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _buildGeminiAura(colors),
           _buildTopOverlay(),
           _buildCameraPreview(size),
-          if (_structuredContent != null) _buildStructuredPanel(size, colors),
+          if (_structuredContent != null) _buildContentOverlay(size, colors),
           _buildBottomControlBar(colors),
         ],
       ),
@@ -448,14 +446,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return const Icon(Icons.keyboard_voice_rounded, color: Colors.white54, size: 24);
   }
 
-  Widget _buildStructuredPanel(Size size, ColorScheme colors) {
+  Widget _buildContentOverlay(Size size, ColorScheme colors) {
+    final type = _structuredContent!['type'] as String? ?? 'detail';
+    if (type == 'vt_report') {
+      return _VtReportOverlay(
+        title: _structuredContent!['title'] as String? ?? '',
+        vtData: _structuredContent!['vtData'] as Map<String, dynamic>?,
+        onClose: () => setState(() { _structuredContent = null; _selectedItem = null; }),
+      );
+    }
+    // Panel genérico para otros tipos de contenido
     final isDetail = _selectedItem != null;
-    final title = isDetail ? _selectedItem!['title'] : _structuredContent!['title'];
+    final title = isDetail ? (_selectedItem!['title'] as String? ?? '') : (_structuredContent!['title'] as String? ?? '');
     final items = _structuredContent!['items'] as List<dynamic>? ?? [];
-    return Center(child: Container(width: size.width * 0.88, height: size.height * 0.55, margin: const EdgeInsets.only(bottom: 60), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white10), boxShadow: [const BoxShadow(color: Colors.black38, blurRadius: 40)]), clipBehavior: Clip.antiAlias, child: Column(children: [
-      _buildPanelHeader(title, isDetail),
-      Expanded(child: isDetail ? _buildDetailView(_selectedItem!, colors) : _buildListView(items, colors)),
-    ])));
+    return Center(child: Container(
+      width: size.width * 0.88, height: size.height * 0.55,
+      margin: const EdgeInsets.only(bottom: 60),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white10), boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 40)]),
+      clipBehavior: Clip.antiAlias,
+      child: Column(children: [
+        _buildPanelHeader(title, isDetail),
+        Expanded(child: isDetail ? _buildDetailView(_selectedItem!, colors) : _buildListView(items, colors)),
+      ]),
+    ));
   }
 
   Widget _buildPanelHeader(String title, bool isDetail) {
@@ -468,9 +481,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Widget _buildListView(List<dynamic> items, ColorScheme colors) {
     return ListView.separated(padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: items.length, separatorBuilder: (_, __) => const SizedBox(height: 12), itemBuilder: (context, index) {
-      final item = items[index];
+      final item = items[index] as Map<String, dynamic>;
       return InkWell(onTap: () => setState(() => _selectedItem = item), borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(16)), child: Row(children: [
-        if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.network(item['imageUrl'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.image, color: Colors.white24))),
+        if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(8), child: item['imageUrl'].toString().startsWith('data:') ? Image.memory(base64Decode(item['imageUrl'].toString().split(',').last), width: 50, height: 50, fit: BoxFit.cover) : Image.network(item['imageUrl'].toString(), width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.image, color: Colors.white24))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), Text(item['description'] ?? '', style: const TextStyle(color: Colors.white60, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis)]))
       ])));
@@ -478,8 +491,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildDetailView(Map<String, dynamic> item, ColorScheme colors) {
+    final imgUrl = item['imageUrl'] as String?;
     return SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(item['imageUrl'], width: double.infinity, height: 150, fit: BoxFit.cover)),
+      if (imgUrl != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: imgUrl.startsWith('data:') ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: 200, fit: BoxFit.contain) : Image.network(imgUrl, width: double.infinity, height: 150, fit: BoxFit.cover)),
       const SizedBox(height: 16),
       Text(item['description'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
     ]));
@@ -603,6 +617,368 @@ class _CircleButton extends StatelessWidget {
     );
   }
 }
+
+// ─── VirusTotal Report Overlay ────────────────────────────────────────────────
+
+class _VtReportOverlay extends StatefulWidget {
+  final String title;
+  final Map<String, dynamic>? vtData;
+  final VoidCallback onClose;
+  const _VtReportOverlay({required this.title, required this.vtData, required this.onClose});
+  @override
+  State<_VtReportOverlay> createState() => _VtReportOverlayState();
+}
+
+class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderStateMixin {
+  late final AnimationController _scanCtrl;
+  late final AnimationController _revealCtrl;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _scanAnim;
+  late final Animation<double> _revealAnim;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..repeat();
+    _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat(reverse: true);
+    _scanAnim = CurvedAnimation(parent: _scanCtrl, curve: Curves.linear);
+    _revealAnim = CurvedAnimation(parent: _revealCtrl, curve: Curves.easeOutCubic);
+    _pulseAnim = CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut);
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) _revealCtrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scanCtrl.dispose();
+    _revealCtrl.dispose();
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  Color get _threatColor {
+    final level = widget.vtData?['threatLevel'] as String? ?? 'clean';
+    return switch (level) {
+      'critical' => const Color(0xFFFF1744),
+      'dangerous' => const Color(0xFFFF6D00),
+      'suspicious' => const Color(0xFFFFD600),
+      _ => const Color(0xFF00E676),
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final vtData = widget.vtData;
+    final isDanger = vtData?['isDanger'] as bool? ?? false;
+    final level = vtData?['threatLevel'] as String? ?? 'clean';
+
+    return FadeTransition(
+      opacity: _revealAnim,
+      child: Center(
+        child: Container(
+          width: size.width * 0.92,
+          margin: const EdgeInsets.only(bottom: 50),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: _threatColor.withValues(alpha: 0.6), width: 1.5),
+            boxShadow: [BoxShadow(color: _threatColor.withValues(alpha: 0.25), blurRadius: 40, spreadRadius: 4)],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildScanHeader(isDanger, level),
+                if (vtData != null) ...[
+                  _buildUrlBar(vtData),
+                  _buildScoreSection(vtData),
+                  _buildEngineBreakdown(vtData),
+                ] else
+                  _buildUnavailable(),
+                _buildCloseButton(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScanHeader(bool isDanger, String level) {
+    final label = switch (level) {
+      'critical' => 'AMENAZA CRÍTICA',
+      'dangerous' => 'AMENAZA DETECTADA',
+      'suspicious' => 'SOSPECHOSO',
+      _ => 'ENLACE SEGURO',
+    };
+    return AnimatedBuilder(
+      animation: _scanAnim,
+      builder: (context, _) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isDanger
+                  ? [_threatColor.withValues(alpha: 0.25), Colors.black.withValues(alpha: 0.6)]
+                  : [const Color(0xFF00E676).withValues(alpha: 0.15), Colors.black.withValues(alpha: 0.6)],
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Línea de escaneo animada
+              if (isDanger)
+                Positioned(
+                  top: _scanAnim.value * 60 - 2,
+                  left: 0, right: 0,
+                  child: Container(height: 2, decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, _threatColor.withValues(alpha: 0.8), Colors.transparent]))),
+                ),
+              Row(
+                children: [
+                  AnimatedBuilder(
+                    animation: _pulseAnim,
+                    builder: (context, _) => Container(
+                      width: 52, height: 52,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _threatColor.withValues(alpha: 0.15 + _pulseAnim.value * 0.1),
+                        border: Border.all(color: _threatColor.withValues(alpha: 0.6 + _pulseAnim.value * 0.4), width: 2),
+                      ),
+                      child: Icon(
+                        isDanger ? Icons.gpp_bad_rounded : Icons.verified_user_rounded,
+                        color: _threatColor, size: 28,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ANÁLISIS VIRUSTOTAL', style: TextStyle(color: _threatColor.withValues(alpha: 0.7), fontSize: 10, letterSpacing: 2.5, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        Text(label, style: TextStyle(color: _threatColor, fontSize: 20, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildUrlBar(Map<String, dynamic> vt) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.link_rounded, color: Colors.white38, size: 16),
+          const SizedBox(width: 8),
+          Expanded(child: Text(vt['url'] as String? ?? '', style: const TextStyle(color: Colors.white60, fontSize: 11, fontFamily: 'monospace'), maxLines: 2, overflow: TextOverflow.ellipsis)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScoreSection(Map<String, dynamic> vt) {
+    final positives = (vt['positives'] as num?)?.toInt() ?? 0;
+    final total = (vt['total'] as num?)?.toInt() ?? 1;
+    final ratio = positives / total;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Row(
+        children: [
+          // Gráfico circular de amenaza
+          _ThreatGauge(ratio: ratio, positives: positives, total: total, color: _threatColor, revealAnim: _revealAnim),
+          const SizedBox(width: 20),
+          // Barras de desglose
+          Expanded(child: _buildBreakdownBars(vt)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBreakdownBars(Map<String, dynamic> vt) {
+    final total = (vt['total'] as num?)?.toDouble() ?? 1.0;
+    final rows = [
+      ('Maliciosos', (vt['malicious'] as num?)?.toInt() ?? 0, const Color(0xFFFF1744)),
+      ('Sospechosos', (vt['suspicious'] as num?)?.toInt() ?? 0, const Color(0xFFFFD600)),
+      ('Sin detectar', (vt['undetected'] as num?)?.toInt() ?? 0, Colors.white24),
+      ('Limpios', (vt['harmless'] as num?)?.toInt() ?? 0, const Color(0xFF00E676)),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows.map((r) {
+        final (label, count, color) = r;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text(label, style: const TextStyle(color: Colors.white54, fontSize: 11))),
+                Text('$count', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+              ]),
+              const SizedBox(height: 4),
+              AnimatedBuilder(
+                animation: _revealAnim,
+                builder: (context, _) => ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: (count / total) * _revealAnim.value,
+                    minHeight: 5,
+                    backgroundColor: Colors.white.withValues(alpha: 0.06),
+                    valueColor: AlwaysStoppedAnimation(color),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildEngineBreakdown(Map<String, dynamic> vt) {
+    final positives = (vt['positives'] as num?)?.toInt() ?? 0;
+    final total = (vt['total'] as num?)?.toInt() ?? 0;
+    final harmless = (vt['harmless'] as num?)?.toInt() ?? 0;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _StatPill(label: 'MOTORES', value: '$total', icon: Icons.memory_rounded, color: Colors.white54),
+          _StatPill(label: 'AMENAZAS', value: '$positives', icon: Icons.bug_report_rounded, color: _threatColor),
+          _StatPill(label: 'VERIFICADOS', value: '$harmless', icon: Icons.check_circle_outline_rounded, color: const Color(0xFF00E676)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnavailable() {
+    return const Padding(
+      padding: EdgeInsets.all(24),
+      child: Column(children: [
+        Icon(Icons.cloud_off_rounded, color: Colors.white38, size: 48),
+        SizedBox(height: 12),
+        Text('Servicio no disponible', style: TextStyle(color: Colors.white54, fontSize: 14)),
+        SizedBox(height: 4),
+        Text('El agente realizará análisis manual', style: TextStyle(color: Colors.white30, fontSize: 12)),
+      ]),
+    );
+  }
+
+  Widget _buildCloseButton() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: GestureDetector(
+        onTap: widget.onClose,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: const Text('Cerrar', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThreatGauge extends StatelessWidget {
+  final double ratio;
+  final int positives;
+  final int total;
+  final Color color;
+  final Animation<double> revealAnim;
+  const _ThreatGauge({required this.ratio, required this.positives, required this.total, required this.color, required this.revealAnim});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 88, height: 88,
+      child: AnimatedBuilder(
+        animation: revealAnim,
+        builder: (context, _) => CustomPaint(
+          painter: _GaugePainter(ratio: ratio * revealAnim.value, color: color),
+          child: Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('$positives', style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.w900)),
+              Text('/ $total', style: const TextStyle(color: Colors.white38, fontSize: 11)),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GaugePainter extends CustomPainter {
+  final double ratio;
+  final Color color;
+  const _GaugePainter({required this.ratio, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = size.width / 2 - 6;
+    final rect = Rect.fromCircle(center: Offset(cx, cy), radius: r);
+    final bg = Paint()..color = Colors.white.withValues(alpha: 0.07)..style = PaintingStyle.stroke..strokeWidth = 7..strokeCap = StrokeCap.round;
+    final fg = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 7..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, -pi / 2, 2 * pi, false, bg);
+    if (ratio > 0) canvas.drawArc(rect, -pi / 2, 2 * pi * ratio, false, fg);
+  }
+
+  @override
+  bool shouldRepaint(_GaugePainter old) => old.ratio != ratio || old.color != color;
+}
+
+class _StatPill extends StatelessWidget {
+  final String label, value;
+  final IconData icon;
+  final Color color;
+  const _StatPill({required this.label, required this.value, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: color, size: 20),
+      const SizedBox(height: 4),
+      Text(value, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w800)),
+      Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 1.2)),
+    ]);
+  }
+}
+
+// ─── Speaking Wave ─────────────────────────────────────────────────────────────
 
 class _SpeakingWave extends StatelessWidget {
   final Animation<double> anim; final ColorScheme colors;
