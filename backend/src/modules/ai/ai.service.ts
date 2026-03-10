@@ -12,6 +12,7 @@ import {
 import { BraveSearchService } from '../tools/brave-search.service';
 import { LocationService } from '../tools/location.service';
 import { VirusTotalService } from '../tools/virustotal.service';
+import { HibpService } from '../tools/hibp.service';
 import { EventEmitter } from 'events';
 
 // ─── Herramientas ────────────────────────────────────────────────────────────
@@ -96,6 +97,59 @@ const OPEN_GALLERY_FUNCTION: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
+const ANALYZE_IP_FUNCTION: FunctionDeclaration = {
+  name: 'analyze_ip',
+  description: 'Analiza la reputación de una dirección IP con VirusTotal. Úsala cuando el usuario mencione una IP sospechosa o quiera saber de dónde viene una llamada/conexión.',
+  parameters: { type: Type.OBJECT, properties: { ip: { type: Type.STRING, description: 'Dirección IP a analizar' } }, required: ['ip'] },
+};
+
+const ANALYZE_DOMAIN_FUNCTION: FunctionDeclaration = {
+  name: 'analyze_domain',
+  description: 'Analiza la reputación y el historial de un dominio con VirusTotal. Úsala cuando el usuario mencione un dominio web sin URL completa.',
+  parameters: { type: Type.OBJECT, properties: { domain: { type: Type.STRING, description: 'Nombre de dominio, ej: example.com' } }, required: ['domain'] },
+};
+
+const ANALYZE_FILE_HASH_FUNCTION: FunctionDeclaration = {
+  name: 'analyze_file_hash',
+  description: 'Consulta VirusTotal usando el hash SHA256 (o MD5/SHA1) de un archivo para saber si es malware conocido.',
+  parameters: { type: Type.OBJECT, properties: { hash: { type: Type.STRING, description: 'Hash SHA256, SHA1 o MD5 del archivo' } }, required: ['hash'] },
+};
+
+const SCAN_FILE_FUNCTION: FunctionDeclaration = {
+  name: 'scan_file',
+  description: 'Sube un archivo (APK, PDF, ejecutable) a VirusTotal para analizarlo en busca de malware. El usuario debe proporcionar el archivo desde la galería.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      fileName: { type: Type.STRING, description: 'Nombre del archivo incluyendo extensión' },
+    },
+    required: ['fileName'],
+  },
+};
+
+const CHECK_PASSWORD_BREACH_FUNCTION: FunctionDeclaration = {
+  name: 'check_password_breach',
+  description: 'Verifica de forma segura si una contraseña ha aparecido en brechas de datos conocidas, usando k-Anonymity (la contraseña nunca sale del dispositivo).',
+  parameters: { type: Type.OBJECT, properties: { password: { type: Type.STRING, description: 'Contraseña a verificar' } }, required: ['password'] },
+};
+
+const GENERATE_PASSWORD_FUNCTION: FunctionDeclaration = {
+  name: 'generate_password',
+  description: 'Genera una contraseña segura y aleatoria con alta entropía.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      length: { type: Type.NUMBER, description: 'Longitud de la contraseña (mínimo 12, recomendado 20)' },
+    },
+  },
+};
+
+const SCAN_QR_CODE_FUNCTION: FunctionDeclaration = {
+  name: 'scan_qr_code',
+  description: 'Activa la cámara para que el usuario apunte a un código QR. Extrae la URL y la analiza automáticamente con VirusTotal para detectar phishing.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
@@ -108,6 +162,13 @@ const AGENT_TOOLS: Tool[] = [
       DISPLAY_CONTENT_FUNCTION,
       CAPTURE_SCREEN_FUNCTION,
       ANALYZE_SECURITY_URL_FUNCTION,
+      ANALYZE_IP_FUNCTION,
+      ANALYZE_DOMAIN_FUNCTION,
+      ANALYZE_FILE_HASH_FUNCTION,
+      SCAN_FILE_FUNCTION,
+      CHECK_PASSWORD_BREACH_FUNCTION,
+      GENERATE_PASSWORD_FUNCTION,
+      SCAN_QR_CODE_FUNCTION,
       SAVE_VISUAL_MEMORY_FUNCTION,
       GET_VISUAL_MEMORY_FUNCTION,
       OPEN_GALLERY_FUNCTION,
@@ -241,6 +302,7 @@ export class AiService implements OnModuleInit {
     private readonly braveSearchService: BraveSearchService,
     private readonly locationService: LocationService,
     private readonly virusTotalService: VirusTotalService,
+    private readonly hibpService: HibpService,
   ) { }
 
   onModuleInit() {
@@ -310,11 +372,43 @@ export class AiService implements OnModuleInit {
       const res = await this.braveSearchService.search(args.query);
       return res.map(r => `[${r.title}](${r.url})`).join('\n');
     }
+
     if (name === 'analyze_security_url') {
       const rep = await this.virusTotalService.analyzeUrl(args.url);
-      // Devolvemos los detalles completos para que el gateway pueda parsearlos
       return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, url: args.url });
     }
+
+    if (name === 'analyze_ip') {
+      const rep = await this.virusTotalService.analyzeIp(args.ip);
+      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, ip: args.ip });
+    }
+
+    if (name === 'analyze_domain') {
+      const rep = await this.virusTotalService.analyzeDomain(args.domain);
+      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, domain: args.domain });
+    }
+
+    if (name === 'analyze_file_hash') {
+      const rep = await this.virusTotalService.analyzeHash(args.hash);
+      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, hash: args.hash });
+    }
+
+    if (name === 'scan_file_data') {
+      const rep = await this.virusTotalService.analyzeFile(args.fileBase64, args.fileName);
+      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, fileName: args.fileName });
+    }
+
+    if (name === 'check_password_breach') {
+      const result = await this.hibpService.checkPassword(args.password);
+      return JSON.stringify(result);
+    }
+
+    if (name === 'generate_password') {
+      const length = Math.max(12, Math.min(args.length ?? 20, 64));
+      const password = this.hibpService.generateSecurePassword(length);
+      return JSON.stringify({ password, length });
+    }
+
     if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
     if (name === 'save_visual_memory') { this.memory.set(args.label.toLowerCase(), `Guardado el ${new Date().toLocaleString()}`); return 'Memoria guardada.'; }
     if (name === 'get_visual_memory') return this.memory.get(args.label.toLowerCase()) || 'No hay recuerdos.';
