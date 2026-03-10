@@ -52,16 +52,40 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       const decoded = await admin.auth().verifyIdToken(token);
       client.data.uid = decoded.uid;
-      this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid})`);
+
+      // Obtener nombre del usuario desde Firebase Auth
+      const userRecord = await admin.auth().getUser(decoded.uid);
+      const displayName = userRecord.displayName || userRecord.email?.split('@')[0] || 'amigo';
+      this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid}, name=${displayName})`);
 
       const session = this.aiService.createLiveSession({
         systemInstruction:
-          'Eres BOB, un agente de seguridad experto en ciberseguridad. Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. Siempre que el usuario mencione problemas con bancos, SMS o enlaces, tu prioridad es evitar que el usuario interactúe con ellos. Si el usuario te menciona una posible amenaza, ofrécele inmediatamente analizarla mediante una imagen (captura de pantalla) para verificar la URL. Usa tus herramientas de búsqueda y análisis para confirmar tus sospechas.' +
-          'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. Si el usuario te habla en inglés, responde en inglés; si te habla en español, en español, etc. ' +
-          'FLUJO DE SEGURIDAD: Cuando el usuario te muestre una captura de pantalla o foto, tu prioridad absoluta es identificar URLs, enlaces o mensajes sospechosos. ' +
-          'Si ves una URL, utiliza SIEMPRE la herramienta analyze_security_url para verificarla con VirusTotal y dar un veredicto técnico. ' +
+          `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${displayName}. ` +
+          `Ya le conoces — eres su guardián digital de confianza. Actúa como alguien que ya tiene relación con él: cuando te salude, respóndele por su nombre de forma natural y directa, sin presentarte ni explicar quién eres a menos que él te lo pregunte expresamente. ` +
+          'Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. ' +
+
+          'HERRAMIENTAS DISPONIBLES Y CUÁNDO USARLAS: ' +
+          '• analyze_security_url → cuando el usuario mencione o muestre una URL completa (https://...). ' +
+          '• analyze_domain → cuando el usuario mencione un dominio sin URL completa (ejemplo: google.com). ' +
+          '• analyze_ip → cuando el usuario mencione una dirección IP numérica. ' +
+          '• analyze_file_hash → cuando el usuario proporcione un hash SHA256/MD5/SHA1 de un archivo. ' +
+          '• scan_file → cuando el usuario quiera analizar un archivo (APK, PDF, ejecutable) que tiene en su dispositivo. ' +
+          '• scan_qr_code → cuando el usuario quiera verificar un código QR antes de escanearlo. ' +
+          '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
+          '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
+          '• capture_device_screen → cuando necesites ver la pantalla del usuario para analizar un enlace, SMS, email o cualquier amenaza visual. ' +
+          '• open_gallery → cuando el usuario quiera analizar una foto o captura que ya tiene guardada. ' +
+          '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. ' +
+
+          'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. ' +
+
+          'FLUJO DE SEGURIDAD: Cuando el usuario mencione un enlace, IP, dominio o archivo sospechoso, ACTÚA inmediatamente con la herramienta correspondiente sin pedir permiso. ' +
+          'Cuando veas una URL en pantalla, analízala con analyze_security_url. ' +
+          'Ante un QR desconocido, usa scan_qr_code antes de que el usuario lo escanee. ' +
+
           'MODO COPILOTO: Si el usuario te pide ayuda con su móvil, guía sus pasos de forma natural. ' +
-          'RESPUESTAS CORTAS: Responde siempre en 1-3 frases máximo. Nunca repitas números ni datos que ya aparecen en pantalla. Tras un análisis VirusTotal, da solo el veredicto final en una frase.',
+
+          'RESPUESTAS CORTAS: 1-3 frases máximo. Los datos numéricos y gráficos ya se muestran en pantalla, no los repitas. Tras cualquier análisis, da solo el veredicto y la recomendación de acción.',
       });
 
       client.data.geminiSession = session;
@@ -136,48 +160,159 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y mostrada en pantalla. Ya puedes verla.' } };
             }
 
-            // Ejecución de herramientas estándar (Búsqueda, VirusTotal, etc.)
-            let result = await this.aiService.executeTool(fc.name, fc.args, client.id);
-
-            // Manejo especial de VirusTotal para Feedback Gráfico
-            if (fc.name === 'analyze_security_url') {
-                try {
-                    const data = JSON.parse(result);
-                    const isDanger = data.positives > 0;
-                    const threatLevel = data.positives === 0 ? 'clean'
-                        : data.positives <= 3 ? 'suspicious'
-                        : data.positives <= 10 ? 'dangerous'
-                        : 'critical';
-                    const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-
-                    client.emit('display_content', {
-                        type: 'vt_report',
-                        title: isDanger ? 'Amenaza Detectada' : 'Enlace Seguro',
-                        vtData: {
-                            url: data.url,
-                            positives: data.positives,
-                            total: data.total,
-                            harmless: data.harmless ?? 0,
-                            suspicious: data.suspicious ?? 0,
-                            malicious: data.malicious ?? 0,
-                            undetected: data.undetected ?? Math.max(0, data.total - data.positives - (data.harmless ?? 0)),
-                            threatLevel,
-                            isDanger,
-                            scanDate,
-                        }
-                    });
-                    // Instrucción concisa al agente para que no se extienda
-                    result = `VT_RESULT:${isDanger ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto mostrado en pantalla. Da un veredicto en 1-2 frases, sin repetir los números.`;
-                } catch (e) {
-                    client.emit('display_content', {
-                        type: 'vt_report',
-                        title: 'Servicio no disponible',
-                        vtData: null,
-                    });
-                }
+            // ── QR Code: activa cámara y luego analiza la URL extraída ──────
+            if (fc.name === 'scan_qr_code') {
+              client.emit('frame_request', { source: 'camera' });
+              const qrFrame = await this._waitForFrame(client, 15000);
+              if (!qrFrame) {
+                return { name: fc.name, id: fc.id, response: { content: 'No se recibió imagen de la cámara.' } };
+              }
+              // Mostramos la imagen capturada con animación de escaneo
+              client.emit('display_content', {
+                type: 'qr_scan',
+                title: 'Escaneando QR...',
+                items: [{ id: 'qr_frame', title: 'Imagen capturada', imageUrl: `data:image/jpeg;base64,${qrFrame}` }],
+              });
+              // Pedimos a Gemini que extraiga la URL del QR
+              const session = client.data.geminiSession as any;
+              session?.sendClientContent([
+                { text: 'Extrae la URL o texto de este código QR. Responde SOLO con la URL, sin nada más.' },
+                { inlineData: { data: qrFrame, mimeType: 'image/jpeg' } },
+              ]);
+              return { name: fc.name, id: fc.id, response: { content: 'QR capturado. Analizando URL extraída con VirusTotal automáticamente.' } };
             }
 
-            // Emisión de comandos al móvil
+            // ── Scan File: solicita archivo desde galería y lo sube a VT ──
+            if (fc.name === 'scan_file') {
+              client.emit('frame_request', { source: 'gallery' });
+              const fileFrame = await this._waitForFrame(client, 30000);
+              if (!fileFrame) {
+                return { name: fc.name, id: fc.id, response: { content: 'No se recibió el archivo.' } };
+              }
+              client.emit('display_content', {
+                type: 'file_scan',
+                title: 'Analizando archivo...',
+                items: [{ id: 'scan_progress', title: fc.args.fileName ?? 'archivo', description: 'Subiendo a VirusTotal...' }],
+              });
+              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName: fc.args.fileName ?? 'archivo' }, client.id);
+              const data = JSON.parse(vtResult);
+              this._emitVtReport(client, data, fc.args.fileName ?? 'archivo');
+              return { name: fc.name, id: fc.id, response: { content: `Análisis completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla.` } };
+            }
+
+            // Ejecución de herramientas estándar
+            let result = await this.aiService.executeTool(fc.name, fc.args, client.id);
+
+            // ── VirusTotal URL ────────────────────────────────────────────
+            if (fc.name === 'analyze_security_url') {
+              try {
+                const data = JSON.parse(result);
+                this._emitVtReport(client, data, data.url);
+                result = `VT_RESULT:${data.positives > 0 ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla. Da veredicto en 1-2 frases.`;
+              } catch {
+                client.emit('display_content', { type: 'vt_report', title: 'Servicio no disponible', vtData: null });
+              }
+            }
+
+            // ── VirusTotal IP ─────────────────────────────────────────────
+            if (fc.name === 'analyze_ip') {
+              try {
+                const data = JSON.parse(result);
+                const isDanger = data.positives > 0;
+                client.emit('display_content', {
+                  type: 'ip_report',
+                  title: isDanger ? 'IP Maliciosa Detectada' : 'IP Sin Amenazas',
+                  ipData: {
+                    ip: data.ip,
+                    country: data.country ?? 'Desconocido',
+                    asOwner: data.asOwner ?? 'Desconocido',
+                    network: data.network ?? '',
+                    reputation: data.reputation ?? 0,
+                    positives: data.positives,
+                    total: data.total,
+                    malicious: data.malicious ?? 0,
+                    suspicious: data.suspicious ?? 0,
+                    harmless: data.harmless ?? 0,
+                    isDanger,
+                    threatLevel: isDanger ? (data.malicious > 5 ? 'critical' : 'dangerous') : 'clean',
+                  },
+                });
+                result = `IP_RESULT:${isDanger ? 'PELIGROSA' : 'LIMPIA'}. Pertenece a ${data.asOwner ?? 'desconocido'} (${data.country ?? '??'}). Veredicto en pantalla.`;
+              } catch { /* usa result tal cual */ }
+            }
+
+            // ── VirusTotal Dominio ────────────────────────────────────────
+            if (fc.name === 'analyze_domain') {
+              try {
+                const data = JSON.parse(result);
+                const isDanger = data.positives > 0;
+                client.emit('display_content', {
+                  type: 'domain_report',
+                  title: isDanger ? 'Dominio Sospechoso' : 'Dominio Limpio',
+                  domainData: {
+                    domain: data.domain,
+                    registrar: data.registrar ?? 'Desconocido',
+                    creationDate: data.creationDate ?? 'Desconocida',
+                    categories: data.categories ?? 'Sin categoría',
+                    reputation: data.reputation ?? 0,
+                    positives: data.positives,
+                    total: data.total,
+                    malicious: data.malicious ?? 0,
+                    suspicious: data.suspicious ?? 0,
+                    isDanger,
+                    threatLevel: isDanger ? (data.malicious > 5 ? 'critical' : 'dangerous') : 'clean',
+                  },
+                });
+                result = `DOMAIN_RESULT:${isDanger ? 'PELIGROSO' : 'LIMPIO'}. Registrado por ${data.registrar ?? '?'} el ${data.creationDate ?? '?'}. Veredicto en pantalla.`;
+              } catch { /* usa result tal cual */ }
+            }
+
+            // ── VirusTotal Hash ───────────────────────────────────────────
+            if (fc.name === 'analyze_file_hash') {
+              try {
+                const data = JSON.parse(result);
+                this._emitVtReport(client, data, data.fileName ?? data.hash?.slice(0, 16) + '...');
+                result = `HASH_RESULT:${data.positives > 0 ? 'MALWARE DETECTADO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla.`;
+              } catch { /* usa result tal cual */ }
+            }
+
+            // ── Contraseña comprometida ───────────────────────────────────
+            if (fc.name === 'check_password_breach') {
+              try {
+                const data = JSON.parse(result);
+                client.emit('display_content', {
+                  type: 'password_check',
+                  title: data.pwned ? 'Contraseña Comprometida' : 'Contraseña Segura',
+                  passwordData: {
+                    pwned: data.pwned,
+                    count: data.count,
+                    threatLevel: data.pwned ? (data.count > 10000 ? 'critical' : 'dangerous') : 'clean',
+                  },
+                });
+                result = data.pwned
+                  ? `BREACH: Esta contraseña apareció ${data.count.toLocaleString()} veces en filtraciones. Resultado en pantalla.`
+                  : `SAFE: Esta contraseña no aparece en filtraciones conocidas. Resultado en pantalla.`;
+              } catch { /* usa result tal cual */ }
+            }
+
+            // ── Generador de contraseña ───────────────────────────────────
+            if (fc.name === 'generate_password') {
+              try {
+                const data = JSON.parse(result);
+                client.emit('display_content', {
+                  type: 'password_generated',
+                  title: 'Contraseña Segura Generada',
+                  passwordData: {
+                    password: data.password,
+                    length: data.length,
+                    entropy: Math.floor(data.length * Math.log2(94)),
+                  },
+                });
+                result = `Contraseña de ${data.length} caracteres generada y mostrada en pantalla. No la compartas por chat o SMS.`;
+              } catch { /* usa result tal cual */ }
+            }
+
+            // ── Comandos al móvil ─────────────────────────────────────────
             if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
@@ -208,6 +343,34 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     session?.close();
     this.locationService.removeClientLocation(client.id);
     this.logger.log(`Cliente desconectado: ${client.id}`);
+  }
+
+  private _emitVtReport(client: Socket, data: any, label: string) {
+    const isDanger = (data.positives ?? 0) > 0;
+    const threatLevel = data.positives === 0 ? 'clean'
+      : data.positives <= 3 ? 'suspicious'
+      : data.positives <= 10 ? 'dangerous'
+      : 'critical';
+    const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    client.emit('display_content', {
+      type: 'vt_report',
+      title: isDanger ? 'Amenaza Detectada' : 'Análisis Limpio',
+      vtData: {
+        url: label,
+        positives: data.positives ?? 0,
+        total: data.total ?? 0,
+        harmless: data.harmless ?? 0,
+        suspicious: data.suspicious ?? 0,
+        malicious: data.malicious ?? 0,
+        undetected: data.undetected ?? 0,
+        fileName: data.fileName,
+        fileType: data.fileType,
+        fileSize: data.fileSize,
+        threatLevel,
+        isDanger,
+        scanDate,
+      },
+    });
   }
 
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<string | null> {
