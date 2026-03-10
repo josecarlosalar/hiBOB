@@ -127,8 +127,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               const source = fc.name === 'capture_device_screen' ? 'screen' : (fc.name === 'open_gallery' ? 'gallery' : 'camera');
               client.emit('frame_request', { source });
               
-              // Para la galería damos más tiempo (20s) porque el usuario debe elegir la foto
-              const timeout = fc.name === 'open_gallery' ? 20000 : 10000;
+              // Para la galería y cámara damos más tiempo porque el usuario interactúa manualmente
+              const timeout = fc.name === 'open_gallery' ? 20000 : fc.name === 'describe_camera_view' ? 40000 : 10000;
               const frame = await this._waitForFrame(client, timeout);
               
               if (!frame) {
@@ -163,7 +163,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // ── QR Code: activa cámara y luego analiza la URL extraída ──────
             if (fc.name === 'scan_qr_code') {
               client.emit('frame_request', { source: 'camera' });
-              const qrFrame = await this._waitForFrame(client, 15000);
+              const qrFrame = await this._waitForFrame(client, 40000);
               if (!qrFrame) {
                 return { name: fc.name, id: fc.id, response: { content: 'No se recibió imagen de la cámara.' } };
               }
@@ -212,6 +212,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   this.logger.warn(`[VT-URL] VirusTotal devolvió error: ${data.error}`);
                   client.emit('display_content', { type: 'vt_report', title: 'Error en análisis', vtData: { url: data.url ?? fc.args.url, positives: 0, total: 0, threatLevel: 'unknown', isDanger: false, scanDate: new Date().toLocaleString('es-ES') } });
                   result = `No se pudo analizar la URL en este momento. ${data.error}`;
+                } else if (data.pending) {
+                  this.logger.warn(`[VT-URL] Análisis pendiente: ${data.message}`);
+                  client.emit('display_content', { type: 'vt_report', title: 'Análisis en Cola', vtData: { url: data.url ?? fc.args.url, positives: 0, total: 0, threatLevel: 'unknown', isDanger: false, scanDate: new Date().toLocaleString('es-ES') } });
+                  result = `El análisis de VirusTotal está en cola (URL nueva). ${data.message} Informa al usuario y recomienda precaución mientras tanto.`;
                 } else {
                   this._emitVtReport(client, data, data.url ?? fc.args.url);
                   result = `VT_RESULT:${data.positives > 0 ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla. Da veredicto en 1-2 frases.`;
