@@ -241,19 +241,23 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const frame = payload?.frameBase64 || payload?.frame;
     if (!session || session.isClosed() || !frame) return;
 
-    // Si hay una solicitud de frame pendiente (tool call), resolver esa promesa
+    // PRIORIDAD CRÍTICA: Si el agente ha pedido una imagen (Tool Call / Aceptar),
+    // esta imagen es la respuesta a esa solicitud.
     if (client.data.pendingFrameResolve) {
-      this.logger.log(`[Visión] Frame recibido para tool call de ${client.id}`);
-      client.data.pendingFrameResolve(frame);
+      this.logger.log(`[Visión] ¡IMAGEN RECIBIDA! Resolviendo espera para el cliente ${client.id}`);
+      const resolve = client.data.pendingFrameResolve;
+      client.data.pendingFrameResolve = null; // Limpiamos inmediatamente para evitar duplicados
+      resolve(frame);
       return;
     }
 
-    // Si no hay solicitud pendiente, es un frame proactivo (app minimizada)
-    this.logger.log(`[Visión] Captura proactiva de ${client.id}`);
+    // Si NO hay una solicitud pendiente, es una captura proactiva (ej. el usuario minimizó la app)
+    // Solo enviamos capturas proactivas si no estamos esperando una respuesta crítica.
+    this.logger.log(`[Visión] Captura proactiva ignorada o procesada como segundo plano para ${client.id}`);
     session.sendClientContent([
-      { text: "El usuario ha minimizado la app. Esta es su pantalla actual." },
+      { text: "El usuario está interactuando con su móvil. Esta es su vista actual de pantalla." },
       { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-    ], false);
+    ], false); // turnComplete = false para no interrumpir el flujo de voz
   }
 
   @SubscribeMessage('update_location')
