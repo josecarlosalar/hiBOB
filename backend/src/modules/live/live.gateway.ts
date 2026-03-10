@@ -205,11 +205,19 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             // ── VirusTotal URL ────────────────────────────────────────────
             if (fc.name === 'analyze_security_url') {
+              this.logger.log(`[VT-URL] Resultado raw: ${result}`);
               try {
                 const data = JSON.parse(result);
-                this._emitVtReport(client, data, data.url);
-                result = `VT_RESULT:${data.positives > 0 ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla. Da veredicto en 1-2 frases.`;
-              } catch {
+                if (data.error) {
+                  this.logger.warn(`[VT-URL] VirusTotal devolvió error: ${data.error}`);
+                  client.emit('display_content', { type: 'vt_report', title: 'Error en análisis', vtData: { url: data.url ?? fc.args.url, positives: 0, total: 0, threatLevel: 'unknown', isDanger: false, scanDate: new Date().toLocaleString('es-ES') } });
+                  result = `No se pudo analizar la URL en este momento. ${data.error}`;
+                } else {
+                  this._emitVtReport(client, data, data.url ?? fc.args.url);
+                  result = `VT_RESULT:${data.positives > 0 ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla. Da veredicto en 1-2 frases.`;
+                }
+              } catch (e) {
+                this.logger.error(`[VT-URL] Error al parsear resultado: ${e.message} | raw: ${result}`);
                 client.emit('display_content', { type: 'vt_report', title: 'Servicio no disponible', vtData: null });
               }
             }

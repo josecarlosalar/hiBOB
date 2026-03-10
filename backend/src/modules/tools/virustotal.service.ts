@@ -51,15 +51,31 @@ export class VirusTotalService {
       const scanRes = await axios.post('https://www.virustotal.com/api/v3/urls', formData, {
         headers: { ...this.baseHeaders, 'Content-Type': 'application/x-www-form-urlencoded' },
       });
+      this.logger.log(`[VT] Scan enviado, analysisId: ${scanRes.data?.data?.id}`);
       const analysisId = scanRes.data.data.id;
-      const reportRes = await axios.get(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, {
+      // Esperar a que el análisis esté listo (hasta 3 intentos con 2s de pausa)
+      for (let i = 0; i < 3; i++) {
+        const reportRes = await axios.get(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, {
+          headers: this.baseHeaders,
+        });
+        const status = reportRes.data.data.attributes.status;
+        this.logger.log(`[VT] Análisis estado: ${status} (intento ${i + 1}/3)`);
+        if (status === 'completed') {
+          const stats = reportRes.data.data.attributes.stats;
+          return this.buildStats(stats, { url });
+        }
+        if (i < 2) await new Promise(r => setTimeout(r, 2000));
+      }
+      // Si no completó, intentar obtener resultados del objeto URL directamente
+      const urlId = Buffer.from(url).toString('base64url');
+      const urlRes = await axios.get(`https://www.virustotal.com/api/v3/urls/${urlId}`, {
         headers: this.baseHeaders,
       });
-      const stats = reportRes.data.data.attributes.stats;
+      const stats = urlRes.data.data.attributes.last_analysis_stats ?? {};
       return this.buildStats(stats, { url });
     } catch (e) {
-      this.logger.error(`Error VT URL: ${e.message}`);
-      return { status: 'unknown', positives: 0, total: 0, details: 'No se pudo completar el análisis.' };
+      this.logger.error(`Error VT URL: ${e.message} | status: ${e.response?.status} | data: ${JSON.stringify(e.response?.data)}`);
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo completar el análisis.', url }) };
     }
   }
 
@@ -82,8 +98,8 @@ export class VirusTotalService {
         reputation: attr.reputation ?? 0,
       });
     } catch (e) {
-      this.logger.error(`Error VT IP: ${e.message}`);
-      return { status: 'unknown', positives: 0, total: 0, details: 'No se pudo analizar la IP.' };
+      this.logger.error(`Error VT IP: ${e.message} | status: ${e.response?.status}`);
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo analizar la IP.', ip }) };
     }
   }
 
@@ -110,8 +126,8 @@ export class VirusTotalService {
         reputation: attr.reputation ?? 0,
       });
     } catch (e) {
-      this.logger.error(`Error VT dominio: ${e.message}`);
-      return { status: 'unknown', positives: 0, total: 0, details: 'No se pudo analizar el dominio.' };
+      this.logger.error(`Error VT dominio: ${e.message} | status: ${e.response?.status}`);
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo analizar el dominio.', domain }) };
     }
   }
 
@@ -134,8 +150,8 @@ export class VirusTotalService {
         tags: (attr.tags ?? []).join(', '),
       });
     } catch (e) {
-      this.logger.error(`Error VT hash: ${e.message}`);
-      return { status: 'unknown', positives: 0, total: 0, details: 'Hash no encontrado en VirusTotal.' };
+      this.logger.error(`Error VT hash: ${e.message} | status: ${e.response?.status}`);
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'Hash no encontrado en VirusTotal.', hash }) };
     }
   }
 
@@ -171,8 +187,8 @@ export class VirusTotalService {
       }
       return { status: 'unknown', positives: 0, total: 0, details: 'Análisis en progreso. Intenta de nuevo en unos segundos.' };
     } catch (e) {
-      this.logger.error(`Error VT archivo: ${e.message}`);
-      return { status: 'unknown', positives: 0, total: 0, details: 'No se pudo analizar el archivo.' };
+      this.logger.error(`Error VT archivo: ${e.message} | status: ${e.response?.status}`);
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo analizar el archivo.', fileName }) };
     }
   }
 }
