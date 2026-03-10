@@ -98,21 +98,87 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            // Manejo de herramientas visuales reactivas
-            if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view') {
-              client.emit('frame_request', { source: fc.name === 'capture_device_screen' ? 'screen' : 'camera' });
-              const frame = await this._waitForFrame(client, 10000);
-              if (!frame) return { name: fc.name, id: fc.id, response: { content: 'ERROR: No se pudo obtener la imagen.' } };
+            // Manejo de herramientas visuales reactivas (BLOQUEANTES)
+            if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view' || fc.name === 'open_gallery') {
+              const source = fc.name === 'capture_device_screen' ? 'screen' : (fc.name === 'open_gallery' ? 'gallery' : 'camera');
+              client.emit('frame_request', { source });
+              
+              // Para la galería damos más tiempo (20s) porque el usuario debe elegir la foto
+              const timeout = fc.name === 'open_gallery' ? 20000 : 10000;
+              const frame = await this._waitForFrame(client, timeout);
+              
+              if (!frame) {
+                return { 
+                  name: fc.name, 
+                  id: fc.id, 
+                  response: { content: `ERROR: No se recibió ninguna imagen de la ${source === 'screen' ? 'pantalla' : (source === 'gallery' ? 'galería' : 'cámara')}.` } 
+                };
+              }
 
+              // MOSTRAR EN PANTALLA (UI)
+              client.emit('display_content', {
+                type: 'detail',
+                title: `Analizando ${source === 'screen' ? 'Captura' : (source === 'gallery' ? 'Galería' : 'Cámara')}`,
+                items: [{
+                    id: 'analysis_frame',
+                    title: 'Imagen Capturada',
+                    description: 'Procesando imagen con IA...',
+                    imageUrl: `data:image/jpeg;base64,${frame}`
+                }]
+              });
+
+              // Enviamos la imagen como contenido del cliente para que Gemini la "vea"
               session.sendClientContent([
-                { text: fc.name === 'capture_device_screen' ? "Aquí tienes la captura de mi pantalla." : "Aquí tienes la imagen de mi cámara." },
+                { text: `Aquí tienes la imagen solicitada (${source}). Analízala cuidadosamente.` },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
               ]);
-              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y procesada.' } };
+              
+              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y mostrada en pantalla. Ya puedes verla.' } };
             }
 
-            // Ejecución de herramientas estándar
-            const result = await this.aiService.executeTool(fc.name, fc.args, client.id);
+            // Ejecución de herramientas estándar (Búsqueda, VirusTotal, etc.)
+            let result = await this.aiService.executeTool(fc.name, fc.args, client.id);
+
+            // Manejo especial de VirusTotal para Feedback Gráfico
+            if (fc.name === 'analyze_security_url') {
+                try {
+                    const data = JSON.parse(result);
+                    const isDanger = data.positives > 0;
+                    
+                    client.emit('display_content', {
+                        type: 'detail',
+                        title: isDanger ? '🚨 Amenaza Detectada' : '✅ Enlace Seguro',
+                        items: [
+                            {
+                                id: 'vt_report',
+                                title: data.url,
+                                description: `Resultado: ${data.positives}/${data.total} motores detectaron amenazas.\n\n` +
+                                             `✅ Limpios: ${data.harmless}\n` +
+                                             `⚠️ Sospechosos: ${data.suspicious}\n` +
+                                             `🚫 Maliciosos: ${data.malicious}`,
+                                imageUrl: isDanger 
+                                    ? 'https://img.icons8.com/color/512/warning-shield.png'
+                                    : 'https://img.icons8.com/color/512/verified-badge.png'
+                            }
+                        ]
+                    });
+                    result = `REPORTE TÉCNICO: La URL ${data.url} ha sido analizada. ${data.positives} de ${data.total} motores la marcan como sospechosa. He mostrado los detalles en pantalla.`;
+                } catch (e) {
+                    // Fallback si VirusTotal falló o devolvió error de API
+                    if (result.includes('no configurado')) {
+                        client.emit('display_content', {
+                            type: 'detail',
+                            title: 'Servicio no disponible',
+                            items: [{
+                                id: 'vt_error',
+                                title: 'VirusTotal Offline',
+                                description: 'No he podido realizar el análisis técnico automático, pero basándome en lo que veo en la captura, te daré mi veredicto manual.',
+                                imageUrl: 'https://img.icons8.com/color/512/broken-robot.png'
+                            }]
+                        });
+                    }
+                }
+            }
 
             // Emisión de comandos al móvil
             if (fc.name === 'toggle_flashlight') {
@@ -121,8 +187,6 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
-            } else if (fc.name === 'open_gallery') {
-              client.emit('command', { action: 'open_gallery' });
             } else if (fc.name === 'display_content') {
               client.emit('display_content', { type: fc.args.type, title: fc.args.title, items: fc.args.items });
             }

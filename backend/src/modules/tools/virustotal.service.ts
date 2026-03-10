@@ -64,7 +64,15 @@ export class VirusTotalService {
         status,
         positives,
         total,
-        details: `Reporte de seguridad: ${positives} de ${total} motores detectaron amenazas.`,
+        details: JSON.stringify({
+            positives,
+            total,
+            malicious: stats.malicious,
+            suspicious: stats.suspicious,
+            harmless: stats.harmless,
+            undetected: stats.undetected,
+            url
+        }),
       };
     } catch (e) {
       this.logger.error(`Error en VirusTotal: ${e.message}`);
