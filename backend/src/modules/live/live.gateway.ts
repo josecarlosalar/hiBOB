@@ -144,39 +144,33 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 try {
                     const data = JSON.parse(result);
                     const isDanger = data.positives > 0;
-                    
+                    const threatLevel = data.positives === 0 ? 'clean'
+                        : data.positives <= 3 ? 'suspicious'
+                        : data.positives <= 10 ? 'dangerous'
+                        : 'critical';
+
                     client.emit('display_content', {
-                        type: 'detail',
-                        title: isDanger ? '🚨 Amenaza Detectada' : '✅ Enlace Seguro',
-                        items: [
-                            {
-                                id: 'vt_report',
-                                title: data.url,
-                                description: `Resultado: ${data.positives}/${data.total} motores detectaron amenazas.\n\n` +
-                                             `✅ Limpios: ${data.harmless}\n` +
-                                             `⚠️ Sospechosos: ${data.suspicious}\n` +
-                                             `🚫 Maliciosos: ${data.malicious}`,
-                                imageUrl: isDanger 
-                                    ? 'https://img.icons8.com/color/512/warning-shield.png'
-                                    : 'https://img.icons8.com/color/512/verified-badge.png'
-                            }
-                        ]
+                        type: 'vt_report',
+                        title: isDanger ? 'Amenaza Detectada' : 'Enlace Seguro',
+                        vtData: {
+                            url: data.url,
+                            positives: data.positives,
+                            total: data.total,
+                            harmless: data.harmless ?? 0,
+                            suspicious: data.suspicious ?? 0,
+                            malicious: data.malicious ?? 0,
+                            undetected: data.undetected ?? (data.total - data.positives),
+                            threatLevel,
+                            isDanger,
+                        }
                     });
                     result = `REPORTE TÉCNICO: La URL ${data.url} ha sido analizada. ${data.positives} de ${data.total} motores la marcan como sospechosa. He mostrado los detalles en pantalla.`;
                 } catch (e) {
-                    // Fallback si VirusTotal falló o devolvió error de API
-                    if (result.includes('no configurado')) {
-                        client.emit('display_content', {
-                            type: 'detail',
-                            title: 'Servicio no disponible',
-                            items: [{
-                                id: 'vt_error',
-                                title: 'VirusTotal Offline',
-                                description: 'No he podido realizar el análisis técnico automático, pero basándome en lo que veo en la captura, te daré mi veredicto manual.',
-                                imageUrl: 'https://img.icons8.com/color/512/broken-robot.png'
-                            }]
-                        });
-                    }
+                    client.emit('display_content', {
+                        type: 'vt_report',
+                        title: 'Servicio no disponible',
+                        vtData: null,
+                    });
                 }
             }
 
