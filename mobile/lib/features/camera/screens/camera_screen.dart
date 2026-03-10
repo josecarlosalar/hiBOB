@@ -13,7 +13,7 @@ import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
-import 'package:device_screenshot/device_screenshot.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/background_service.dart';
@@ -30,17 +30,13 @@ class CameraScreen extends ConsumerStatefulWidget {
 }
 
 class _CameraScreenState extends ConsumerState<CameraScreen>
-    with TickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin {
   
-  bool _isAppInForeground = true;
   static const String _settingsFileName = 'conversation_settings.json';
-  final GlobalKey _screenCaptureKey = GlobalKey();
   
   static const double _defaultVadThresholdDb = -68.0;
   static const double _defaultBargeInThresholdDb = -10.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultMinRecordMs = 450;
-  static const int _defaultMinBargeInMs = 900;
   static const int _defaultAgentSpeechGraceMs = 900;
 
   CameraController? _cameraCtrl;
@@ -50,29 +46,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   final LiveSessionService _liveSession = LiveSessionService();
   final AudioService _audio = AudioService();
   final PcmAudioService _pcmAudio = PcmAudioService();
+  final ImagePicker _picker = ImagePicker();
 
   AssistantState _state = AssistantState.inactive;
   double _vadThresholdDb = _defaultVadThresholdDb;
   double _bargeInThresholdDb = _defaultBargeInThresholdDb;
   int _silenceMs = _defaultSilenceMs;
-  int _minRecordMs = _defaultMinRecordMs;
-  int _minBargeInMs = _defaultMinBargeInMs;
   int _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
   String _conversationProfile = 'Equilibrado';
 
   StreamSubscription<String>? _audioStreamSub;
   StreamSubscription<Amplitude>? _amplitudeSub;
   final List<StreamSubscription<dynamic>> _subs = [];
-  Timer? _locationTimer;
   Timer? _agentSpeechIdleTimer;
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
-  double _lastAmplitudeDb = -160.0;
   bool _showCameraPreview = false;
   Timer? _hideCameraTimer;
   Map<String, dynamic>? _structuredContent;
   Map<String, dynamic>? _selectedItem;
+  
+  // Para la nueva funcionalidad de galería
+  XFile? _selectedGalleryImage;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
@@ -82,7 +78,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initAnimations();
     _initCamera();
     unawaited(_loadConversationSettings());
@@ -94,144 +89,68 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _pulseCtrl.dispose();
     _waveCtrl.dispose();
     _cameraCtrl?.dispose();
     _audio.dispose();
     _pcmAudio.dispose();
-    _locationTimer?.cancel();
     _agentSpeechIdleTimer?.cancel();
     _hideCameraTimer?.cancel();
     for (final sub in _subs) sub.cancel();
     super.dispose();
   }
 
-  bool _isRequestingMediaProjection = false;
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    debugPrint('[CameraScreen] Lifecycle changed to: $state');
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _isAppInForeground = false;
-      // No enviar frame proactivo si estamos en proceso de pedir permiso de MediaProjection
-      if (_isRequestingMediaProjection) {
-        debugPrint('[CameraScreen] Ignorando pausa: solicitando permiso de MediaProjection');
-        return;
-      }
-      if (_state != AssistantState.inactive && _liveSession.state == LiveSessionState.connected) {
-        debugPrint('[CameraScreen] App minimizada. Enviando captura de pantalla proactiva...');
-        _sendProactiveScreenFrame();
-      }
-    } else if (state == AppLifecycleState.resumed) {
-      _isAppInForeground = true;
-      _isRequestingMediaProjection = false;
-    }
-  }
-
-  Future<void> _sendProactiveScreenFrame() async {
-    // Esperamos un instante a que la app termine de ocultarse para ver lo que hay debajo
-    await Future.delayed(const Duration(milliseconds: 500));
-    final frame = await _captureFrame(source: 'screen');
-    if (frame != null && _liveSession.state == LiveSessionState.connected) {
-      _liveSession.sendFrame(frameBase64: frame);
-    }
-  }
-
   void _initAnimations() {
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-
-    _waveCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..repeat(reverse: true);
-
-    _pulseAnim = Tween<double>(begin: 0.88, end: 1.12).animate(
-      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
-    );
-    _waveAnim = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(parent: _waveCtrl, curve: Curves.easeInOut),
-    );
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+    _waveCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.88, end: 1.12).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _waveAnim = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _waveCtrl, curve: Curves.easeInOut));
   }
 
   Future<void> _initCamera() async {
     _availableCameras = await availableCameras();
     if (_availableCameras.isEmpty) return;
-
-    final selectedCamera = _findCameraForLens(_selectedLensDirection) ??
-        _availableCameras.first;
+    final selectedCamera = _findCameraForLens(_selectedLensDirection) ?? _availableCameras.first;
     _selectedLensDirection = selectedCamera.lensDirection;
-
-    _cameraCtrl = CameraController(
-      selectedCamera,
-      ResolutionPreset.low,
-      enableAudio: false,
-    );
+    _cameraCtrl = CameraController(selectedCamera, ResolutionPreset.low, enableAudio: false);
     await _cameraCtrl!.initialize();
     if (mounted) setState(() {});
   }
 
   CameraDescription? _findCameraForLens(CameraLensDirection lensDirection) {
-    for (final camera in _availableCameras) {
-      if (camera.lensDirection == lensDirection) return camera;
-    }
+    for (final camera in _availableCameras) { if (camera.lensDirection == lensDirection) return camera; }
     return null;
   }
-
-  bool get _hasFrontCamera => _findCameraForLens(CameraLensDirection.front) != null;
-  bool get _hasBackCamera => _findCameraForLens(CameraLensDirection.back) != null;
-  bool get _bargeInEnabled => _conversationProfile == 'Interrupcion facil';
 
   Future<void> _switchCamera(CameraLensDirection lensDirection) async {
     if (_selectedLensDirection == lensDirection) return;
     final selectedCamera = _findCameraForLens(lensDirection);
     if (selectedCamera == null) return;
-
-    final previousController = _cameraCtrl;
     final nextController = CameraController(selectedCamera, ResolutionPreset.low, enableAudio: false);
-
     try {
       await nextController.initialize();
+      final old = _cameraCtrl;
       _cameraCtrl = nextController;
       _selectedLensDirection = lensDirection;
       if (mounted) setState(() {});
-      await previousController?.dispose();
-    } catch (_) {
-      await nextController.dispose();
-    }
+      await old?.dispose();
+    } catch (_) { await nextController.dispose(); }
   }
 
   Future<void> _startSession() async {
     try {
-      final hasPerm = await _audio.hasPermission;
-      if (!hasPerm) { _showMessage('Necesito permiso de microfono'); return; }
-
-      final firebase = ref.read(firebaseServiceProvider);
-      final token = await firebase.getIdToken();
+      if (!await _audio.hasPermission) { _showMessage('Necesito permiso de microfono'); return; }
+      final token = await ref.read(firebaseServiceProvider).getIdToken();
       if (token == null) { _showMessage('No se pudo autenticar'); return; }
 
       await _pcmAudio.init();
-
       _subs.addAll([
         _liveSession.onStateChange.listen((s) {
-          debugPrint('[CameraScreen] LiveSessionState: $s');
           if (!mounted) return;
-          if (s == LiveSessionState.connecting) {
-            _setStateIfMounted(AssistantState.connecting);
-          } else if (s == LiveSessionState.connected) {
-            _startStreaming();
-          } else if (s == LiveSessionState.error) {
-            _stopSession();
-            _showMessage('Error de conexión con el servidor');
-          } else if (s == LiveSessionState.disconnected) {
-            if (_state != AssistantState.inactive) {
-              _stopSession();
-              _showMessage('Sesión finalizada por el servidor');
-            }
-          }
+          if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
+          else if (s == LiveSessionState.connected) _startStreaming();
+          else if (s == LiveSessionState.error) { _stopSession(); _showMessage('Error de conexión'); }
+          else if (s == LiveSessionState.disconnected) { if (_state != AssistantState.inactive) _stopSession(); }
         }),
         _liveSession.onAudioChunk.listen((audioChunk) {
           if (!mounted) return;
@@ -244,15 +163,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onFrameRequest.listen((data) async {
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
-
           if (source == 'camera') {
             setState(() => _showCameraPreview = true);
             _hideCameraTimer?.cancel();
-            _hideCameraTimer = Timer(const Duration(seconds: 10), () {
-              if (mounted) setState(() => _showCameraPreview = false);
-            });
+            _hideCameraTimer = Timer(const Duration(seconds: 10), () { if (mounted) setState(() => _showCameraPreview = false); });
           }
-
           final frame = await _captureFrame(source: source);
           if (frame != null) _liveSession.sendFrame(frameBase64: frame);
         }),
@@ -261,15 +176,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ]);
 
       await hiBOBBackgroundService.startForeground();
-      // Pedir MediaProjection DESPUÉS del foreground service pero ANTES del socket
-      await _initMediaProjection();
       await _liveSession.connect(token);
       unawaited(_startLocationUpdates());
-    } catch (e) {
-      debugPrint('[CameraScreen] Error starting session: $e');
-      _stopSession();
-      _showMessage('Error al iniciar: $e');
-    }
+    } catch (e) { _stopSession(); _showMessage('Error al iniciar: $e'); }
   }
 
   void _startStreaming() {
@@ -279,30 +188,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     unawaited(_audio.startStreamingRecording(intervalMs: 200));
     _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
     _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-      if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
-        _liveSession.sendAudioChunk(audioBase64: base64Chunk);
-      }
+      if (_liveSession.state == LiveSessionState.connected) _liveSession.sendAudioChunk(audioBase64: base64Chunk);
     });
   }
 
   void _handleAmplitudeSample(Amplitude amp) {
-    _lastAmplitudeDb = amp.current;
     if (!_agentAudioActive) return;
     final now = DateTime.now();
     final graceElapsed = _agentSpeechStartedAt != null && now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs;
     if (!graceElapsed) return;
-
     if (amp.current >= _bargeInThresholdDb) {
       _bargeInStartedAt ??= now;
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 900 && _bargeInEnabled) _stopSpeaking();
-    } else {
-      _bargeInStartedAt = null;
-    }
-  }
-
-  bool _shouldForwardAudioChunk() {
-    if (!_agentAudioActive) return true;
-    return _conversationProfile == 'Interrupcion facil';
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 900) _stopSpeaking();
+    } else { _bargeInStartedAt = null; }
   }
 
   void _markAgentSpeechActive() {
@@ -331,72 +229,79 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       final enabled = cmd['enabled'] as bool? ?? false;
       try { if (enabled) await TorchLight.enableTorch(); else await TorchLight.disableTorch(); } catch (_) {}
     } else if (action == 'switch_camera') {
-      final direction = cmd['direction'] as String?;
-      await _switchCamera(direction == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
-    } else if (action == 'start_copilot_mode') {
-      unawaited(hiBOBBackgroundService.startForeground());
-      _showMessage('Modo Copiloto activado. Puedes minimizar.');
+      await _switchCamera(cmd['direction'] == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'vibrate') {
       if (await Vibration.hasVibrator()) Vibration.vibrate(duration: 100);
+    } else if (action == 'open_gallery') {
+      _openGalleryPicker();
     }
   }
 
-  Future<void> _initMediaProjection() async {
+  Future<void> _openGalleryPicker() async {
     try {
-      final isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
-      if (isRunning) return;
-      _isRequestingMediaProjection = true;
-      DeviceScreenshot.instance.requestMediaProjection();
-      for (int i = 0; i < 20; i++) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        if (await DeviceScreenshot.instance.checkMediaProjectionService()) break;
+      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      if (image != null) {
+        setState(() => _selectedGalleryImage = image);
+        _showImageReviewDialog();
       }
-      _isRequestingMediaProjection = false;
-    } catch (e) {
-      debugPrint('[CameraScreen] Error iniciando MediaProjection: $e');
-      _isRequestingMediaProjection = false;
-    }
+    } catch (e) { _showMessage('Error abriendo galería: $e'); }
+  }
+
+  void _showImageReviewDialog() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Analizar captura', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.file(File(_selectedGalleryImage!.path), height: 200, fit: BoxFit.contain),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () { setState(() => _selectedGalleryImage = null); Navigator.pop(context); },
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () { _sendImageToAssistant(); Navigator.pop(context); },
+                      style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
+                      child: const Text('Aceptar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendImageToAssistant() async {
+    if (_selectedGalleryImage == null) return;
+    try {
+      final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
+      _liveSession.sendFrame(frameBase64: base64Encode(bytes));
+      _showMessage('Imagen enviada a hiBOB...');
+      setState(() => _selectedGalleryImage = null);
+    } catch (e) { _showMessage('Error enviando imagen: $e'); }
   }
 
   Future<String?> _captureFrame({String source = 'camera'}) async {
-    if (source == 'screen') {
-      try {
-        debugPrint('[CameraScreen] Solicitando captura de pantalla...');
-        final isRunning = await DeviceScreenshot.instance.checkMediaProjectionService();
-        if (!isRunning) {
-          // MediaProjection no está activo — usar cámara como fallback
-          // No intentar iniciar MediaProjection aquí porque el diálogo de permiso
-          // causa que la app pase a background y se desconecte el socket
-          debugPrint('[CameraScreen] MediaProjection no activo, usando cámara como fallback');
-          return _captureCameraFrame();
-        }
-
-        final uri = await DeviceScreenshot.instance.takeScreenshot();
-        if (uri == null) {
-          debugPrint('[CameraScreen] takeScreenshot devolvió null, usando cámara como fallback');
-          return _captureCameraFrame();
-        }
-
-        final path = uri.toFilePath();
-        final file = File(path);
-
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          debugPrint('[CameraScreen] Captura realizada: ${bytes.length} bytes');
-          return base64Encode(bytes);
-        } else {
-          debugPrint('[CameraScreen] El archivo de captura no existe en: $path');
-          return _captureCameraFrame();
-        }
-      } catch (e) {
-        debugPrint('[CameraScreen] Error en captura de pantalla: $e');
-        return _captureCameraFrame();
-      }
-    }
-    return _captureCameraFrame();
-  }
-
-  Future<String?> _captureCameraFrame() async {
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
     try {
       final file = await _cameraCtrl!.takePicture();
@@ -419,14 +324,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _liveSession.disconnect();
     _setStateIfMounted(AssistantState.inactive);
     unawaited(hiBOBBackgroundService.stop());
-    try { DeviceScreenshot.instance.stopMediaProjectionService(); } catch (_) {}
   }
 
   void _setStateIfMounted(AssistantState newState) {
     if (!mounted || _state == newState) return;
-    if (_conversationProfile == 'Interrupcion facil' || newState == AssistantState.inactive) {
-      if (newState == AssistantState.listening) Vibration.vibrate(duration: 50);
-    }
     setState(() => _state = newState);
   }
 
@@ -442,60 +343,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     setState(() {});
   }
 
-  void _openFineTuningPanel() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF111111),
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(builder: (context, modalSetState) {
-          void updateSettings(VoidCallback update) { modalSetState(update); setState(() {}); unawaited(_persistConversationSettings()); }
-          return SafeArea(child: Padding(padding: const EdgeInsets.fromLTRB(20, 20, 20, 28), child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Ajuste fino', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, children: [
-              _CalibrationChip(label: 'Equilibrado', isSelected: _conversationProfile == 'Equilibrado', onTap: () => updateSettings(() => _applyConversationProfile('Equilibrado'))),
-              _CalibrationChip(label: 'Evitar cortes', isSelected: _conversationProfile == 'Evitar cortes', onTap: () => updateSettings(() => _applyConversationProfile('Evitar cortes'))),
-              _CalibrationChip(label: 'Interrupcion facil', isSelected: _conversationProfile == 'Interrupcion facil', onTap: () => updateSettings(() => _applyConversationProfile('Interrupcion facil'))),
-            ]),
-            _SettingSlider(label: 'Sensibilidad', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: -35, divisions: 45, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
-          ])));
-        });
-      },
-    );
-  }
-
-  void _applyConversationProfile(String profile) {
-    _conversationProfile = profile;
-    if (profile == 'Evitar cortes') { _vadThresholdDb = -66; _silenceMs = 800; }
-    else if (profile == 'Interrupcion facil') { _vadThresholdDb = -68; _bargeInThresholdDb = -16; }
-    else { _vadThresholdDb = _defaultVadThresholdDb; _silenceMs = _defaultSilenceMs; }
-  }
-
-  Future<File> _settingsFile() async { final dir = await getApplicationSupportDirectory(); return File('${dir.path}/$_settingsFileName'); }
-  Future<void> _loadConversationSettings() async {
-    try {
-      final file = await _settingsFile();
-      if (!await file.exists()) return;
-      final json = jsonDecode(await file.readAsString());
-      setState(() { _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; _vadThresholdDb = json['vadThresholdDb'] ?? _defaultVadThresholdDb; });
-    } catch (_) {}
-  }
-  Future<void> _persistConversationSettings() async {
-    try { await (await _settingsFile()).writeAsString(jsonEncode({'conversationProfile': _conversationProfile, 'vadThresholdDb': _vadThresholdDb})); } catch (_) {}
-  }
+  Future<void> _signOut() async { _stopSession(); await ref.read(firebaseServiceProvider).signOut(); }
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final size = MediaQuery.of(context).size;
-    return RepaintBoundary(key: _screenCaptureKey, child: Scaffold(backgroundColor: Colors.black, body: Stack(children: [
-      _buildGeminiAura(colors),
-      _buildTopOverlay(),
-      _buildCameraPreview(size),
-      if (_structuredContent != null) _buildStructuredPanel(size, colors),
-      _buildBottomControlBar(colors),
-    ])));
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          _buildGeminiAura(colors),
+          _buildTopOverlay(),
+          _buildCameraPreview(size),
+          if (_structuredContent != null) _buildStructuredPanel(size, colors),
+          _buildBottomControlBar(colors),
+        ],
+      ),
+    );
   }
 
   Widget _buildGeminiAura(ColorScheme colors) {
@@ -506,7 +371,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildCameraPreview(Size size) {
     return IgnorePointer(ignoring: !_showCameraPreview, child: AnimatedOpacity(opacity: _showCameraPreview ? 1.0 : 0.0, duration: const Duration(milliseconds: 600), child: Center(child: AnimatedScale(scale: _showCameraPreview ? 1.0 : 0.85, duration: const Duration(milliseconds: 600), child: Container(
       width: size.width * 0.92, height: size.height * 0.62,
-      decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white24, width: 2), boxShadow: [BoxShadow(color: Colors.black54, blurRadius: 30)]),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white24, width: 2), boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 30)]),
       clipBehavior: Clip.antiAlias,
       child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized) ? CameraPreview(_cameraCtrl!) : Container(color: Colors.grey[900], child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64)),
     )))));
@@ -514,9 +379,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Widget _buildTopOverlay() {
     return Positioned(top: 40, left: 20, right: 20, child: Row(children: [
-      _StatusBadge(state: _state), const Spacer(),
-      _CircleButton(icon: Icons.tune_rounded, onTap: _openFineTuningPanel), const SizedBox(width: 10),
-      _CircleButton(icon: _cameraCtrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off, onTap: _toggleFlashLocally), const SizedBox(width: 10),
+      _StatusBadge(state: _state), 
+      const Spacer(),
+      _CircleButton(icon: Icons.photo_library_rounded, onTap: _openGalleryPicker),
+      const SizedBox(width: 10),
+      _CircleButton(icon: _cameraCtrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off, onTap: _toggleFlashLocally),
+      const SizedBox(width: 10),
       _CircleButton(icon: Icons.logout_rounded, onTap: _signOut),
     ]));
   }
@@ -530,60 +398,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildAiActionButton(ColorScheme colors) {
     final isInactive = _state == AssistantState.inactive;
     final isConnecting = _state == AssistantState.connecting;
-
     return GestureDetector(
       onTap: isInactive ? _startSession : _stopSession,
       child: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: isConnecting
-                ? [Colors.grey[700]!, Colors.grey[600]!]
-                : [colors.primary, colors.secondary],
-          ),
-        ),
-        child: isConnecting
-            ? const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(
-                  strokeWidth: 3,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(
-                isInactive ? Icons.auto_awesome : Icons.stop_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
+        width: 56, height: 56,
+        decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: isConnecting ? [Colors.grey[700]!, Colors.grey[600]!] : [colors.primary, colors.secondary])),
+        child: isConnecting ? const Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)) : Icon(isInactive ? Icons.auto_awesome : Icons.stop_rounded, color: Colors.white, size: 28),
       ),
     );
   }
 
   Widget _buildStateSpecificContent(ColorScheme colors) {
-    if (_state == AssistantState.connecting) {
-      return const Text('Conectando…',
-          style: TextStyle(color: Colors.white54, fontSize: 14));
-    }
-    if (_state == AssistantState.listening) {
-      return ScaleTransition(
-          scale: _pulseAnim,
-          child: const Icon(Icons.hearing_rounded,
-              color: Colors.white70, size: 30));
-    }
-    if (_state == AssistantState.speaking) {
-      return _SpeakingWave(anim: _waveAnim, colors: colors);
-    }
-    return const Icon(Icons.keyboard_voice_rounded,
-        color: Colors.white54, size: 24);
+    if (_state == AssistantState.connecting) return const Text('Conectando…', style: TextStyle(color: Colors.white54, fontSize: 14));
+    if (_state == AssistantState.listening) return ScaleTransition(scale: _pulseAnim, child: const Icon(Icons.hearing_rounded, color: Colors.white70, size: 30));
+    if (_state == AssistantState.speaking) return _SpeakingWave(anim: _waveAnim, colors: colors);
+    return const Icon(Icons.keyboard_voice_rounded, color: Colors.white54, size: 24);
   }
 
   Widget _buildStructuredPanel(Size size, ColorScheme colors) {
     final isDetail = _selectedItem != null;
     final title = isDetail ? _selectedItem!['title'] : _structuredContent!['title'];
     final items = _structuredContent!['items'] as List<dynamic>? ?? [];
-    return Center(child: Container(width: size.width * 0.88, height: size.height * 0.55, margin: const EdgeInsets.only(bottom: 60), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white10), boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 40)]), clipBehavior: Clip.antiAlias, child: Column(children: [
+    return Center(child: Container(width: size.width * 0.88, height: size.height * 0.55, margin: const EdgeInsets.only(bottom: 60), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white10), boxShadow: [const BoxShadow(color: Colors.black38, blurRadius: 40)]), clipBehavior: Clip.antiAlias, child: Column(children: [
       _buildPanelHeader(title, isDetail),
       Expanded(child: isDetail ? _buildDetailView(_selectedItem!, colors) : _buildListView(items, colors)),
     ])));
@@ -613,12 +449,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.network(item['imageUrl'], width: double.infinity, height: 150, fit: BoxFit.cover)),
       const SizedBox(height: 16),
       Text(item['description'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
-      if (item['url'] != null) ...[const SizedBox(height: 24), SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => _launchUrl(item['url']), icon: const Icon(Icons.open_in_new), label: const Text('Ver más')))]
     ]));
   }
 
-  Future<void> _launchUrl(String url) async { _showMessage('Abriendo enlace...'); }
-  Future<void> _signOut() async { _stopSession(); await ref.read(firebaseServiceProvider).signOut(); }
+  void _applyConversationProfile(String profile) {
+    _conversationProfile = profile;
+    if (profile == 'Evitar cortes') { _vadThresholdDb = -66; }
+    else if (profile == 'Interrupcion facil') { _vadThresholdDb = -68; }
+    else { _vadThresholdDb = _defaultVadThresholdDb; }
+  }
+
+  Future<File> _settingsFile() async { final dir = await getApplicationSupportDirectory(); return File('${dir.path}/$_settingsFileName'); }
+  Future<void> _loadConversationSettings() async {
+    try {
+      final file = await _settingsFile();
+      if (!await file.exists()) return;
+      final json = jsonDecode(await file.readAsString());
+      setState(() { _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; _vadThresholdDb = json['vadThresholdDb'] ?? _defaultVadThresholdDb; });
+    } catch (_) {}
+  }
+  Future<void> _persistConversationSettings() async {
+    try { await (await _settingsFile()).writeAsString(jsonEncode({'conversationProfile': _conversationProfile, 'vadThresholdDb': _vadThresholdDb})); } catch (_) {}
+  }
 }
 
 class _SpeakingWave extends StatelessWidget {
@@ -640,43 +492,13 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     IconData icon;
     Color color = Colors.white;
-
     switch (state) {
-      case AssistantState.inactive:
-        icon = Icons.power_settings_new;
-        break;
-      case AssistantState.connecting:
-        icon = Icons.sync;
-        color = Colors.orangeAccent;
-        break;
-      case AssistantState.listening:
-        icon = Icons.hearing;
-        color = Colors.greenAccent;
-        break;
-      case AssistantState.speaking:
-        icon = Icons.graphic_eq;
-        color = Colors.cyanAccent;
-        break;
+      case AssistantState.inactive: icon = Icons.power_settings_new; break;
+      case AssistantState.connecting: icon = Icons.sync; color = Colors.orangeAccent; break;
+      case AssistantState.listening: icon = Icons.hearing; color = Colors.greenAccent; break;
+      case AssistantState.speaking: icon = Icons.graphic_eq; color = Colors.cyanAccent; break;
     }
-
-    return Container(
-      width: 48,
-      height: 48,
-      decoration: BoxDecoration(
-          color: Colors.black45,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white10)),
-      child: Center(child: Icon(icon, color: color, size: 20)),
-    );
-  }
-}
-
-class _CalibrationChip extends StatelessWidget {
-  final String label; final bool isSelected; final VoidCallback onTap;
-  const _CalibrationChip({required this.label, required this.isSelected, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), decoration: BoxDecoration(color: isSelected ? Colors.white12 : Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? Colors.white70 : Colors.white12)), child: Text(label, style: TextStyle(color: isSelected ? Colors.white : Colors.white70, fontSize: 12))));
+    return Container(width: 48, height: 48, decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white10)), child: Center(child: Icon(icon, color: color, size: 20)));
   }
 }
 
@@ -686,17 +508,5 @@ class _CircleButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(onTap: onTap, child: Container(width: 44, height: 44, decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle, border: Border.all(color: Colors.white24)), child: Icon(icon, color: Colors.white, size: 22)));
-  }
-}
-
-class _SettingSlider extends StatelessWidget {
-  final String label, valueLabel; final double value, min, max; final int divisions; final ValueChanged<double> onChanged;
-  const _SettingSlider({required this.label, required this.valueLabel, required this.value, required this.min, required this.max, required this.divisions, required this.onChanged});
-  @override
-  Widget build(BuildContext context) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [Expanded(child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14))), Text(valueLabel, style: const TextStyle(color: Colors.white70, fontSize: 12))]),
-      Slider(value: value.clamp(min, max), min: min, max: max, divisions: divisions, onChanged: onChanged),
-    ]);
   }
 }
