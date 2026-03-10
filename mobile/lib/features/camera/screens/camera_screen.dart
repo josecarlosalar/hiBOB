@@ -7,6 +7,7 @@ import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart' show Amplitude;
@@ -448,13 +449,50 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Widget _buildContentOverlay(Size size, ColorScheme colors) {
     final type = _structuredContent!['type'] as String? ?? 'detail';
+    void onClose() => setState(() { _structuredContent = null; _selectedItem = null; });
+
     if (type == 'vt_report') {
       return _VtReportOverlay(
         title: _structuredContent!['title'] as String? ?? '',
         vtData: _structuredContent!['vtData'] as Map<String, dynamic>?,
-        onClose: () => setState(() { _structuredContent = null; _selectedItem = null; }),
+        onClose: onClose,
       );
     }
+    if (type == 'ip_report') {
+      return _IpReportOverlay(
+        title: _structuredContent!['title'] as String? ?? '',
+        ipData: _structuredContent!['ipData'] as Map<String, dynamic>?,
+        onClose: onClose,
+      );
+    }
+    if (type == 'domain_report') {
+      return _DomainReportOverlay(
+        title: _structuredContent!['title'] as String? ?? '',
+        domainData: _structuredContent!['domainData'] as Map<String, dynamic>?,
+        onClose: onClose,
+      );
+    }
+    if (type == 'password_check') {
+      return _PasswordCheckOverlay(
+        title: _structuredContent!['title'] as String? ?? '',
+        passwordData: _structuredContent!['passwordData'] as Map<String, dynamic>?,
+        onClose: onClose,
+      );
+    }
+    if (type == 'password_generated') {
+      return _PasswordGeneratedOverlay(
+        passwordData: _structuredContent!['passwordData'] as Map<String, dynamic>?,
+        onClose: onClose,
+      );
+    }
+    if (type == 'qr_scan' || type == 'file_scan') {
+      return _ScanProgressOverlay(
+        title: _structuredContent!['title'] as String? ?? '',
+        items: _structuredContent!['items'] as List<dynamic>? ?? [],
+        onClose: onClose,
+      );
+    }
+
     // Panel genérico para otros tipos de contenido
     final isDetail = _selectedItem != null;
     final title = isDetail ? (_selectedItem!['title'] as String? ?? '') : (_structuredContent!['title'] as String? ?? '');
@@ -1039,5 +1077,582 @@ class _SpeakingWave extends StatelessWidget {
         }),
       ),
     );
+  }
+}
+
+// ─── Shared overlay base ────────────────────────────────────────────────────
+
+/// Mixin con animaciones de entrada comunes para todos los overlays de seguridad.
+mixin _SecurityOverlayAnimMixin<T extends StatefulWidget> on State<T>, TickerProviderStateMixin<T> {
+  late final AnimationController revealCtrl;
+  late final AnimationController pulseCtrl;
+  late final Animation<double> revealAnim;
+  late final Animation<double> pulseAnim;
+
+  void initSecurityAnims() {
+    revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..forward();
+    pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
+    revealAnim = CurvedAnimation(parent: revealCtrl, curve: Curves.easeOutCubic);
+    pulseAnim = CurvedAnimation(parent: pulseCtrl, curve: Curves.easeInOut);
+  }
+
+  void disposeSecurityAnims() {
+    revealCtrl.dispose();
+    pulseCtrl.dispose();
+  }
+
+  Color threatColor(String level) => switch (level) {
+    'critical'   => const Color(0xFFFF1744),
+    'dangerous'  => const Color(0xFFFF6D00),
+    'suspicious' => const Color(0xFFFFD600),
+    _            => const Color(0xFF00E676),
+  };
+
+  Widget overlayShell({required Color accent, required List<Widget> children}) {
+    final size = MediaQuery.of(context).size;
+    return FadeTransition(
+      opacity: revealAnim,
+      child: Center(
+        child: Container(
+          width: size.width * 0.92,
+          margin: const EdgeInsets.only(bottom: 50),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: accent.withValues(alpha: 0.6), width: 1.5),
+            boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.2), blurRadius: 40, spreadRadius: 4)],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(mainAxisSize: MainAxisSize.min, children: children),
+        ),
+      ),
+    );
+  }
+
+  Widget overlayHeader({required IconData icon, required String badge, required String title, required Color accent, String? subtitle}) {
+    return AnimatedBuilder(
+      animation: pulseAnim,
+      builder: (_, __) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [accent.withValues(alpha: 0.22), Colors.black.withValues(alpha: 0.5)],
+          ),
+        ),
+        child: Row(children: [
+          Container(
+            width: 52, height: 52,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: accent.withValues(alpha: 0.15 + pulseAnim.value * 0.08),
+              border: Border.all(color: accent.withValues(alpha: 0.5 + pulseAnim.value * 0.4), width: 2),
+            ),
+            child: Icon(icon, color: accent, size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(badge, style: TextStyle(color: accent.withValues(alpha: 0.7), fontSize: 9, letterSpacing: 2.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text(title, style: TextStyle(color: accent, fontSize: 18, fontWeight: FontWeight.w900)),
+            if (subtitle != null) ...[
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 10)),
+            ],
+          ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget overlayInfoRow(IconData icon, String label, String value, {Color? valueColor}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(children: [
+        Icon(icon, color: Colors.white30, size: 14),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 12)),
+        const Spacer(),
+        Flexible(child: Text(value, style: TextStyle(color: valueColor ?? Colors.white70, fontSize: 12, fontWeight: FontWeight.w600), textAlign: TextAlign.end, maxLines: 2, overflow: TextOverflow.ellipsis)),
+      ]),
+    );
+  }
+
+  Widget overlayCloseButton(VoidCallback onClose) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      child: GestureDetector(
+        onTap: onClose,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(14), border: Border.all(color: Colors.white12)),
+          child: const Text('Cerrar', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── IP Report Overlay ──────────────────────────────────────────────────────
+
+class _IpReportOverlay extends StatefulWidget {
+  final String title;
+  final Map<String, dynamic>? ipData;
+  final VoidCallback onClose;
+  const _IpReportOverlay({required this.title, required this.ipData, required this.onClose});
+  @override
+  State<_IpReportOverlay> createState() => _IpReportOverlayState();
+}
+
+class _IpReportOverlayState extends State<_IpReportOverlay>
+    with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
+  @override
+  void initState() { super.initState(); initSecurityAnims(); }
+  @override
+  void dispose() { disposeSecurityAnims(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.ipData;
+    final level = d?['threatLevel'] as String? ?? 'clean';
+    final accent = threatColor(level);
+    final isDanger = d?['isDanger'] as bool? ?? false;
+
+    return overlayShell(accent: accent, children: [
+      overlayHeader(
+        icon: isDanger ? Icons.language_rounded : Icons.public_rounded,
+        badge: 'ANÁLISIS DE IP — VIRUSTOTAL',
+        title: widget.title,
+        accent: accent,
+        subtitle: d?['ip'] as String?,
+      ),
+      if (d != null) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Column(children: [
+            overlayInfoRow(Icons.flag_rounded, 'País', d['country'] as String? ?? '—'),
+            overlayInfoRow(Icons.business_rounded, 'Proveedor', d['asOwner'] as String? ?? '—'),
+            overlayInfoRow(Icons.router_rounded, 'Red', d['network'] as String? ?? '—'),
+            overlayInfoRow(Icons.thumb_down_rounded, 'Reputación VT',
+              '${d['reputation'] ?? 0}',
+              valueColor: (d['reputation'] as num? ?? 0) < 0 ? const Color(0xFFFF6D00) : const Color(0xFF00E676),
+            ),
+            const Divider(color: Colors.white12, height: 20),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              _StatPill(label: 'MOTORES', value: '${d['total'] ?? 0}', icon: Icons.memory_rounded, color: Colors.white54),
+              _StatPill(label: 'DETECTADO', value: '${d['positives'] ?? 0}', icon: Icons.bug_report_rounded, color: accent),
+              _StatPill(label: 'LIMPIO', value: '${d['harmless'] ?? 0}', icon: Icons.check_circle_outline_rounded, color: const Color(0xFF00E676)),
+            ]),
+          ]),
+        ),
+      ] else ...[
+        const Padding(padding: EdgeInsets.all(20), child: Text('No hay datos disponibles', style: TextStyle(color: Colors.white38))),
+      ],
+      overlayCloseButton(widget.onClose),
+    ]);
+  }
+}
+
+// ─── Domain Report Overlay ──────────────────────────────────────────────────
+
+class _DomainReportOverlay extends StatefulWidget {
+  final String title;
+  final Map<String, dynamic>? domainData;
+  final VoidCallback onClose;
+  const _DomainReportOverlay({required this.title, required this.domainData, required this.onClose});
+  @override
+  State<_DomainReportOverlay> createState() => _DomainReportOverlayState();
+}
+
+class _DomainReportOverlayState extends State<_DomainReportOverlay>
+    with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
+  @override
+  void initState() { super.initState(); initSecurityAnims(); }
+  @override
+  void dispose() { disposeSecurityAnims(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.domainData;
+    final level = d?['threatLevel'] as String? ?? 'clean';
+    final accent = threatColor(level);
+    final isDanger = d?['isDanger'] as bool? ?? false;
+
+    return overlayShell(accent: accent, children: [
+      overlayHeader(
+        icon: isDanger ? Icons.domain_disabled_rounded : Icons.domain_rounded,
+        badge: 'ANÁLISIS DE DOMINIO — VIRUSTOTAL',
+        title: widget.title,
+        accent: accent,
+        subtitle: d?['domain'] as String?,
+      ),
+      if (d != null) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Column(children: [
+            overlayInfoRow(Icons.business_center_rounded, 'Registrador', d['registrar'] as String? ?? '—'),
+            overlayInfoRow(Icons.calendar_today_rounded, 'Fecha de registro', d['creationDate'] as String? ?? '—'),
+            overlayInfoRow(Icons.category_rounded, 'Categorías', d['categories'] as String? ?? '—'),
+            overlayInfoRow(Icons.thumb_down_rounded, 'Reputación VT',
+              '${d['reputation'] ?? 0}',
+              valueColor: (d['reputation'] as num? ?? 0) < 0 ? const Color(0xFFFF6D00) : const Color(0xFF00E676),
+            ),
+            const Divider(color: Colors.white12, height: 20),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              _StatPill(label: 'MOTORES', value: '${d['total'] ?? 0}', icon: Icons.memory_rounded, color: Colors.white54),
+              _StatPill(label: 'DETECTADO', value: '${d['positives'] ?? 0}', icon: Icons.bug_report_rounded, color: accent),
+              _StatPill(label: 'LIMPIO', value: '${d['harmless'] ?? 0}', icon: Icons.check_circle_outline_rounded, color: const Color(0xFF00E676)),
+            ]),
+          ]),
+        ),
+      ] else ...[
+        const Padding(padding: EdgeInsets.all(20), child: Text('No hay datos disponibles', style: TextStyle(color: Colors.white38))),
+      ],
+      overlayCloseButton(widget.onClose),
+    ]);
+  }
+}
+
+// ─── Password Check Overlay ─────────────────────────────────────────────────
+
+class _PasswordCheckOverlay extends StatefulWidget {
+  final String title;
+  final Map<String, dynamic>? passwordData;
+  final VoidCallback onClose;
+  const _PasswordCheckOverlay({required this.title, required this.passwordData, required this.onClose});
+  @override
+  State<_PasswordCheckOverlay> createState() => _PasswordCheckOverlayState();
+}
+
+class _PasswordCheckOverlayState extends State<_PasswordCheckOverlay>
+    with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
+  late final AnimationController _counterCtrl;
+
+  String _formatNumber(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write('.');
+      buf.write(s[i]);
+    }
+    return buf.toString();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    initSecurityAnims();
+    _counterCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..forward();
+  }
+
+  @override
+  void dispose() {
+    _counterCtrl.dispose();
+    disposeSecurityAnims();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.passwordData;
+    final level = d?['threatLevel'] as String? ?? 'clean';
+    final accent = threatColor(level);
+    final pwned = d?['pwned'] as bool? ?? false;
+    final count = (d?['count'] as num?)?.toInt() ?? 0;
+
+    return overlayShell(accent: accent, children: [
+      overlayHeader(
+        icon: pwned ? Icons.lock_open_rounded : Icons.lock_rounded,
+        badge: 'VERIFICACIÓN DE BRECHAS — HIBP',
+        title: widget.title,
+        accent: accent,
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Column(children: [
+          // Contador animado de exposiciones
+          if (pwned) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: accent.withValues(alpha: 0.3)),
+              ),
+              child: Column(children: [
+                Text('APARECE EN', style: TextStyle(color: accent.withValues(alpha: 0.7), fontSize: 9, letterSpacing: 2.5, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                AnimatedBuilder(
+                  animation: _counterCtrl,
+                  builder: (_, __) {
+                    final displayed = (count * _counterCtrl.value).round();
+                    return Text(
+                      _formatNumber(displayed),
+                      style: TextStyle(color: accent, fontSize: 36, fontWeight: FontWeight.w900, letterSpacing: -1),
+                    );
+                  },
+                ),
+                Text('filtraciones conocidas', style: TextStyle(color: accent.withValues(alpha: 0.6), fontSize: 12)),
+              ]),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(12)),
+              child: Row(children: [
+                const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFD600), size: 16),
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Cambia esta contraseña inmediatamente y no la uses en ningún otro sitio.', style: TextStyle(color: Colors.white60, fontSize: 11, height: 1.4))),
+              ]),
+            ),
+          ] else ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00E676).withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF00E676).withValues(alpha: 0.3)),
+              ),
+              child: Column(children: [
+                const Icon(Icons.verified_user_rounded, color: Color(0xFF00E676), size: 48),
+                const SizedBox(height: 8),
+                const Text('No encontrada en filtraciones', style: TextStyle(color: Color(0xFF00E676), fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                const Text('Verificado con k-Anonymity (la contraseña nunca salió del dispositivo)', style: TextStyle(color: Colors.white30, fontSize: 10), textAlign: TextAlign.center),
+              ]),
+            ),
+          ],
+        ]),
+      ),
+      overlayCloseButton(widget.onClose),
+    ]);
+  }
+}
+
+// ─── Password Generated Overlay ─────────────────────────────────────────────
+
+class _PasswordGeneratedOverlay extends StatefulWidget {
+  final Map<String, dynamic>? passwordData;
+  final VoidCallback onClose;
+  const _PasswordGeneratedOverlay({required this.passwordData, required this.onClose});
+  @override
+  State<_PasswordGeneratedOverlay> createState() => _PasswordGeneratedOverlayState();
+}
+
+class _PasswordGeneratedOverlayState extends State<_PasswordGeneratedOverlay>
+    with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
+  bool _visible = false;
+  bool _copied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    initSecurityAnims();
+  }
+
+  @override
+  void dispose() { disposeSecurityAnims(); super.dispose(); }
+
+  void _copyToClipboard() {
+    final pwd = widget.passwordData?['password'] as String? ?? '';
+    Clipboard.setData(ClipboardData(text: pwd));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _copied = false); });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final d = widget.passwordData;
+    final password = d?['password'] as String? ?? '';
+    final length = (d?['length'] as num?)?.toInt() ?? 20;
+    final entropy = (d?['entropy'] as num?)?.toInt() ?? 0;
+    const accent = Color(0xFF00E676);
+
+    return overlayShell(accent: accent, children: [
+      overlayHeader(
+        icon: Icons.key_rounded,
+        badge: 'GENERADOR DE CONTRASEÑA SEGURA',
+        title: 'Contraseña Lista',
+        accent: accent,
+        subtitle: '$length caracteres · $entropy bits de entropía',
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+        child: Column(children: [
+          // Campo de contraseña con toggle de visibilidad
+          Container(
+            padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              Expanded(
+                child: _visible
+                    ? SelectableText(password, style: const TextStyle(color: Colors.white, fontSize: 13, fontFamily: 'monospace', letterSpacing: 1.2))
+                    : Text('•' * password.length, style: const TextStyle(color: Colors.white54, fontSize: 10, letterSpacing: 2)),
+              ),
+              IconButton(
+                icon: Icon(_visible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: Colors.white38, size: 20),
+                onPressed: () => setState(() => _visible = !_visible),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 10),
+          // Botón copiar
+          GestureDetector(
+            onTap: _copyToClipboard,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              decoration: BoxDecoration(
+                color: _copied ? accent.withValues(alpha: 0.25) : Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _copied ? accent.withValues(alpha: 0.6) : Colors.white12),
+              ),
+              child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(_copied ? Icons.check_rounded : Icons.copy_rounded, color: _copied ? accent : Colors.white54, size: 18),
+                const SizedBox(width: 8),
+                Text(_copied ? 'Copiada al portapapeles' : 'Copiar contraseña',
+                  style: TextStyle(color: _copied ? accent : Colors.white60, fontWeight: FontWeight.w600, fontSize: 13)),
+              ]),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Barra de entropía
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Text('Fortaleza', style: TextStyle(color: Colors.white38, fontSize: 11)),
+              const Spacer(),
+              Text('$entropy bits', style: const TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.bold)),
+            ]),
+            const SizedBox(height: 6),
+            AnimatedBuilder(
+              animation: revealAnim,
+              builder: (_, __) => ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (entropy / 140).clamp(0.0, 1.0) * revealAnim.value,
+                  minHeight: 6,
+                  backgroundColor: Colors.white.withValues(alpha: 0.07),
+                  valueColor: const AlwaysStoppedAnimation(accent),
+                ),
+              ),
+            ),
+          ]),
+        ]),
+      ),
+      overlayCloseButton(widget.onClose),
+    ]);
+  }
+}
+
+// ─── Scan Progress Overlay (QR / File) ──────────────────────────────────────
+
+class _ScanProgressOverlay extends StatefulWidget {
+  final String title;
+  final List<dynamic> items;
+  final VoidCallback onClose;
+  const _ScanProgressOverlay({required this.title, required this.items, required this.onClose});
+  @override
+  State<_ScanProgressOverlay> createState() => _ScanProgressOverlayState();
+}
+
+class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
+    with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
+  late final AnimationController _scanLineCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    initSecurityAnims();
+    _scanLineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+  }
+
+  @override
+  void dispose() { _scanLineCtrl.dispose(); disposeSecurityAnims(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    const accent = Color(0xFF40C4FF);
+    final item = widget.items.isNotEmpty ? widget.items.first as Map<String, dynamic> : null;
+    final imgUrl = item?['imageUrl'] as String?;
+
+    return overlayShell(accent: accent, children: [
+      overlayHeader(
+        icon: Icons.qr_code_scanner_rounded,
+        badge: 'ESCÁNER DE SEGURIDAD',
+        title: widget.title,
+        accent: accent,
+      ),
+      if (imgUrl != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: imgUrl.startsWith('data:')
+                    ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: 160, fit: BoxFit.cover)
+                    : Image.network(imgUrl, width: double.infinity, height: 160, fit: BoxFit.cover),
+              ),
+              // Línea de escaneo animada sobre la imagen
+              AnimatedBuilder(
+                animation: _scanLineCtrl,
+                builder: (_, __) => Positioned(
+                  top: _scanLineCtrl.value * 140,
+                  left: 0, right: 0,
+                  child: Container(
+                    height: 2,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [Colors.transparent, accent.withValues(alpha: 0.9), Colors.transparent]),
+                    ),
+                  ),
+                ),
+              ),
+              // Esquinas del escáner
+              ..._buildScanCorners(accent),
+            ],
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(children: [
+          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accent))),
+          const SizedBox(width: 12),
+          Text(item?['description'] as String? ?? 'Analizando...', style: const TextStyle(color: Colors.white60, fontSize: 13)),
+        ]),
+      ),
+      overlayCloseButton(widget.onClose),
+    ]);
+  }
+
+  List<Widget> _buildScanCorners(Color accent) {
+    const size = 20.0;
+    const thick = 3.0;
+    Widget corner(AlignmentGeometry align, BorderRadius br) => Positioned.fill(
+      child: Align(alignment: align, child: Container(
+        width: size, height: size,
+        decoration: BoxDecoration(border: Border(
+          top: align == Alignment.topLeft || align == Alignment.topRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          bottom: align == Alignment.bottomLeft || align == Alignment.bottomRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          left: align == Alignment.topLeft || align == Alignment.bottomLeft ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          right: align == Alignment.topRight || align == Alignment.bottomRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
+        ), borderRadius: br),
+      )),
+    );
+    return [
+      corner(Alignment.topLeft, const BorderRadius.only(topLeft: Radius.circular(6))),
+      corner(Alignment.topRight, const BorderRadius.only(topRight: Radius.circular(6))),
+      corner(Alignment.bottomLeft, const BorderRadius.only(bottomLeft: Radius.circular(6))),
+      corner(Alignment.bottomRight, const BorderRadius.only(bottomRight: Radius.circular(6))),
+    ];
   }
 }
