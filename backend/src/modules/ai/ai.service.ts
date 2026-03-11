@@ -375,6 +375,19 @@ export class AiService implements OnModuleInit {
 
     if (name === 'analyze_security_url') {
       const rep = await this.virusTotalService.analyzeUrl(args.url);
+      
+      // Mejora: si VT dice que es seguro o sospechoso (poco claro), cruzamos con búsqueda web
+      // para detectar reportes de phishing muy nuevos.
+      if (rep.status === 'safe' || rep.status === 'suspicious') {
+        const searchRes = await this.braveSearchService.search(`"${args.url}" phishing scam report`);
+        const recentReports = searchRes.map(r => r.content).join('\n').slice(0, 500);
+        if (recentReports.length > 50) {
+          rep.details = JSON.stringify({
+            ...JSON.parse(rep.details),
+            web_search_context: `Búsqueda web encontró información adicional: ${recentReports}`
+          });
+        }
+      }
       return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, url: args.url });
     }
 

@@ -64,6 +64,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           `Ya le conoces — eres su guardián digital de confianza. Actúa como alguien que ya tiene relación con él: cuando te salude, respóndele por su nombre de forma natural y directa, sin presentarte ni explicar quién eres a menos que él te lo pregunte expresamente. ` +
           'Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. ' +
 
+          'REGLAS CRÍTICAS DE SEGURIDAD: ' +
+          '1. LENGUAJE DE RIESGO: Nunca digas que algo es "100% seguro" o "totalmente confiable". Habla siempre en términos de "reputación", "riesgo bajo/alto" o "sin amenazas detectadas por el momento". ' +
+          '2. DISCLAIMER: Tras cada análisis de URL o archivo, incluye siempre un aviso breve: "Recuerda que ninguna herramienta es infalible; mantén la precaución". ' +
+          '3. ALUCINACIONES: Si una herramienta devuelve un error o no tiene datos, admítelo. No inventes resultados. ' +
+
           'HERRAMIENTAS DISPONIBLES Y CUÁNDO USARLAS: ' +
           '• analyze_security_url → cuando el usuario mencione o muestre una URL completa (https://...). ' +
           '• analyze_domain → cuando el usuario mencione un dominio sin URL completa (ejemplo: google.com). ' +
@@ -75,7 +80,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
           '• capture_device_screen → cuando necesites ver la pantalla del usuario para analizar un enlace, SMS, email o cualquier amenaza visual. ' +
           '• open_gallery → cuando el usuario quiera analizar una foto o captura que ya tiene guardada. ' +
-          '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. ' +
+          '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
 
           'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. ' +
 
@@ -198,6 +203,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               const data = JSON.parse(vtResult);
               this._emitVtReport(client, data, fc.args.fileName ?? 'archivo');
               return { name: fc.name, id: fc.id, response: { content: `Análisis completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla.` } };
+            }
+
+            // Feedback visual de "pensando" para herramientas de red
+            if (['analyze_security_url', 'analyze_domain', 'analyze_ip', 'analyze_file_hash', 'web_search', 'check_password_breach'].includes(fc.name)) {
+              client.emit('thinking_state', { tool: fc.name, message: this._getThinkingMessage(fc.name) });
             }
 
             // Ejecución de herramientas estándar
@@ -397,6 +407,18 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         resolve(frame);
       };
     });
+  }
+
+  private _getThinkingMessage(toolName: string): string {
+    const messages = {
+      analyze_security_url: 'Analizando URL con VirusTotal...',
+      analyze_domain: 'Consultando reputación del dominio...',
+      analyze_ip: 'Verificando dirección IP sospechosa...',
+      analyze_file_hash: 'Buscando hash en bases de datos de malware...',
+      web_search: 'Buscando reportes de amenazas recientes en la web...',
+      check_password_breach: 'Verificando filtraciones de seguridad...',
+    };
+    return messages[toolName] || 'Procesando...';
   }
 
   @SubscribeMessage('audio_chunk')
