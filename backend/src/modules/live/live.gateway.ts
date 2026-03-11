@@ -130,6 +130,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       session.on('tool_call', async (toolCall) => {
         this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
+        // pendingClientContent: contenido a enviar DESPUÉS del sendToolResponse (para imágenes de galería)
+        let pendingClientContent: any[] | null = null;
+
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
             // open_gallery: flujo para obtener imagen de la galería
@@ -174,28 +177,27 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 }
               }
 
-              // Mostramos en la UI para feedback visual inmediato con preview
+              // Mostramos en la UI para feedback visual inmediato (sin base64 para evitar destellos)
               client.emit('display_content', {
                 type: 'file_scan',
                 title: 'Analizando Imagen',
                 items: [{
                     id: 'scan_progress',
                     title: 'Imagen de Galería',
-                    description: 'Enviando a motores de análisis...',
-                    imageUrl: `data:image/jpeg;base64,${frame}`
+                    description: 'Enviando imagen a Gemini...',
                 }]
               });
 
-              // Enviamos la imagen como contenido para que Gemini la tenga disponible en el contexto
-              session.sendClientContent([
-                { text: 'Aquí tienes la imagen de la galería que solicitaste. Analízala para responder al usuario.' },
+              // Guardar imagen para enviar DESPUÉS del sendToolResponse (evita race condition)
+              pendingClientContent = [
+                { text: 'Aquí tienes la imagen de la galería que solicitaste. Analízala detalladamente y responde al usuario.' },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-              ]);
+              ];
 
-              return { 
-                name: fc.name, 
-                id: fc.id, 
-                response: { content: 'Análisis de imagen completado con éxito. Ya puedes verla y responder.' } 
+              return {
+                name: fc.name,
+                id: fc.id,
+                response: { content: 'Imagen recibida. Analizando ahora...' }
               };
             }
 
@@ -433,6 +435,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           }),
         );
         session.sendToolResponse(results);
+
+        // Enviar imagen DESPUÉS del tool response para que Gemini la reciba en el turno correcto
+        if (pendingClientContent) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+          session.sendClientContent(pendingClientContent);
+        }
       });
 
       // Conectar después de haber configurado todos los listeners
