@@ -54,14 +54,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const decoded = await admin.auth().verifyIdToken(token);
       client.data.uid = decoded.uid;
 
-      // Obtener nombre del usuario desde Firebase Auth
+      // Obtener nombre del usuario desde Firebase Auth y usar solo el primer nombre
       const userRecord = await admin.auth().getUser(decoded.uid);
-      const displayName = userRecord.displayName || userRecord.email?.split('@')[0] || 'amigo';
-      this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid}, name=${displayName})`);
+      const fullDisplayName = userRecord.displayName || userRecord.email?.split('@')[0] || 'amigo';
+      const firstName = fullDisplayName.trim().split(' ')[0];
+      this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid}, name=${fullDisplayName}, usedName=${firstName})`);
 
       const session = this.aiService.createLiveSession({
         systemInstruction:
-          `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${displayName}. ` +
+          `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${firstName}. ` +
           `Ya le conoces — eres su guardián digital de confianza. Salúdale de forma proactiva, breve y natural por su nombre en cuanto se conecte, como quien retoma una conversación. ` +
           'Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. ' +
 
@@ -79,8 +80,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• scan_qr_code → cuando el usuario quiera verificar un código QR antes de escanearlo. ' +
           '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
           '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
-          '• capture_device_screen → cuando necesites ver la pantalla del usuario para analizar un enlace, SMS, email o cualquier amenaza visual. ' +
-          '• open_gallery → cuando el usuario quiera analizar una foto o captura que ya tiene guardada. ' +
+          '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
+          '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto" o "imagen" que quiere enseñarte. Es la opción preferida para analizar SMS o correos ya recibidos. ' +
           '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
 
           'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. ' +

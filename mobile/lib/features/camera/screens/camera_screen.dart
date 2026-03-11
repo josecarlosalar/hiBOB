@@ -68,6 +68,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _showCameraPreview = false;
   Timer? _hideCameraTimer;
   Map<String, dynamic>? _structuredContent;
+  Map<String, dynamic>? _thinkingData;
   Map<String, dynamic>? _selectedItem;
 
   // Captura manual con cámara trasera
@@ -98,7 +99,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     unawaited(_loadConversationSettings());
     
     _liveSession.onDisplayContent.listen((data) {
-      if (mounted) setState(() => _structuredContent = data);
+      if (mounted) setState(() {
+        _structuredContent = data;
+        _thinkingData = null;
+      });
+    });
+
+    _liveSession.onThinkingState.listen((data) {
+      if (mounted) setState(() => _thinkingData = data);
     });
   }
 
@@ -563,6 +571,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return base64Encode(bytes);
       }
 
+      if (source == 'screen') {
+        // La captura de pantalla en tiempo real requiere una librería adicional (device_screenshot).
+        // Por ahora devolvemos null para evitar abrir la cámara por error si Gemini se equivoca de herramienta.
+        debugPrint('[CameraScreen] Screen capture requested but not implemented. Use open_gallery for screenshots.');
+        return null;
+      }
+
       if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
       final file = await _cameraCtrl!.takePicture();
       final bytes = await File(file.path).readAsBytes();
@@ -640,8 +655,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!_showCameraPreview) _buildGeminiAura(colors),
           // 3. Banner copiloto activo
           _buildCopilotBanner(colors),
-          // 4. Capa de contenido estructurado
-          if (_structuredContent != null) _buildContentOverlay(size, colors),
+          // 4. Capa de contenido estructurado o esqueleto de carga
+          if (_structuredContent != null || _thinkingData != null) _buildContentOverlay(size, colors),
           // 5. Interfaz de controles (siempre arriba)
           _buildTopOverlay(),
           _buildBottomControlBar(colors),
@@ -651,8 +666,47 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildGeminiAura(ColorScheme colors) {
-    Color auraColor = _state == AssistantState.listening ? colors.secondary.withValues(alpha: 0.3) : (_state == AssistantState.speaking ? Colors.cyanAccent.withValues(alpha: 0.38) : colors.primary.withValues(alpha: 0.14));
-    return AnimatedContainer(duration: const Duration(milliseconds: 800), decoration: BoxDecoration(gradient: RadialGradient(colors: [auraColor, Colors.black87, Colors.black], center: Alignment.center, radius: 1.2)));
+    Color auraColor = _state == AssistantState.listening 
+        ? colors.secondary.withValues(alpha: 0.3) 
+        : (_state == AssistantState.speaking 
+            ? Colors.cyanAccent.withValues(alpha: 0.38) 
+            : colors.primary.withValues(alpha: 0.14));
+            
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 800),
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          colors: [auraColor, Colors.black87, Colors.black],
+          center: Alignment.center,
+          radius: 1.2,
+        ),
+      ),
+      child: Center(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 800),
+          opacity: _state == AssistantState.inactive ? 0.25 : 0.6,
+          child: ShaderMask(
+            shaderCallback: (bounds) => LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                colors.primary.withValues(alpha: 0.8),
+                colors.secondary.withValues(alpha: 0.8),
+              ],
+            ).createShader(bounds),
+            child: const Text(
+              'hiBOB',
+              style: TextStyle(
+                fontSize: 68,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+                letterSpacing: 10,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildCopilotBanner(ColorScheme colors) {
@@ -770,32 +824,133 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildBottomControlBar(ColorScheme colors) {
-    return Positioned(left: 20, right: 20, bottom: 34, child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12), decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.75), borderRadius: BorderRadius.circular(40), border: Border.all(color: Colors.white10), boxShadow: [BoxShadow(color: colors.primary.withValues(alpha: 0.15), blurRadius: 24)]), child: Row(children: [
-      _buildAiActionButton(colors), const Spacer(), _buildStateSpecificContent(colors), const SizedBox(width: 12),
-    ])));
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 45,
+      child: Center(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(40),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 400),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(40),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.primary.withValues(alpha: 0.1),
+                    blurRadius: 20,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: IntrinsicWidth(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildAiActionButton(colors),
+                    const SizedBox(width: 16),
+                    _buildStateSpecificContent(colors),
+                    const SizedBox(width: 12),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildAiActionButton(ColorScheme colors) {
     final isInactive = _state == AssistantState.inactive;
     final isConnecting = _state == AssistantState.connecting;
+    
     return GestureDetector(
       onTap: isInactive ? _startSession : _stopSession,
-      child: Container(
-        width: 56, height: 56,
-        decoration: BoxDecoration(shape: BoxShape.circle, gradient: LinearGradient(colors: isConnecting ? [Colors.grey[700]!, Colors.grey[600]!] : [colors.primary, colors.secondary])),
-        child: isConnecting ? const Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white)) : Icon(isInactive ? Icons.auto_awesome : Icons.stop_rounded, color: Colors.white, size: 28),
+      child: ScaleTransition(
+        scale: isInactive ? const AlwaysStoppedAnimation(1.0) : _pulseAnim,
+        child: Container(
+          width: 54, height: 54,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle, 
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: isConnecting 
+                ? [Colors.grey[800]!, Colors.grey[700]!] 
+                : [colors.primary, colors.secondary],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (isConnecting ? Colors.black : colors.primary).withValues(alpha: 0.4),
+                blurRadius: 15,
+                spreadRadius: 2,
+              )
+            ],
+          ),
+          child: Center(
+            child: isConnecting 
+              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70))
+              : Icon(isInactive ? Icons.auto_awesome_rounded : Icons.stop_rounded, color: Colors.white, size: 26),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildStateSpecificContent(ColorScheme colors) {
-    if (_state == AssistantState.connecting) return const Text('Conectando…', style: TextStyle(color: Colors.white54, fontSize: 14));
-    if (_state == AssistantState.listening) return ScaleTransition(scale: _pulseAnim, child: const Icon(Icons.hearing_rounded, color: Colors.white70, size: 30));
-    if (_state == AssistantState.speaking) return _SpeakingWave(anim: _waveAnim, colors: colors);
-    return const Icon(Icons.keyboard_voice_rounded, color: Colors.white54, size: 24);
+    if (_state == AssistantState.inactive) {
+      return const Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('hiBOB AI', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+          Text('Pulsa para activar', style: TextStyle(color: Colors.white38, fontSize: 10)),
+        ],
+      );
+    }
+    
+    if (_state == AssistantState.connecting) {
+      return const Text('Iniciando...', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500));
+    }
+    
+    if (_state == AssistantState.listening) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Escuchando', style: TextStyle(color: Colors.cyanAccent, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          ScaleTransition(scale: _pulseAnim, child: const Icon(Icons.mic_none_rounded, color: Colors.cyanAccent, size: 18)),
+        ],
+      );
+    }
+    
+    if (_state == AssistantState.speaking) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('hiBOB hablando', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 12),
+          _SpeakingWave(anim: _waveAnim, colors: colors),
+        ],
+      );
+    }
+    
+    return const SizedBox.shrink();
   }
 
   Widget _buildContentOverlay(Size size, ColorScheme colors) {
+    if (_structuredContent == null && _thinkingData != null) {
+      return _ThinkingSkeletonOverlay(
+        message: _thinkingData!['message'] as String? ?? 'Consultando base de datos...',
+      );
+    }
+    
     final type = _structuredContent!['type'] as String? ?? 'detail';
     void onClose() => setState(() { _structuredContent = null; _selectedItem = null; });
 
@@ -2252,4 +2407,154 @@ class _CornerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CornerPainter old) => false;
+}
+
+// ─── Thinking Skeleton Overlay ──────────────────────────────────────────────
+
+class _ThinkingSkeletonOverlay extends StatefulWidget {
+  final String message;
+  const _ThinkingSkeletonOverlay({required this.message});
+
+  @override
+  State<_ThinkingSkeletonOverlay> createState() => _ThinkingSkeletonOverlayState();
+}
+
+class _ThinkingSkeletonOverlayState extends State<_ThinkingSkeletonOverlay>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmerCtrl;
+  late final Animation<double> _shimmerAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmerCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..repeat();
+    _shimmerAnim = Tween<double>(begin: -1.0, end: 2.0).animate(CurvedAnimation(parent: _shimmerCtrl, curve: Curves.easeInOutSine));
+  }
+
+  @override
+  void dispose() {
+    _shimmerCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    const accent = Color(0xFF40C4FF);
+
+    return Center(
+      child: Container(
+        width: size.width * 0.92,
+        margin: const EdgeInsets.only(bottom: 50),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
+          boxShadow: [const BoxShadow(color: Colors.black54, blurRadius: 40)],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Header Skeleton
+            _buildHeaderSkeleton(accent),
+            // Body Skeleton
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  _buildShimmerBox(double.infinity, 45, radius: 12), // URL bar
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      _buildShimmerBox(88, 88, radius: 44), // Gauge
+                      const SizedBox(width: 20),
+                      Expanded(
+                        child: Column(
+                          children: List.generate(3, (i) => Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _buildShimmerBox(double.infinity, 8, radius: 4),
+                          )),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _buildShimmerBox(double.infinity, 60, radius: 14), // Engine breakdown
+                  const SizedBox(height: 20),
+                  Text(
+                    widget.message.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: accent.withValues(alpha: 0.7),
+                      fontSize: 10,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSkeleton(Color accent) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+      ),
+      child: Row(
+        children: [
+          _buildShimmerBox(52, 52, radius: 26),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildShimmerBox(120, 8, radius: 4),
+                const SizedBox(height: 8),
+                _buildShimmerBox(180, 16, radius: 4),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShimmerBox(double w, double h, {double radius = 8}) {
+    return AnimatedBuilder(
+      animation: _shimmerAnim,
+      builder: (context, _) {
+        return Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(radius),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              stops: [
+                (_shimmerAnim.value - 0.4).clamp(0.0, 1.0),
+                _shimmerAnim.value.clamp(0.0, 1.0),
+                (_shimmerAnim.value + 0.4).clamp(0.0, 1.0),
+              ],
+              colors: [
+                Colors.white.withValues(alpha: 0.05),
+                Colors.white.withValues(alpha: 0.12),
+                Colors.white.withValues(alpha: 0.05),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
