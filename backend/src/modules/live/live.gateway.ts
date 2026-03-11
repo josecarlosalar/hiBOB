@@ -129,15 +129,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
-            // open_gallery: flujo NO bloqueante para evitar desconexión al entrar en background
+            // open_gallery: flujo para obtener imagen de la galería
             if (fc.name === 'open_gallery') {
-              this.logger.log(`[Herramienta] Esperando imagen de la galería para ${client.id}...`);
-              client.data.awaitingGalleryFrame = true;
+              this.logger.log(`[Herramienta] Solicitando imagen de la galería para ${client.id}...`);
               client.emit('command', { action: 'open_gallery' });
               
               // Esperamos hasta 60s a que el usuario elija la imagen
-              const frame = await this._waitForFrame(client, 60000);
-              client.data.awaitingGalleryFrame = false;
+              const payload = await this._waitForFrame(client, 60000);
+              const frame = payload?.frameBase64 || payload?.frame;
 
               if (!frame) {
                 return { 
@@ -145,6 +144,30 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   id: fc.id, 
                   response: { content: 'El usuario no seleccionó ninguna imagen o tardó demasiado.' } 
                 };
+              }
+
+              // Si viene con fileName es un fichero arbitrario → analizar con VirusTotal
+              if (payload?.fileName) {
+                const fileName = payload.fileName;
+                this.logger.log(`[Fichero] Fichero recibido desde galería: ${fileName}`);
+                client.emit('display_content', {
+                  type: 'file_scan',
+                  title: 'Analizando Fichero',
+                  items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }]
+                });
+
+                const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
+                try {
+                  const data = JSON.parse(vtResult);
+                  this._emitVtReport(client, data, fileName);
+                  return {
+                    name: fc.name,
+                    id: fc.id,
+                    response: { content: `Fichero "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado en pantalla.` }
+                  };
+                } catch {
+                  return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
+                }
               }
 
               // Mostramos en la UI para feedback visual inmediato
@@ -178,7 +201,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('frame_request', { source });
 
               const timeout = fc.name === 'describe_camera_view' ? 40000 : 10000;
-              const frame = await this._waitForFrame(client, timeout);
+              const payload = await this._waitForFrame(client, timeout);
+              const frame = payload?.frameBase64 || payload?.frame;
 
               if (!frame) {
                 return {
@@ -212,7 +236,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // ── QR Code: activa cámara y luego analiza la URL extraída ──────
             if (fc.name === 'scan_qr_code') {
               client.emit('frame_request', { source: 'camera' });
-              const qrFrame = await this._waitForFrame(client, 40000);
+              const payload = await this._waitForFrame(client, 40000);
+              const qrFrame = payload?.frameBase64 || payload?.frame;
               if (!qrFrame) {
                 return { name: fc.name, id: fc.id, response: { content: 'No se recibió imagen de la cámara.' } };
               }
@@ -234,7 +259,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // ── Scan File: solicita archivo desde galería y lo sube a VT ──
             if (fc.name === 'scan_file') {
               client.emit('frame_request', { source: 'gallery' });
-              const fileFrame = await this._waitForFrame(client, 30000);
+              const payload = await this._waitForFrame(client, 30000);
+              const fileFrame = payload?.frameBase64 || payload?.frame;
               if (!fileFrame) {
                 return { name: fc.name, id: fc.id, response: { content: 'No se recibió el archivo.' } };
               }
@@ -439,16 +465,16 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
-  private _waitForFrame(client: Socket, timeoutMs: number): Promise<string | null> {
+  private _waitForFrame(client: Socket, timeoutMs: number): Promise<FramePayload | null> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         client.data.pendingFrameResolve = null;
         resolve(null);
       }, timeoutMs);
-      client.data.pendingFrameResolve = (frame: string | null) => {
+      client.data.pendingFrameResolve = (payload: FramePayload | null) => {
         clearTimeout(timer);
         client.data.pendingFrameResolve = null;
-        resolve(frame);
+        resolve(payload);
       };
     });
   }
@@ -479,68 +505,19 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const frame = payload?.frameBase64 || payload?.frame;
     if (!session || session.isClosed() || !frame) return;
 
-    // PRIORIDAD 1: Frame de galería (flujo no bloqueante open_gallery)
-    if (client.data.awaitingGalleryFrame) {
-      client.data.awaitingGalleryFrame = false;
-
-      // Si viene con fileName es un fichero arbitrario → analizar con VirusTotal
-      if (payload?.fileName) {
-        const fileName = payload.fileName;
-        this.logger.log(`[Fichero] Fichero recibido para escanear: ${fileName}`);
-        client.emit('display_content', {
-          type: 'file_scan',
-          title: 'Analizando fichero...',
-          items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
-        });
-        // Ejecutar en background para no bloquear
-        this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id).then(vtResult => {
-          try {
-            const data = JSON.parse(vtResult);
-            this._emitVtReport(client, data, fileName);
-            session.sendClientContent([{
-              text: `El usuario ha subido el fichero "${fileName}" para análisis de seguridad. VirusTotal ha completado el análisis: ${data.positives}/${data.total} motores detectaron amenaza. Estado: ${data.status}. El resultado ya se muestra en pantalla.`
-            }]);
-          } catch {
-            client.emit('display_content', { type: 'error', title: 'Error', items: [{ id: 'err', title: 'Error analizando fichero', description: vtResult }] });
-          }
-        }).catch(err => {
-          this.logger.error(`Error escaneando fichero: ${err.message}`);
-        });
-        return;
-      }
-
-      // Sin fileName → es una imagen → flujo de visión normal
-      this.logger.log(`[Visión] Frame de galería recibido para cliente ${client.id}`);
-      client.emit('display_content', {
-        type: 'detail',
-        title: 'Analizando Imagen',
-        items: [{
-          id: 'analysis_frame',
-          title: 'Imagen de Galería',
-          description: 'Procesando imagen con IA...',
-          imageUrl: `data:image/jpeg;base64,${frame}`
-        }]
-      });
-      session.sendClientContent([
-        { text: 'El usuario ha seleccionado esta imagen de su galería para que la analices. Analízala cuidadosamente.' },
-        { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-      ]);
-      return;
-    }
-
-    // PRIORIDAD 2: Si el agente ha pedido una imagen (Tool Call / Aceptar),
+    // PRIORIDAD 1: Si el agente ha pedido una imagen (Tool Call / Aceptar),
     // esta imagen es la respuesta a esa solicitud.
     if (client.data.pendingFrameResolve) {
       this.logger.log(`[Visión] ¡IMAGEN RECIBIDA! Resolviendo espera para el cliente ${client.id}`);
       const resolve = client.data.pendingFrameResolve;
-      client.data.pendingFrameResolve = null; // Limpiamos inmediatamente para evitar duplicados
-      resolve(frame);
+      client.data.pendingFrameResolve = null; 
+      resolve(payload);
       return;
     }
 
-    // Si NO hay una solicitud pendiente, es una captura proactiva (ej. el usuario minimizó la app)
+    // PRIORIDAD 2: Captura proactiva (ej. el usuario minimizó la app)
     // Solo enviamos capturas proactivas si no estamos esperando una respuesta crítica.
-    this.logger.log(`[Visión] Captura proactiva ignorada o procesada como segundo plano para ${client.id}`);
+    this.logger.log(`[Visión] Captura proactiva para ${client.id}`);
     session.sendClientContent([
       { text: "El usuario está interactuando con su móvil. Esta es su vista actual de pantalla." },
       { inlineData: { data: frame, mimeType: 'image/jpeg' } }
