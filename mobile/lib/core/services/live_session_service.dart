@@ -50,6 +50,10 @@ class LiveSessionService {
             'Authorization': 'Bearer $idToken',
             'authorization': 'Bearer $idToken',
           })
+          .enableReconnection()
+          .setReconnectionAttempts(5)
+          .setReconnectionDelay(1000)
+          .setReconnectionDelayMax(5000)
           .disableAutoConnect()
           .build(),
     );
@@ -66,6 +70,14 @@ class LiveSessionService {
       ..onConnectError((err) {
         debugPrint('WebSocket connect error: $err');
         _setState(LiveSessionState.error);
+      })
+      ..on('reconnect', (_) {
+        debugPrint('WebSocket reconnected');
+        _setState(LiveSessionState.connected);
+      })
+      ..on('reconnect_attempt', (attempt) {
+        debugPrint('WebSocket reconnect attempt $attempt');
+        _setState(LiveSessionState.connecting);
       })
       ..on('transcription', (data) {
         final text = (data as Map<String, dynamic>)['text'] as String? ?? '';
@@ -119,13 +131,14 @@ class LiveSessionService {
     });
   }
 
-  /// Envía un frame de cámara o pantalla (manual o solicitado).
-  void sendFrame({required String frameBase64, String? prompt}) {
+  /// Envía un frame de cámara, imagen de galería o fichero arbitrario.
+  void sendFrame({required String frameBase64, String? prompt, String? fileName}) {
     if (_state != LiveSessionState.connected) return;
-    debugPrint('[LiveSessionService] Sending frame (${frameBase64.length} chars) with prompt: $prompt');
+    debugPrint('[LiveSessionService] Sending frame (${frameBase64.length} chars) prompt: $prompt fileName: $fileName');
     _socket?.emit('frame', {
       'frameBase64': frameBase64,
       if (prompt != null) 'prompt': prompt,
+      if (fileName != null) 'fileName': fileName,
     });
   }
 
