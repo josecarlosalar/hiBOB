@@ -595,7 +595,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return;
       }
 
-      _liveSession.sendFrame(frameBase64: frameBase64);
+      _liveSession.sendFrame(frameBase64: frameBase64, prompt: 'analyze_image');
 
       // Mostrar overlay de progreso con la ruta local (no base64) para evitar destellos
       setState(() {
@@ -2166,16 +2166,54 @@ class _ScanProgressOverlay extends StatefulWidget {
 class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
     with TickerProviderStateMixin, _SecurityOverlayAnimMixin {
   late final AnimationController _scanLineCtrl;
+  int _stepIndex = 0;
+  Timer? _stepTimer;
+
+  static const _steps = [
+    (Icons.cloud_upload_outlined, 'Enviando a hiBOB'),
+    (Icons.fingerprint, 'Analizando contenido'),
+    (Icons.analytics_outlined, 'Generando diagnóstico'),
+  ];
 
   @override
   void initState() {
     super.initState();
     initSecurityAnims();
     _scanLineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000))..repeat();
+    // Avanzar pasos automáticamente: paso 1 a los 2s, paso 2 a los 5s
+    _stepTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) { setState(() => _stepIndex = 1); }
+      _stepTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) setState(() => _stepIndex = 2);
+      });
+    });
   }
 
   @override
-  void dispose() { _scanLineCtrl.dispose(); disposeSecurityAnims(); super.dispose(); }
+  void didUpdateWidget(_ScanProgressOverlay old) {
+    super.didUpdateWidget(old);
+    // Si el backend actualiza la description, sincronizar el step visualmente
+    final desc = _currentDescription();
+    if (desc.contains('VirusTotal') || desc.contains('Analizando') || desc.contains('Subiendo a')) {
+      if (_stepIndex < 1 && mounted) setState(() => _stepIndex = 1);
+    }
+    if (desc.contains('diagnos') || desc.contains('completado') || desc.contains('Veredicto')) {
+      if (_stepIndex < 2 && mounted) setState(() => _stepIndex = 2);
+    }
+  }
+
+  @override
+  void dispose() {
+    _stepTimer?.cancel();
+    _scanLineCtrl.dispose();
+    disposeSecurityAnims();
+    super.dispose();
+  }
+
+  String _currentDescription() {
+    final item = widget.items.isNotEmpty ? widget.items.first as Map<String, dynamic> : null;
+    return item?['description'] as String? ?? 'Analizando...';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2184,7 +2222,7 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
     final imgUrl = item?['imageUrl'] as String?;
     final localPath = item?['localPath'] as String?;
     final fileName = item?['title'] as String? ?? 'Archivo';
-    final description = item?['description'] as String? ?? 'Analizando...';
+    final description = _currentDescription();
 
     return overlayShell(accent: accent, children: [
       overlayHeader(
@@ -2227,7 +2265,7 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
                     ),
                   ],
                 ),
-              
+
               // Capa de escaneo
               AnimatedBuilder(
                 animation: _scanLineCtrl,
@@ -2243,7 +2281,7 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
                   ),
                 ),
               ),
-              
+
               // Esquinas
               ..._buildScanCorners(accent),
             ],
@@ -2265,19 +2303,24 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(description, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 400),
+                        child: Text(
+                          _steps[_stepIndex].$2,
+                          key: ValueKey(_stepIndex),
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      const Text('Conectando con VirusTotal API...', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                      Text(description, style: const TextStyle(color: Colors.white38, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 20),
-            // Pasos simulados o reales del proceso
-            _buildProcessStep(Icons.cloud_upload_outlined, 'Subida a hiBOB', true),
-            _buildProcessStep(Icons.fingerprint, 'Extracción de firma', description.contains('VT') || description.contains('Análisis')),
-            _buildProcessStep(Icons.analytics_outlined, 'Veredicto motores VT', description.contains('completado')),
+            for (int i = 0; i < _steps.length; i++)
+              _buildProcessStep(_steps[i].$1, _steps[i].$2, i <= _stepIndex, i < _stepIndex),
           ],
         ),
       ),
@@ -2285,17 +2328,20 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
     ]);
   }
 
-  Widget _buildProcessStep(IconData icon, String label, bool active) {
+  Widget _buildProcessStep(IconData icon, String label, bool active, bool done) {
     final color = active ? const Color(0xFF40C4FF) : Colors.white12;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: color),
+          Icon(done ? Icons.check_circle_rounded : icon, size: 16, color: color),
           const SizedBox(width: 12),
           Text(label, style: TextStyle(color: active ? Colors.white70 : Colors.white24, fontSize: 12)),
           const Spacer(),
-          if (active) Icon(Icons.check_circle_rounded, size: 14, color: color),
+          if (active && !done)
+            SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.5, valueColor: AlwaysStoppedAnimation(color.withValues(alpha: 0.7)))),
+          if (done)
+            Icon(Icons.check_circle_rounded, size: 14, color: color),
         ],
       ),
     );
