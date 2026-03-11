@@ -15,6 +15,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/background_service.dart';
@@ -71,19 +72,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   // Captura manual con cámara trasera
   bool _awaitingManualCapture = false;
+  bool _openingGallery = false;
   Completer<String?>? _manualCaptureCompleter;
   Timer? _manualCaptureTimer;
   int _manualCaptureCountdown = 30;
 
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
-  // Para la nueva funcionalidad de galería
+  // Para la nueva funcionalidad de galería / ficheros
   XFile? _selectedGalleryImage;
+  PlatformFile? _selectedFile;
 
   late final AnimationController _pulseCtrl;
   late final AnimationController _waveCtrl;
   late final Animation<double> _pulseAnim;
   late final Animation<double> _waveAnim;
+  late final AnimationController _bannerCtrl;
+  double _micAmplitudeDb = -80.0;
 
   @override
   void initState() {
@@ -101,6 +106,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void dispose() {
     _pulseCtrl.dispose();
     _waveCtrl.dispose();
+    _bannerCtrl.dispose();
     _cameraCtrl?.dispose();
     _audio.dispose();
     _pcmAudio.dispose();
@@ -113,6 +119,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _initAnimations() {
     _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
     _waveCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))..repeat(reverse: true);
+    _bannerCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400));
     _pulseAnim = Tween<double>(begin: 0.88, end: 1.12).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
     _waveAnim = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _waveCtrl, curve: Curves.easeInOut));
   }
@@ -122,7 +129,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_availableCameras.isEmpty) return;
     final selectedCamera = _findCameraForLens(_selectedLensDirection) ?? _availableCameras.first;
     _selectedLensDirection = selectedCamera.lensDirection;
-    _cameraCtrl = CameraController(selectedCamera, ResolutionPreset.low, enableAudio: false);
+    _cameraCtrl = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
     await _cameraCtrl!.initialize();
     if (mounted) setState(() {});
   }
@@ -136,7 +143,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_selectedLensDirection == lensDirection) return;
     final selectedCamera = _findCameraForLens(lensDirection);
     if (selectedCamera == null) return;
-    final nextController = CameraController(selectedCamera, ResolutionPreset.low, enableAudio: false);
+    final nextController = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
     try {
       await nextController.initialize();
       final old = _cameraCtrl;
@@ -177,7 +184,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
           else if (s == LiveSessionState.connected) _startStreaming();
           else if (s == LiveSessionState.error) { _stopSession(); _showMessage('Error de conexión'); }
-          else if (s == LiveSessionState.disconnected) { if (_state != AssistantState.inactive) _stopSession(); }
+          else if (s == LiveSessionState.disconnected) { if (_state != AssistantState.inactive && !_openingGallery) _stopSession(); }
         }),
         _liveSession.onAudioChunk.listen((audioChunk) {
           if (!mounted) return;
@@ -245,6 +252,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _handleAmplitudeSample(Amplitude amp) {
+    if (mounted) setState(() => _micAmplitudeDb = amp.current);
     if (!_agentAudioActive || _isVibrating) return;
     final now = DateTime.now();
     final graceElapsed = _agentSpeechStartedAt != null && now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs;
@@ -296,13 +304,162 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _openGalleryPicker() async {
+    // Mostrar diálogo para elegir entre galería de imágenes o gestor de ficheros
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('¿Qué quieres analizar?', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const Icon(Icons.image_outlined, color: Colors.white70),
+                title: const Text('Imagen de la galería', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('JPG, PNG, etc.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                onTap: () { Navigator.pop(ctx); _pickImageFromGallery(); },
+              ),
+              ListTile(
+                leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
+                title: const Text('Fichero del dispositivo', style: TextStyle(color: Colors.white)),
+                subtitle: const Text('PDF, APK, ZIP, EXE…', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                onTap: () { Navigator.pop(ctx); _pickAnyFile(); },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImageFromGallery() async {
     try {
+      _openingGallery = true;
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      _openingGallery = false;
       if (image != null) {
         setState(() => _selectedGalleryImage = image);
         _showImageReviewDialog();
       }
-    } catch (e) { _showMessage('Error abriendo galería: $e'); }
+    } catch (e) {
+      _openingGallery = false;
+      _showMessage('Error abriendo galería: $e');
+    }
+  }
+
+  Future<void> _pickAnyFile() async {
+    try {
+      _openingGallery = true;
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        withData: false,
+        withReadStream: false,
+      );
+      _openingGallery = false;
+      if (result != null && result.files.isNotEmpty) {
+        setState(() => _selectedFile = result.files.first);
+        _showFileReviewDialog();
+      }
+    } catch (e) {
+      _openingGallery = false;
+      _showMessage('Error abriendo gestor de ficheros: $e');
+    }
+  }
+
+  void _showFileReviewDialog() {
+    final file = _selectedFile!;
+    final sizeKb = file.size / 1024;
+    final sizeText = sizeKb >= 1024
+        ? '${(sizeKb / 1024).toStringAsFixed(1)} MB'
+        : '${sizeKb.toStringAsFixed(0)} KB';
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF111111),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Analizar fichero', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Icon(Icons.insert_drive_file_outlined, color: Colors.white54, size: 40),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(file.name, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600), maxLines: 2, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 4),
+                        Text(sizeText, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () { setState(() => _selectedFile = null); Navigator.pop(ctx); },
+                      style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () { _sendFileToAssistant(); Navigator.pop(ctx); },
+                      style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary),
+                      child: const Text('Analizar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _sendFileToAssistant() async {
+    if (_selectedFile == null) return;
+    try {
+      final file = _selectedFile!;
+      if (file.path == null) { _showMessage('No se puede leer el fichero.'); return; }
+
+      final bytes = await File(file.path!).readAsBytes();
+      if (bytes.length > 32 * 1024 * 1024) {
+        _showMessage('El fichero supera el límite de 32 MB de VirusTotal.');
+        setState(() => _selectedFile = null);
+        return;
+      }
+      final fileBase64 = base64Encode(bytes);
+
+      int retries = 12;
+      while (_liveSession.state != LiveSessionState.connected && retries > 0) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        retries--;
+      }
+      if (_liveSession.state != LiveSessionState.connected) {
+        _showMessage('Sin conexión con hiBOB. Intenta de nuevo.');
+        return;
+      }
+
+      _liveSession.sendFrame(frameBase64: fileBase64, fileName: file.name);
+      _showMessage('Fichero enviado a hiBOB para análisis...');
+      setState(() => _selectedFile = null);
+    } catch (e) { _showMessage('Error enviando fichero: $e'); }
   }
 
   void _showImageReviewDialog() {
@@ -353,10 +510,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_selectedGalleryImage == null) return;
     try {
       final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
-      _liveSession.sendFrame(
-        frameBase64: base64Encode(bytes),
-        prompt: 'El usuario ha seleccionado esta captura de su galería para que la analices. Busca URLs sospechosas, estafas o contenido importante.',
-      );
+      final frameBase64 = base64Encode(bytes);
+
+      // Esperar hasta 6s a que el socket esté conectado (reconexión automática)
+      int retries = 12;
+      while (_liveSession.state != LiveSessionState.connected && retries > 0) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        retries--;
+      }
+      if (_liveSession.state != LiveSessionState.connected) {
+        _showMessage('Sin conexión con hiBOB. Intenta de nuevo.');
+        return;
+      }
+
+      _liveSession.sendFrame(frameBase64: frameBase64);
       _showMessage('Imagen enviada a hiBOB...');
       setState(() => _selectedGalleryImage = null);
     } catch (e) { _showMessage('Error enviando imagen: $e'); }
@@ -413,6 +580,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _setStateIfMounted(AssistantState newState) {
     if (!mounted || _state == newState) return;
     setState(() => _state = newState);
+    if (newState == AssistantState.inactive) {
+      _bannerCtrl.reverse();
+    } else if (newState == AssistantState.listening || newState == AssistantState.speaking) {
+      if (!_bannerCtrl.isAnimating && _bannerCtrl.value < 1.0) _bannerCtrl.forward();
+    }
   }
 
   void _showMessage(String msg) {
@@ -437,10 +609,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          _buildGeminiAura(colors),
-          _buildTopOverlay(),
+          // 1. Cámara de fondo (si está activa)
           _buildCameraPreview(size),
+          // 2. Aura Gemini (solo si la cámara no está activa)
+          if (!_showCameraPreview) _buildGeminiAura(colors),
+          // 3. Banner copiloto activo
+          _buildCopilotBanner(colors),
+          // 4. Capa de contenido estructurado
           if (_structuredContent != null) _buildContentOverlay(size, colors),
+          // 5. Interfaz de controles (siempre arriba)
+          _buildTopOverlay(),
           _buildBottomControlBar(colors),
         ],
       ),
@@ -450,6 +628,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildGeminiAura(ColorScheme colors) {
     Color auraColor = _state == AssistantState.listening ? colors.secondary.withValues(alpha: 0.3) : (_state == AssistantState.speaking ? Colors.cyanAccent.withValues(alpha: 0.38) : colors.primary.withValues(alpha: 0.14));
     return AnimatedContainer(duration: const Duration(milliseconds: 800), decoration: BoxDecoration(gradient: RadialGradient(colors: [auraColor, Colors.black87, Colors.black], center: Alignment.center, radius: 1.2)));
+  }
+
+  Widget _buildCopilotBanner(ColorScheme colors) {
+    if (_state == AssistantState.inactive) return const SizedBox.shrink();
+    return Positioned(
+      top: 100,
+      left: 24,
+      right: 24,
+      child: FadeTransition(
+        opacity: _bannerCtrl,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, -0.3), end: Offset.zero)
+              .animate(CurvedAnimation(parent: _bannerCtrl, curve: Curves.easeOut)),
+          child: _CopilotBanner(
+            state: _state,
+            amplitudeDb: _micAmplitudeDb,
+            colors: colors,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildCameraPreview(Size size) {
@@ -463,57 +662,63 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         children: [
           // Fondo negro
           Container(color: Colors.black),
-          // Preview a pantalla completa, respetando el aspect ratio de la cámara
+          // Preview a pantalla completa corregido
           if (isReady)
-            Center(
-              child: AspectRatio(
-                aspectRatio: ctrl.value.aspectRatio,
-                child: CameraPreview(ctrl),
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: ctrl.value.previewSize?.height ?? size.width,
+                  height: ctrl.value.previewSize?.width ?? size.height,
+                  child: CameraPreview(ctrl),
+                ),
               ),
             )
           else
             const Center(child: CircularProgressIndicator(color: Colors.white54)),
-          // Visor QR: recuadro central con esquinas
+          
+          // Visor QR centrado
           if (_awaitingManualCapture)
             _QrViewfinderOverlay(size: size),
-          // Controles inferiores
+
+          // Botones de control inferiores (específicos de captura)
           if (_awaitingManualCapture)
             Positioned(
-              left: 0, right: 0, bottom: 48,
+              left: 0, right: 0, bottom: 120, // Subido un poco para no chocar con la barra principal
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
-                    style: const TextStyle(color: Colors.white, fontSize: 14, shadows: [Shadow(blurRadius: 4, color: Colors.black)]),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                    child: Text(
+                      'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      GestureDetector(
-                        onTap: _cancelManualCapture,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24)),
-                          child: const Text('Cancelar', style: TextStyle(color: Colors.white70, fontSize: 15)),
-                        ),
-                      ),
-                      const SizedBox(width: 20),
+                      _CircleButton(icon: Icons.close, onTap: _cancelManualCapture),
+                      const SizedBox(width: 40),
                       GestureDetector(
                         onTap: _triggerManualCapture,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.qr_code_scanner, color: Colors.black, size: 22),
-                              SizedBox(width: 10),
-                              Text('Capturar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
-                            ],
+                          width: 72, height: 72,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 4),
+                          ),
+                          child: Center(
+                            child: Container(width: 54, height: 54, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white)),
                           ),
                         ),
+                      ),
+                      const SizedBox(width: 40),
+                      _CircleButton(
+                        icon: ctrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off,
+                        onTap: _toggleFlashLocally,
                       ),
                     ],
                   ),
@@ -1775,6 +1980,137 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
   }
 }
 
+// ─── Banner Copiloto Activo ───────────────────────────────────────────────────
+
+class _CopilotBanner extends StatelessWidget {
+  final AssistantState state;
+  final double amplitudeDb;
+  final ColorScheme colors;
+
+  const _CopilotBanner({
+    required this.state,
+    required this.amplitudeDb,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSpeaking = state == AssistantState.speaking;
+    final accent = isSpeaking ? Colors.cyanAccent : colors.secondary;
+    final label = isSpeaking ? 'hiBOB te habla…' : 'Copiloto activo — te escucho';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent.withValues(alpha: 0.45), width: 1.2),
+        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.18), blurRadius: 16)],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Punto de estado pulsante
+          _PulseDot(color: accent),
+          const SizedBox(width: 10),
+          // Texto
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // VU-meter: 5 barras proporcionales a la amplitud
+          _VuMeter(amplitudeDb: amplitudeDb, color: accent, active: state == AssistantState.listening),
+        ],
+      ),
+    );
+  }
+}
+
+class _PulseDot extends StatefulWidget {
+  final Color color;
+  const _PulseDot({required this.color});
+
+  @override
+  State<_PulseDot> createState() => _PulseDotState();
+}
+
+class _PulseDotState extends State<_PulseDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..repeat(reverse: true);
+    _anim = Tween<double>(begin: 0.4, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (_, __) => Container(
+        width: 8, height: 8,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: widget.color.withValues(alpha: _anim.value),
+          boxShadow: [BoxShadow(color: widget.color.withValues(alpha: _anim.value * 0.6), blurRadius: 6)],
+        ),
+      ),
+    );
+  }
+}
+
+class _VuMeter extends StatelessWidget {
+  final double amplitudeDb;
+  final Color color;
+  final bool active;
+
+  const _VuMeter({required this.amplitudeDb, required this.color, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    // Normaliza de [-80, -20] dB → [0.0, 1.0]
+    final level = active ? ((amplitudeDb + 80) / 60).clamp(0.0, 1.0) : 0.0;
+    const barCount = 5;
+    const maxH = 18.0;
+    const minH = 4.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(barCount, (i) {
+        final threshold = (i + 1) / barCount;
+        final filled = level >= threshold;
+        final barH = minH + (maxH - minH) * ((i + 1) / barCount);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1.5),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 3,
+            height: barH,
+            decoration: BoxDecoration(
+              color: filled ? color : Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Visor QR a pantalla completa: oscurece todo excepto el recuadro central
 /// donde el usuario debe enfocar el código QR.
 class _QrViewfinderOverlay extends StatelessWidget {
@@ -1785,7 +2121,7 @@ class _QrViewfinderOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final boxSize = size.width * 0.65;
     final left = (size.width - boxSize) / 2;
-    final top = (size.height - boxSize) / 2 - 40;
+    final top = (size.height - boxSize) / 2; // Centrado exacto
 
     return Positioned.fill(
       child: CustomPaint(
@@ -1799,7 +2135,7 @@ class _QrViewfinderOverlay extends StatelessWidget {
             // Etiqueta
             Positioned(
               left: 0, right: 0,
-              top: top + boxSize + 16,
+              top: top + boxSize + 24,
               child: const Center(
                 child: Text(
                   'Centra el código QR en el recuadro',

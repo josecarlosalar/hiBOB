@@ -22,6 +22,7 @@ interface FramePayload {
   frameBase64?: string;
   frame?: string;
   prompt?: string;
+  fileName?: string;
 }
 
 @WebSocketGateway({
@@ -127,27 +128,35 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
         const results = await Promise.all(
           toolCall.functionCalls.map(async (fc: any) => {
+            // open_gallery: flujo NO bloqueante para evitar desconexión al entrar en background
+            if (fc.name === 'open_gallery') {
+              // Marcamos que el próximo frame que llegue es de galería (para procesarlo en handleFrame)
+              client.data.awaitingGalleryFrame = true;
+              // Enviamos comando directo al cliente (no frame_request que bloquea el socket)
+              client.emit('command', { action: 'open_gallery' });
+              return { name: fc.name, id: fc.id, response: { content: 'Galería abierta. El usuario seleccionará una imagen y te la enviaré para que la analices.' } };
+            }
+
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
-            if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view' || fc.name === 'open_gallery') {
-              const source = fc.name === 'capture_device_screen' ? 'screen' : (fc.name === 'open_gallery' ? 'gallery' : 'camera');
+            if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view') {
+              const source = fc.name === 'capture_device_screen' ? 'screen' : 'camera';
               client.emit('frame_request', { source });
-              
-              // Para la galería y cámara damos más tiempo porque el usuario interactúa manualmente
-              const timeout = fc.name === 'open_gallery' ? 20000 : fc.name === 'describe_camera_view' ? 40000 : 10000;
+
+              const timeout = fc.name === 'describe_camera_view' ? 40000 : 10000;
               const frame = await this._waitForFrame(client, timeout);
-              
+
               if (!frame) {
-                return { 
-                  name: fc.name, 
-                  id: fc.id, 
-                  response: { content: `ERROR: No se recibió ninguna imagen de la ${source === 'screen' ? 'pantalla' : (source === 'gallery' ? 'galería' : 'cámara')}.` } 
+                return {
+                  name: fc.name,
+                  id: fc.id,
+                  response: { content: `ERROR: No se recibió ninguna imagen de la ${source === 'screen' ? 'pantalla' : 'cámara'}.` }
                 };
               }
 
               // MOSTRAR EN PANTALLA (UI)
               client.emit('display_content', {
                 type: 'detail',
-                title: `Analizando ${source === 'screen' ? 'Captura' : (source === 'gallery' ? 'Galería' : 'Cámara')}`,
+                title: `Analizando ${source === 'screen' ? 'Captura' : 'Cámara'}`,
                 items: [{
                     id: 'analysis_frame',
                     title: 'Imagen Capturada',
@@ -161,7 +170,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 { text: `Aquí tienes la imagen solicitada (${source}). Analízala cuidadosamente.` },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
               ]);
-              
+
               return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y mostrada en pantalla. Ya puedes verla.' } };
             }
 
@@ -435,7 +444,56 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const frame = payload?.frameBase64 || payload?.frame;
     if (!session || session.isClosed() || !frame) return;
 
-    // PRIORIDAD CRÍTICA: Si el agente ha pedido una imagen (Tool Call / Aceptar),
+    // PRIORIDAD 1: Frame de galería (flujo no bloqueante open_gallery)
+    if (client.data.awaitingGalleryFrame) {
+      client.data.awaitingGalleryFrame = false;
+
+      // Si viene con fileName es un fichero arbitrario → analizar con VirusTotal
+      if (payload?.fileName) {
+        const fileName = payload.fileName;
+        this.logger.log(`[Fichero] Fichero recibido para escanear: ${fileName}`);
+        client.emit('display_content', {
+          type: 'file_scan',
+          title: 'Analizando fichero...',
+          items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
+        });
+        // Ejecutar en background para no bloquear
+        this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id).then(vtResult => {
+          try {
+            const data = JSON.parse(vtResult);
+            this._emitVtReport(client, data, fileName);
+            session.sendClientContent([{
+              text: `El usuario ha subido el fichero "${fileName}" para análisis de seguridad. VirusTotal ha completado el análisis: ${data.positives}/${data.total} motores detectaron amenaza. Estado: ${data.status}. El resultado ya se muestra en pantalla.`
+            }]);
+          } catch {
+            client.emit('display_content', { type: 'error', title: 'Error', items: [{ id: 'err', title: 'Error analizando fichero', description: vtResult }] });
+          }
+        }).catch(err => {
+          this.logger.error(`Error escaneando fichero: ${err.message}`);
+        });
+        return;
+      }
+
+      // Sin fileName → es una imagen → flujo de visión normal
+      this.logger.log(`[Visión] Frame de galería recibido para cliente ${client.id}`);
+      client.emit('display_content', {
+        type: 'detail',
+        title: 'Analizando Imagen',
+        items: [{
+          id: 'analysis_frame',
+          title: 'Imagen de Galería',
+          description: 'Procesando imagen con IA...',
+          imageUrl: `data:image/jpeg;base64,${frame}`
+        }]
+      });
+      session.sendClientContent([
+        { text: 'El usuario ha seleccionado esta imagen de su galería para que la analices. Analízala cuidadosamente.' },
+        { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+      ]);
+      return;
+    }
+
+    // PRIORIDAD 2: Si el agente ha pedido una imagen (Tool Call / Aceptar),
     // esta imagen es la respuesta a esa solicitud.
     if (client.data.pendingFrameResolve) {
       this.logger.log(`[Visión] ¡IMAGEN RECIBIDA! Resolviendo espera para el cliente ${client.id}`);
