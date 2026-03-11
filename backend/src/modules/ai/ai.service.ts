@@ -217,31 +217,27 @@ export class GeminiLiveSession extends EventEmitter {
       systemInstruction: { 
         parts: [{ 
           text: (this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.') + 
-                ' Tu acento debe ser de España (Castellano). Usa vocabulario de España (ej. "vale", "ordenador", "móvil"). ' +
-                ' Pronuncia las palabras correctamente en español, especialmente "hoy", que debe sonar natural y no como "hoie". ' +
-                ' IMPORTANTE: Estás en una conversación fluida en tiempo real. Si el usuario te interrumpe, detente de inmediato y escucha. '
+                ' Habla en español de España. Usa vocabulario español (vale, ordenador, móvil). ' +
+                ' IMPORTANTE: Si el usuario te interrumpe, detente de inmediato. '
         }] 
       },
       tools: AGENT_TOOLS,
       speechConfig: {
         voiceConfig: {
           prebuiltVoiceConfig: {
-            // Cambiamos a 'Puck' que suele tener una entonación más compatible con español de España 
-            // o mantenemos la configuración pero forzamos el lenguaje en el nivel superior.
-            voiceName: this.options.voiceName || 'Puck', 
+            voiceName: this.options.voiceName || 'Aoede', 
           },
         },
       },
       inputAudioTranscription: {},
-      // Reducir sensibilidad del VAD servidor para evitar que el eco del altavoz
-      // sea interpretado como interrupción del usuario.
+      // Sensibilidad del VAD ajustada para evitar eco pero permitir interrupción natural
       realtimeInputConfig: {
         automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
           endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-          prefixPaddingMs: 300,
-          silenceDurationMs: 600,
+          prefixPaddingMs: 400,
+          silenceDurationMs: 800,
         },
       },
     };
