@@ -1,0 +1,26 @@
+# Node.js
+backend/node_modules/
+backend/dist/
+backend/logs.txt
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/build/
+mobile/.pub-cache/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+
+# Firebase
+.firebase/
+firestore-debug.log
+firebase-debug.log
+ui-debug.log
+
+# Otros
+.git/
+.vscode/
+.idea/
+*.log
+tmp/
+dist/
+build/

@@ -214,16 +214,31 @@ export class GeminiLiveSession extends EventEmitter {
     // inputAudioTranscription DEBE ser un objeto vacío {} para habilitarse.
     const liveConfig: any = {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
-      systemInstruction: { parts: [{ text: this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.' }] },
+      systemInstruction: { 
+        parts: [{ 
+          text: (this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.') + 
+                ' Tu acento debe ser de España (Castellano). Usa vocabulario de España (ej. "vale", "ordenador", "móvil"). ' +
+                ' Pronuncia las palabras correctamente en español, especialmente "hoy", que debe sonar natural y no como "hoie". ' +
+                ' IMPORTANTE: Estás en una conversación fluida en tiempo real. Si el usuario te interrumpe, detente de inmediato y escucha. '
+        }] 
+      },
       tools: AGENT_TOOLS,
       speechConfig: {
         voiceConfig: {
           prebuiltVoiceConfig: {
-            voiceName: this.options.voiceName || 'Aoede',
+            // Cambiamos a 'Puck' que suele tener una entonación más compatible con español de España 
+            // o mantenemos la configuración pero forzamos el lenguaje en el nivel superior.
+            voiceName: this.options.voiceName || 'Puck', 
           },
         },
       },
-      inputAudioTranscription: {}, 
+      // Forzamos el idioma de transcripción y respuesta a español de España
+      generationConfig: {
+        language: 'es-ES',
+      },
+      inputAudioTranscription: {
+        model: 'models/speech-to-text',
+      }, 
     };
 
     try {
