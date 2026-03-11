@@ -269,25 +269,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     final now = DateTime.now();
     
-    // El "Grace Period" es el tiempo que ignoramos el audio tras empezar a hablar 
-    // para evitar que el primer frame del altavoz nos corte de inmediato.
+    // Grace Period: Tiempo que ignoramos el micrófono tras empezar a hablar 
+    // para evitar que el primer frame del altavoz nos corte.
+    // Lo aumentamos a 1.5s para mayor seguridad.
     final graceElapsed = _agentSpeechStartedAt != null 
-        ? now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs
+        ? now.difference(_agentSpeechStartedAt!).inMilliseconds >= 1500
         : true;
     
     if (!graceElapsed) return;
 
     // LÓGICA DE DETECCIÓN DINÁMICA:
-    // Si el agente está hablando, el umbral debe ser mayor para no cortarse con su propio eco.
+    // Subimos el umbral significativamente (+15dB) mientras el agente habla 
+    // para que su propio eco NO lo interrumpa.
     double dynamicThreshold = _agentAudioActive 
-        ? _bargeInThresholdDb + 6.0  // Somos menos sensibles (necesitas hablar más fuerte que el eco)
-        : _vadThresholdDb;           // Muy sensibles cuando hay silencio
+        ? _bargeInThresholdDb + 15.0  // Muy resistente al eco del altavoz
+        : _vadThresholdDb;            // Muy sensible en silencio
 
     if (amp.current >= dynamicThreshold) {
       _bargeInStartedAt ??= now;
-      // Reducimos el tiempo de confirmación a 400ms para que sea más reactivo
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 400 && _bargeInEnabled) {
-        debugPrint('[BargeIn] Interrupción local detectada (${amp.current} dB)');
+      // Confirmación rápida de 450ms
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 450 && _bargeInEnabled) {
+        debugPrint('[BargeIn] Interrupción detectada: ${amp.current}dB vs $dynamicThreshold');
         _stopSpeaking();
       }
     } else {
