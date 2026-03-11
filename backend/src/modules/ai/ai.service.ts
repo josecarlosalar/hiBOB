@@ -93,8 +93,17 @@ const GET_VISUAL_MEMORY_FUNCTION: FunctionDeclaration = {
 
 const OPEN_GALLERY_FUNCTION: FunctionDeclaration = {
   name: 'open_gallery',
-  description: 'Abre la galería de imágenes del dispositivo para que el usuario seleccione una captura de pantalla o foto.',
-  parameters: { type: Type.OBJECT, properties: {} },
+  description: 'Abre la galería de imágenes o el gestor de archivos. Úsala para que el usuario seleccione una captura de pantalla, foto o documento.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      source: {
+        type: Type.STRING,
+        enum: ['gallery', 'files'],
+        description: 'Usa "gallery" para imágenes/capturas de pantalla y "files" para documentos/ficheros arbitrarios (PDF, APK, etc).',
+      },
+    },
+  },
 };
 
 const ANALYZE_IP_FUNCTION: FunctionDeclaration = {
@@ -117,7 +126,7 @@ const ANALYZE_FILE_HASH_FUNCTION: FunctionDeclaration = {
 
 const SCAN_FILE_FUNCTION: FunctionDeclaration = {
   name: 'scan_file',
-  description: 'Sube un archivo (APK, PDF, ejecutable) a VirusTotal para analizarlo en busca de malware. El usuario debe proporcionar el archivo desde la galería.',
+  description: 'Sube un archivo (APK, PDF, ejecutable) a VirusTotal para analizarlo. El asistente abrirá automáticamente el selector de archivos del dispositivo.',
   parameters: {
     type: Type.OBJECT,
     properties: {
