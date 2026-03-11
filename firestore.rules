@@ -2,15 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ==================== AGENT CONFIGURATIONS ====================
-    match /agent-configs/{configId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null;
-      allow delete: if request.auth != null
-        && (request.auth.token.role == 'ORG_ADMIN'
-        || request.auth.token.role == 'SUPER_ADMIN');
-    }
-
     // Helper functions
     function isAuthenticated() {
       return request.auth != null;
@@ -20,237 +11,40 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    function hasRole(role) {
-      return isAuthenticated() && request.auth.token.role == role;
-    }
-
-    function isSuperAdmin() {
-      return hasRole('SUPER_ADMIN');
-    }
-
-    function isOrgAdmin() {
-      return hasRole('ORG_ADMIN') || isSuperAdmin();
-    }
-
-    // Users collection
+    // Perfiles de Usuario
     match /users/{userId} {
-      allow read: if isOwner(userId) || isOrgAdmin();
-      allow write: if isOrgAdmin();
-
-      match /notifications/{notificationId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) || isOrgAdmin();
-      }
-
-      match /messageNotifications/{notificationId} {
-        allow read: if isOwner(userId);
-        allow write: if isOwner(userId) || isOrgAdmin();
-      }
-    }
-
-    // Organizations collection
-    match /organizations/{orgId} {
-      allow read: if isAuthenticated() &&
-        (request.auth.token.organizationId == orgId || isSuperAdmin());
-      allow write: if isOrgAdmin();
-    }
-
-    // Conversations (Gemini Live Agent)
-    // El backend (Admin SDK) gestiona escrituras; el cliente puede leer las suyas
-    match /conversations/{conversationId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.userId ||
-        request.auth.uid in resource.data.participantUids
-      );
-      allow create: if false; // solo backend vía Admin SDK
-      allow update: if false; // solo backend vía Admin SDK
-      allow delete: if false; // solo backend vía Admin SDK
-
-      match /messages/{messageId} {
-        allow read: if isAuthenticated() &&
-          get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
-        allow write: if false; // solo backend vía Admin SDK
-      }
-    }
-
-    // Messages
-    match /messages/{messageId} {
-      allow read: if isAuthenticated() && (
-        request.auth.uid == resource.data.senderUid ||
-        request.auth.uid in resource.data.recipientUids
-      );
-      allow create: if isAuthenticated() &&
-        request.auth.uid == request.resource.data.senderUid;
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.senderUid ||
-        request.auth.uid in resource.data.recipientUids
-      );
-      allow delete: if isAuthenticated() &&
-        request.auth.uid == resource.data.senderUid;
-    }
-
-    // Projects
-    match /projects/{projectId} {
-      allow read: if isAuthenticated();
-      allow write: if isOrgAdmin();
-    }
-
-    // Tasks
-    match /tasks/{taskId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Tableros SEO
-    match /tablerosSeo/{tableroId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        request.auth.uid in resource.data.colaboradores
-      );
-      allow delete: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        isOrgAdmin()
-      );
-
-      match /datos/{datoId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
-        allow update: if isAuthenticated() && (
-          request.auth.uid == resource.data.addedBy ||
-          request.auth.uid in get(/databases/$(database)/documents/tablerosSeo/$(tableroId)).data.colaboradores
-        );
-        allow delete: if isAuthenticated() && (
-          request.auth.uid == resource.data.addedBy ||
-          request.auth.uid in get(/databases/$(database)/documents/tablerosSeo/$(tableroId)).data.colaboradores
-        );
-      }
-    }
-
-    // Canvas - multi-tenant with organizationId enforcement
-    match /canvas/{canvasId} {
-      allow read: if isAuthenticated() &&
-        resource.data.organizationId == request.auth.token.organizationId;
-      allow create: if isAuthenticated() &&
-        request.resource.data.organizationId == request.auth.token.organizationId;
-      allow update: if isAuthenticated() &&
-        resource.data.organizationId == request.auth.token.organizationId &&
-        (request.auth.uid == resource.data.createdBy ||
-         request.auth.uid in resource.data.colaboradores);
-      allow delete: if isAuthenticated() &&
-        resource.data.organizationId == request.auth.token.organizationId &&
-        (request.auth.uid == resource.data.createdBy || isOrgAdmin());
-
-      // Datos subcollection - CORREGIDO: "datos" en lugar de "data"
-      match /datos/{dataId} {
-        allow read: if isAuthenticated() &&
-          get(/databases/$(database)/documents/canvas/$(canvasId)).data.organizationId == request.auth.token.organizationId;
-        allow create: if isAuthenticated() &&
-          get(/databases/$(database)/documents/canvas/$(canvasId)).data.organizationId == request.auth.token.organizationId;
-        allow update: if isAuthenticated() &&
-          get(/databases/$(database)/documents/canvas/$(canvasId)).data.organizationId == request.auth.token.organizationId &&
-          (request.auth.uid == resource.data.addedBy ||
-           request.auth.uid in get(/databases/$(database)/documents/canvas/$(canvasId)).data.colaboradores);
-        allow delete: if isAuthenticated() &&
-          get(/databases/$(database)/documents/canvas/$(canvasId)).data.organizationId == request.auth.token.organizationId &&
-          (request.auth.uid == resource.data.addedBy ||
-           request.auth.uid in get(/databases/$(database)/documents/canvas/$(canvasId)).data.colaboradores);
-      }
-    }
-
-    // Análisis de canvas
-    match /analisis-canvas/{analisisId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        isOrgAdmin()
-      );
-      allow delete: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        isOrgAdmin()
-      );
-    }
-
-    // Client accounts
-    match /clientAccounts/{accountId} {
-      allow read: if isAuthenticated();
-      allow write: if isOrgAdmin();
-    }
-
-    // Reports
-    match /reports/{reportId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Files
-    match /files/{fileId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
-    }
-
-    // Notifications
-    match /notifications/{notificationId} {
-      allow read: if isAuthenticated() &&
-        request.auth.uid == resource.data.recipientUid;
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() &&
-        request.auth.uid == resource.data.recipientUid;
-    }
-
-    // LLM Collection
-    match /llm/{userId} {
       allow read, write: if isOwner(userId);
 
-      match /sessions/{sessionId} {
+      match /notifications/{notificationId} {
         allow read, write: if isOwner(userId);
-
-        match /messages/{messageId} {
-          allow read, write: if isOwner(userId);
-        }
       }
-
-      match /folders/{folderId} {
+      
+      match /messageNotifications/{notificationId} {
         allow read, write: if isOwner(userId);
       }
     }
 
-    // Análisis de tableros
-    match /analisis-tablero/{analisisId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        isOrgAdmin()
-      );
-      allow delete: if isAuthenticated() && (
-        request.auth.uid == resource.data.createdBy ||
-        isOrgAdmin()
-      );
-    }
+    // Conversaciones (hiBOB Live Agent)
+    // El cliente puede leer sus propias conversaciones, el backend (Admin SDK) gestiona la creación.
+    match /conversations/{conversationId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if false; // Solo backend vía Admin SDK
+      allow update: if false; // Solo backend vía Admin SDK
+      allow delete: if isOwner(resource.data.userId);
 
-    // Helper function to check if user belongs to organization
-    function belongsToOrg(orgId) {
-      return isAuthenticated() &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == orgId;
-    }
-
-    // Tracked Data - SEO tracking snapshots
-    // Only backend (via Admin SDK) can write
-    // Users can read their organization's data
-    match /tracked_data/{orgId} {
-      allow read: if belongsToOrg(orgId);
-      allow write: if false; // Only backend via Admin SDK
-
-      match /snapshots/{snapshotId} {
-        allow read: if belongsToOrg(orgId);
-        allow write: if false; // Only backend via Admin SDK
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && 
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.userId == request.auth.uid;
+        allow write: if false; // Solo backend vía Admin SDK
       }
     }
 
-    // Default deny all other collections (DEBE SER LA ÚLTIMA REGLA)
+    // Herramientas y Memoria Visual
+    match /memory/{memoryId} {
+      allow read, write: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Denegar todo lo demás por defecto
     match /{document=**} {
       allow read, write: if false;
     }
