@@ -63,7 +63,7 @@ jobs:
             --min-instances 0 \
             --max-instances 10 \
             --set-env-vars="GCP_LOCATION=europe-west1,GCP_LIVE_LOCATION=europe-west1,GEMINI_LIVE_MODEL=gemini-2.5-flash-native-audio-latest,GEMINI_LIVE_DEBUG_VERBOSE=false,NODE_ENV=production,ALLOWED_ORIGINS=https://hibob-backend-777378009998.europe-west1.run.app" \
-            --set-secrets="GCP_PROJECT_ID=hibob-gcp-project-id:latest,FIREBASE_PROJECT_ID=hibob-firebase-project-id:latest,BRAVE_SEARCH_API_KEY=hibob-brave-search-api-key:latest,GEMINI_MODEL=hibob-gemini-model:latest,GEMINI_API_KEY=hibob-gemini-api-key:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=hibob-sa-key:latest" \
+            --set-secrets="GCP_PROJECT_ID=hibob-gcp-project-id:latest,FIREBASE_PROJECT_ID=hibob-firebase-project-id:latest,BRAVE_SEARCH_API_KEY=hibob-brave-search-api-key:latest,GEMINI_MODEL=hibob-gemini-model:latest,GEMINI_API_KEY=hibob-gemini-api-key:latest,VIRUSTOTAL_API_KEY=hibob-virustotal-api-key:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=hibob-sa-key:latest" \
             --service-account gemini-agent-sa@websites-technology.iam.gserviceaccount.com
 
       - name: Mostrar URL del servicio
