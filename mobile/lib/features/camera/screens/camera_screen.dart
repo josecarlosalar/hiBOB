@@ -353,7 +353,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _pickImageFromGallery() async {
     try {
-      final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+      // Redimensionar a una resolución razonable para IA (máx 1600px)
+      // Esto ahorra memoria RAM crítica y evita que el sistema cierre la app (OOM).
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 85,
+      );
       if (image != null) {
         setState(() => _selectedGalleryImage = image);
         _showImageReviewDialog();
@@ -476,13 +483,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _sendFileToAssistant() async {
     if (_selectedFile == null) return;
-    _openingGallery = false;
     try {
       final file = _selectedFile!;
-      if (file.path == null) { _showMessage('No se puede leer el fichero.'); return; }
+      if (file.path == null) { 
+        _openingGallery = false;
+        _showMessage('No se puede leer el fichero.'); 
+        return; 
+      }
 
       final bytes = await File(file.path!).readAsBytes();
       if (bytes.length > 32 * 1024 * 1024) {
+        _openingGallery = false;
         _showMessage('El fichero supera el límite de 32 MB de VirusTotal.');
         setState(() => _selectedFile = null);
         return;
@@ -495,9 +506,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
 
       _liveSession.sendFrame(frameBase64: fileBase64, fileName: file.name);
-      _showMessage('Fichero enviado a hiBOB para análisis...');
+      _showMessage('Analizando fichero...');
       setState(() => _selectedFile = null);
-    } catch (e) { _showMessage('Error enviando fichero: $e'); }
+      _openingGallery = false;
+    } catch (e) {
+      _openingGallery = false;
+      _showMessage('Error enviando fichero: $e');
+    }
   }
 
   void _showImageReviewDialog() {
@@ -546,7 +561,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _sendImageToAssistant() async {
     if (_selectedGalleryImage == null) return;
-    _openingGallery = false;
     try {
       final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
       final frameBase64 = base64Encode(bytes);
@@ -557,15 +571,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
 
       _liveSession.sendFrame(frameBase64: frameBase64);
-      _showMessage('Imagen enviada a hiBOB...');
+      _showMessage('Analizando imagen...');
       setState(() => _selectedGalleryImage = null);
-    } catch (e) { _showMessage('Error enviando imagen: $e'); }
+      // Solo liberamos la flag de "galería" tras enviar con éxito
+      _openingGallery = false;
+    } catch (e) {
+      _openingGallery = false;
+      _showMessage('Error enviando imagen: $e');
+    }
   }
 
   Future<String?> _captureFrame({String source = 'camera'}) async {
     try {
       if (source == 'gallery') {
-        final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+        const double maxDim = 1600;
+        final XFile? image = await _picker.pickImage(
+          source: ImageSource.gallery,
+          maxWidth: maxDim,
+          maxHeight: maxDim,
+          imageQuality: 85,
+        );
         if (image == null) return null;
         final bytes = await File(image.path).readAsBytes();
         return base64Encode(bytes);
