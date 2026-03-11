@@ -65,6 +65,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   DateTime? _agentSpeechStartedAt;
   bool _agentAudioActive = false;
   bool _isVibrating = false;
+  // Post-playback hold-off: tiempo de silencio adicional tras el último chunk
+  // de audio del agente para que el eco del altavoz decaiga antes de reanudar
+  // el envío del micrófono a Gemini. Evita que el eco provoque falsas interrupciones.
+  Timer? _echoHoldOffTimer;
+  bool _inEchoHoldOff = false;
   bool _showCameraPreview = false;
   Timer? _hideCameraTimer;
   Map<String, dynamic>? _structuredContent;
@@ -119,6 +124,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _audio.dispose();
     _pcmAudio.dispose();
     _agentSpeechIdleTimer?.cancel();
+    _echoHoldOffTimer?.cancel();
     _hideCameraTimer?.cancel();
     for (final sub in _subs) sub.cancel();
     super.dispose();
@@ -257,9 +263,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _shouldForwardAudioChunk() {
     // 1. Bloqueo por vibración (ruido de hardware)
     if (_isVibrating) return false;
-    
-    // PARA EL HACKATHON: El micrófono debe estar siempre enviando audio 
-    // para que Gemini pueda detectar la interrupción (barge-in) de forma natural.
+    // 2. Hold-off post-playback: esperar a que el eco del altavoz decaiga
+    //    antes de reanudar el envío del micrófono a Gemini.
+    if (_inEchoHoldOff) return false;
     return true;
   }
 
@@ -284,6 +290,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _markAgentSpeechActive() {
     _agentSpeechStartedAt ??= DateTime.now();
     _agentAudioActive = true;
+    _inEchoHoldOff = true;
+    // Cancelar cualquier hold-off previo mientras sigan llegando chunks
+    _echoHoldOffTimer?.cancel();
     _agentSpeechIdleTimer?.cancel();
     _agentSpeechIdleTimer = Timer(const Duration(milliseconds: 7000), _handleAgentSpeechEnded);
   }
@@ -292,6 +301,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _agentSpeechIdleTimer?.cancel();
     _agentAudioActive = false;
     if (_state != AssistantState.inactive) _setStateIfMounted(AssistantState.listening);
+    // Mantener hold-off ~250 ms adicionales para que el eco residual del
+    // altavoz decaiga antes de que Gemini vuelva a recibir audio del micro.
+    _echoHoldOffTimer?.cancel();
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 250), () {
+      _inEchoHoldOff = false;
+    });
   }
 
   Future<void> _startLocationUpdates() async {
@@ -682,12 +697,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  void _stopSpeaking() { _pcmAudio.stop(); _handleAgentSpeechEnded(); }
+  void _stopSpeaking() {
+    _pcmAudio.stop();
+    _echoHoldOffTimer?.cancel();
+    _inEchoHoldOff = false;
+    _handleAgentSpeechEnded();
+  }
 
   void _stopSession() {
     _audioStreamSub?.cancel();
     _amplitudeSub?.cancel();
     _agentSpeechIdleTimer?.cancel();
+    _echoHoldOffTimer?.cancel();
+    _inEchoHoldOff = false;
     _showCameraPreview = false;
     unawaited(_audio.stopRecording());
     for (final sub in _subs) sub.cancel();
