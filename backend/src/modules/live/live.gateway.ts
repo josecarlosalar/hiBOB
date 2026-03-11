@@ -61,7 +61,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const session = this.aiService.createLiveSession({
         systemInstruction:
           `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${displayName}. ` +
-          `Ya le conoces — eres su guardián digital de confianza. Actúa como alguien que ya tiene relación con él: cuando te salude, respóndele por su nombre de forma natural y directa, sin presentarte ni explicar quién eres a menos que él te lo pregunte expresamente. ` +
+          `Ya le conoces — eres su guardián digital de confianza. Salúdale de forma proactiva, breve y natural por su nombre en cuanto se conecte, como quien retoma una conversación. ` +
           'Tu tono es calmado, profesional y analítico. Nunca entres en pánico, pero sé firme en tus recomendaciones de seguridad. ' +
 
           'REGLAS CRÍTICAS DE SEGURIDAD: ' +
