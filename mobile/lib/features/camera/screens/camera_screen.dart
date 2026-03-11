@@ -255,42 +255,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   bool _shouldForwardAudioChunk() {
-    // Si el dispositivo está vibrando, bloqueamos el audio para evitar el ruido del motor.
-    // YA NO BLOQUEAMOS el audio si el agente habla, para que Gemini Live pueda detectar el barge-in del servidor.
+    // 1. Bloqueo por vibración (ruido de hardware)
     if (_isVibrating) return false;
+    
+    // PARA EL HACKATHON: El micrófono debe estar siempre enviando audio 
+    // para que Gemini pueda detectar la interrupción (barge-in) de forma natural.
     return true;
   }
 
   void _handleAmplitudeSample(Amplitude amp) {
     if (mounted) setState(() => _micAmplitudeDb = amp.current);
     
-    // Ignoramos la interrupción local si está vibrando.
-    if (_isVibrating) return;
+    // Si el agente está en modo habla, desactivamos el VAD local para evitar cortes por eco.
+    if (_state == AssistantState.speaking || _agentAudioActive || _isVibrating) return;
 
     final now = DateTime.now();
     
-    // Grace Period: Tiempo que ignoramos el micrófono tras empezar a hablar 
-    // para evitar que el primer frame del altavoz nos corte.
-    // Lo aumentamos a 1.5s para mayor seguridad.
-    final graceElapsed = _agentSpeechStartedAt != null 
-        ? now.difference(_agentSpeechStartedAt!).inMilliseconds >= 1500
-        : true;
-    
-    if (!graceElapsed) return;
-
-    // LÓGICA DE DETECCIÓN DINÁMICA:
-    // Subimos el umbral significativamente (+15dB) mientras el agente habla 
-    // para que su propio eco NO lo interrumpa.
-    double dynamicThreshold = _agentAudioActive 
-        ? _bargeInThresholdDb + 15.0  // Muy resistente al eco del altavoz
-        : _vadThresholdDb;            // Muy sensible en silencio
-
-    if (amp.current >= dynamicThreshold) {
+    if (amp.current >= _vadThresholdDb) {
       _bargeInStartedAt ??= now;
-      // Confirmación rápida de 450ms
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 450 && _bargeInEnabled) {
-        debugPrint('[BargeIn] Interrupción detectada: ${amp.current}dB vs $dynamicThreshold');
-        _stopSpeaking();
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 350 && _bargeInEnabled) {
+        _setStateIfMounted(AssistantState.listening);
       }
     } else {
       _bargeInStartedAt = null;
@@ -988,9 +972,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildAiActionButton(ColorScheme colors) {
     final isInactive = _state == AssistantState.inactive;
     final isConnecting = _state == AssistantState.connecting;
+    final isSpeaking = _state == AssistantState.speaking || _agentAudioActive;
     
     return GestureDetector(
-      onTap: isInactive ? _startSession : _stopSession,
+      onTap: () {
+        if (isInactive) _startSession();
+        else if (isSpeaking) _stopSpeaking(); // SI TOCA EL BOTÓN MIENTRAS HABLA, SE CALLA
+        else _stopSession();
+      },
       child: ScaleTransition(
         scale: isInactive ? const AlwaysStoppedAnimation(1.0) : _pulseAnim,
         child: Container(
@@ -1006,7 +995,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: (isConnecting ? Colors.black : colors.primary).withValues(alpha: 0.4),
+                color: (isConnecting ? Colors.black : (isSpeaking ? Colors.cyanAccent : colors.primary)).withValues(alpha: 0.4),
                 blurRadius: 15,
                 spreadRadius: 2,
               )
@@ -1015,7 +1004,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           child: Center(
             child: isConnecting 
               ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white70))
-              : Icon(isInactive ? Icons.auto_awesome_rounded : Icons.stop_rounded, color: Colors.white, size: 26),
+              : Icon(isInactive ? Icons.auto_awesome_rounded : (isSpeaking ? Icons.close : Icons.stop_rounded), color: Colors.white, size: 26),
           ),
         ),
       ),
