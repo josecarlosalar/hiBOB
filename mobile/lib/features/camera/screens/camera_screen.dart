@@ -2272,8 +2272,8 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
             const SizedBox(height: 20),
             // Pasos simulados o reales del proceso
             _buildProcessStep(Icons.cloud_upload_outlined, 'Subida a hiBOB', true),
-            _buildProcessStep(Icons.biometric_view_rounded, 'Extracción de firma', description.contains('VT') || description.contains('Análisis')),
-            _buildProcessStep(Icons.Analytics_outlined, 'Veredicto motores VT', description.contains('completado')),
+            _buildProcessStep(Icons.fingerprint, 'Extracción de firma', description.contains('VT') || description.contains('Análisis')),
+            _buildProcessStep(Icons.analytics_outlined, 'Veredicto motores VT', description.contains('completado')),
           ],
         ),
       ),
