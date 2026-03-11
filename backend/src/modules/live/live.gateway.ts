@@ -527,6 +527,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleAudioChunk(@MessageBody() payload: AudioChunkPayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
     if (session && !session.isClosed() && payload?.audioBase64) {
+      // Log de depuración: solo imprimimos uno de cada 50 para no inundar el log
+      if (Math.random() < 0.02) this.logger.debug(`Recibido audio_chunk de cliente ${client.id} (size: ${payload.audioBase64.length})`);
       session.sendAudioFrame(payload.audioBase64, payload.mimeType || 'audio/pcm;rate=16000');
     }
   }

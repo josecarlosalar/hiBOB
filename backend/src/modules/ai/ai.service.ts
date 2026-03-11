@@ -216,28 +216,15 @@ export class GeminiLiveSession extends EventEmitter {
       responseModalities: this.options.responseModalities ?? [Modality.AUDIO],
       systemInstruction: { 
         parts: [{ 
-          text: (this.options.systemInstruction || 'Eres hiBOB, una asistente multimodal útil.') + 
-                ' Habla en español de España. Usa vocabulario español (vale, ordenador, móvil). ' +
-                ' IMPORTANTE: Si el usuario te interrumpe, detente de inmediato. '
+          text: 'Eres hiBOB, un asistente de España. Habla siempre en español de España.'
         }] 
       },
       tools: AGENT_TOOLS,
       speechConfig: {
         voiceConfig: {
           prebuiltVoiceConfig: {
-            voiceName: this.options.voiceName || 'Aoede', 
+            voiceName: 'Puck', // Voz estable para español
           },
-        },
-      },
-      inputAudioTranscription: {},
-      // Sensibilidad del VAD ajustada para evitar eco pero permitir interrupción natural
-      realtimeInputConfig: {
-        automaticActivityDetection: {
-          disabled: false,
-          startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
-          endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-          prefixPaddingMs: 400,
-          silenceDurationMs: 800,
         },
       },
     };
@@ -247,7 +234,11 @@ export class GeminiLiveSession extends EventEmitter {
         model: this.modelId,
         config: liveConfig,
         callbacks: {
-          onmessage: (msg: any) => this._handleSdkMessage(msg),
+          onmessage: (msg: any) => {
+            // Log para ver si recibimos algo del modelo
+            if (msg.serverContent) this.logger.log('Recibido contenido del servidor Gemini');
+            this._handleSdkMessage(msg);
+          },
           onerror: (err: any) => { 
             this.logger.error(`Error de Gemini Live API: ${err.message || JSON.stringify(err)}`); 
             this.emit('error', err); 
