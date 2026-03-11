@@ -453,68 +453,74 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Widget _buildCameraPreview(Size size) {
-    return IgnorePointer(
-      ignoring: !_showCameraPreview,
-      child: AnimatedOpacity(
-        opacity: _showCameraPreview ? 1.0 : 0.0,
-        duration: const Duration(milliseconds: 600),
-        child: Center(
-          child: AnimatedScale(
-            scale: _showCameraPreview ? 1.0 : 0.85,
-            duration: const Duration(milliseconds: 600),
-            child: Stack(
-              alignment: Alignment.bottomCenter,
-              children: [
-                Container(
-                  width: size.width * 0.92, height: size.height * 0.62,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(32), border: Border.all(color: Colors.white24, width: 2), boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 30)]),
-                  clipBehavior: Clip.antiAlias,
-                  child: (_cameraCtrl != null && _cameraCtrl!.value.isInitialized) ? CameraPreview(_cameraCtrl!) : Container(color: Colors.grey[900], child: const Icon(Icons.camera_alt, color: Colors.white24, size: 64)),
-                ),
-                if (_awaitingManualCapture)
-                  Positioned(
-                    bottom: 20,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('Enfoca y captura · $_manualCaptureCountdown s', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                        const SizedBox(height: 10),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            GestureDetector(
-                              onTap: _cancelManualCapture,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24)),
-                                child: const Text('Cancelar', style: TextStyle(color: Colors.white60, fontSize: 14)),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            GestureDetector(
-                              onTap: _triggerManualCapture,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
-                                child: const Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.camera_alt, color: Colors.black, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Capturar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 15)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+    if (!_showCameraPreview) return const SizedBox.shrink();
+
+    final ctrl = _cameraCtrl;
+    final isReady = ctrl != null && ctrl.value.isInitialized;
+
+    return Positioned.fill(
+      child: Stack(
+        children: [
+          // Fondo negro
+          Container(color: Colors.black),
+          // Preview a pantalla completa, respetando el aspect ratio de la cámara
+          if (isReady)
+            Center(
+              child: AspectRatio(
+                aspectRatio: ctrl.value.aspectRatio,
+                child: CameraPreview(ctrl),
+              ),
+            )
+          else
+            const Center(child: CircularProgressIndicator(color: Colors.white54)),
+          // Visor QR: recuadro central con esquinas
+          if (_awaitingManualCapture)
+            _QrViewfinderOverlay(size: size),
+          // Controles inferiores
+          if (_awaitingManualCapture)
+            Positioned(
+              left: 0, right: 0, bottom: 48,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
+                    style: const TextStyle(color: Colors.white, fontSize: 14, shadows: [Shadow(blurRadius: 4, color: Colors.black)]),
                   ),
-              ],
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: _cancelManualCapture,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.white24)),
+                          child: const Text('Cancelar', style: TextStyle(color: Colors.white70, fontSize: 15)),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      GestureDetector(
+                        onTap: _triggerManualCapture,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.qr_code_scanner, color: Colors.black, size: 22),
+                              SizedBox(width: 10),
+                              Text('Capturar', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -1767,4 +1773,122 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
       corner(Alignment.bottomRight, const BorderRadius.only(bottomRight: Radius.circular(6))),
     ];
   }
+}
+
+/// Visor QR a pantalla completa: oscurece todo excepto el recuadro central
+/// donde el usuario debe enfocar el código QR.
+class _QrViewfinderOverlay extends StatelessWidget {
+  final Size size;
+  const _QrViewfinderOverlay({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    final boxSize = size.width * 0.65;
+    final left = (size.width - boxSize) / 2;
+    final top = (size.height - boxSize) / 2 - 40;
+
+    return Positioned.fill(
+      child: CustomPaint(
+        painter: _QrDimPainter(
+          cutoutRect: Rect.fromLTWH(left, top, boxSize, boxSize),
+        ),
+        child: Stack(
+          children: [
+            // Esquinas del visor
+            ..._corners(left, top, boxSize),
+            // Etiqueta
+            Positioned(
+              left: 0, right: 0,
+              top: top + boxSize + 16,
+              child: const Center(
+                child: Text(
+                  'Centra el código QR en el recuadro',
+                  style: TextStyle(color: Colors.white, fontSize: 14,
+                      shadows: [Shadow(blurRadius: 6, color: Colors.black)]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _corners(double left, double top, double boxSize) {
+    const arm = 24.0;
+    const thick = 3.0;
+    const r = 6.0;
+    const color = Colors.white;
+
+    Widget corner(double dx, double dy, bool mirrorX, bool mirrorY) {
+      return Positioned(
+        left: dx, top: dy,
+        child: Transform.scale(
+          scaleX: mirrorX ? -1 : 1,
+          scaleY: mirrorY ? -1 : 1,
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: arm, height: arm,
+            child: CustomPaint(painter: _CornerPainter(color: color, thick: thick, r: r)),
+          ),
+        ),
+      );
+    }
+
+    return [
+      corner(left, top, false, false),
+      corner(left + boxSize - arm, top, true, false),
+      corner(left, top + boxSize - arm, false, true),
+      corner(left + boxSize - arm, top + boxSize - arm, true, true),
+    ];
+  }
+}
+
+class _QrDimPainter extends CustomPainter {
+  final Rect cutoutRect;
+  _QrDimPainter({required this.cutoutRect});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.black.withValues(alpha: 0.55);
+    final full = Rect.fromLTWH(0, 0, size.width, size.height);
+    final path = Path()
+      ..addRect(full)
+      ..addRRect(RRect.fromRectAndRadius(cutoutRect, const Radius.circular(12)))
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(path, paint);
+    // Borde del recuadro
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(cutoutRect, const Radius.circular(12)),
+      Paint()..color = Colors.white54..style = PaintingStyle.stroke..strokeWidth = 1.5,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_QrDimPainter old) => old.cutoutRect != cutoutRect;
+}
+
+class _CornerPainter extends CustomPainter {
+  final Color color;
+  final double thick;
+  final double r;
+  const _CornerPainter({required this.color, required this.thick, required this.r});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = thick
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(0, r)
+      ..arcToPoint(Offset(r, 0), radius: Radius.circular(r))
+      ..lineTo(size.width, 0);
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_CornerPainter old) => false;
 }
