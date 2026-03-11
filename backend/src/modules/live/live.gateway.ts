@@ -164,6 +164,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 });
 
                 const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
+                client.emit('display_content', {
+                  type: 'file_scan',
+                  title: 'Analizando Fichero',
+                  items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }]
+                });
                 try {
                   const data = JSON.parse(vtResult);
                   this._emitVtReport(client, data, fileName);
@@ -282,6 +287,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               });
               
               const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName }, client.id);
+              client.emit('display_content', {
+                type: 'file_scan',
+                title: 'Analizando archivo...',
+                items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }],
+              });
               try {
                 const data = JSON.parse(vtResult);
                 this._emitVtReport(client, data, fileName);
@@ -537,7 +547,23 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // PRIORIDAD 2: Captura proactiva (ej. el usuario minimizó la app)
+    // PRIORIDAD 2: El usuario envió una imagen manualmente (botón de galería en la UI).
+    // Si viene con prompt 'analyze_image', instruir a Gemini para que la analice.
+    if (payload?.prompt === 'analyze_image') {
+      this.logger.log(`[Visión] Imagen manual recibida para análisis directo en ${client.id}`);
+      client.emit('display_content', {
+        type: 'file_scan',
+        title: 'Analizando Imagen',
+        items: [{ id: 'scan_progress', title: 'Imagen de Galería', description: 'Analizando con Gemini...' }]
+      });
+      session.sendClientContent([
+        { text: 'El usuario ha seleccionado esta imagen de su galería para que la analices en detalle. Descríbela, identifica cualquier amenaza de seguridad, URL sospechosa, QR, texto relevante o cualquier problema que detectes. Responde de forma clara y útil.' },
+        { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+      ], true);
+      return;
+    }
+
+    // PRIORIDAD 3: Captura proactiva (ej. el usuario minimizó la app)
     // Solo enviamos capturas proactivas si no estamos esperando una respuesta crítica.
     this.logger.log(`[Visión] Captura proactiva para ${client.id}`);
     session.sendClientContent([
