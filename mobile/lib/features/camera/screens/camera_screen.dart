@@ -147,6 +147,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (_) { await nextController.dispose(); }
   }
 
+  /// Cambia a cámara trasera, espera a que produzca frames reales y luego
+  /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
+  Future<void> _switchCameraForQr() async {
+    // Si ya está en trasera, reinicializar igualmente para garantizar frames frescos
+    if (_selectedLensDirection != CameraLensDirection.back) {
+      await _switchCamera(CameraLensDirection.back);
+    }
+    // Pequeña pausa para que el sensor produzca el primer frame visible
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (!mounted) return;
+    setState(() {
+      _showCameraPreview = true;
+      _awaitingManualCapture = true;
+      _manualCaptureCountdown = 30;
+    });
+  }
+
   Future<void> _startSession() async {
     try {
       if (!await _audio.hasPermission) { _showMessage('Necesito permiso de microfono'); return; }
@@ -174,13 +191,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
           if (source == 'camera') {
-            // Cambiar a cámara trasera, mostrar preview y esperar captura manual
-            await _switchCamera(CameraLensDirection.back);
-            setState(() {
-              _showCameraPreview = true;
-              _awaitingManualCapture = true;
-              _manualCaptureCountdown = 30;
-            });
+            // Cambiar a cámara trasera y esperar a que esté lista antes de mostrar preview
+            await _switchCameraForQr();
             _manualCaptureCompleter = Completer<String?>();
             // Countdown de 30s
             _manualCaptureTimer?.cancel();
