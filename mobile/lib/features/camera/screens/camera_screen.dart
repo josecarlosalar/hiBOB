@@ -304,46 +304,53 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _openGalleryPicker() async {
-    // Mostrar diálogo para elegir entre galería de imágenes o gestor de ficheros
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF111111),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('¿Qué quieres analizar?', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 20),
-              ListTile(
-                leading: const Icon(Icons.image_outlined, color: Colors.white70),
-                title: const Text('Imagen de la galería', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('JPG, PNG, etc.', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                onTap: () { Navigator.pop(ctx); _pickImageFromGallery(); },
-              ),
-              ListTile(
-                leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
-                title: const Text('Fichero del dispositivo', style: TextStyle(color: Colors.white)),
-                subtitle: const Text('PDF, APK, ZIP, EXE…', style: TextStyle(color: Colors.white38, fontSize: 12)),
-                onTap: () { Navigator.pop(ctx); _pickAnyFile(); },
-              ),
-            ],
+    // Marcar como abriendo galería ANTES del diálogo para evitar que la desconexión
+    // del WebSocket (al ir la app a background) cierre la sesión.
+    _openingGallery = true;
+    bool pickerChosen = false;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        backgroundColor: const Color(0xFF111111),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(32))),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('¿Qué quieres analizar?', style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(Icons.image_outlined, color: Colors.white70),
+                  title: const Text('Imagen de la galería', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('JPG, PNG, etc.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  onTap: () { pickerChosen = true; Navigator.pop(ctx); _pickImageFromGallery(); },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.folder_open_outlined, color: Colors.white70),
+                  title: const Text('Fichero del dispositivo', style: TextStyle(color: Colors.white)),
+                  subtitle: const Text('PDF, APK, ZIP, EXE…', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  onTap: () { pickerChosen = true; Navigator.pop(ctx); _pickAnyFile(); },
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } catch (_) {}
+    // Si el usuario cerró el bottom sheet sin elegir nada, restablecer la flag
+    if (!pickerChosen) _openingGallery = false;
   }
 
   Future<void> _pickImageFromGallery() async {
     try {
-      _openingGallery = true;
       final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
-      _openingGallery = false;
       if (image != null) {
         setState(() => _selectedGalleryImage = image);
         _showImageReviewDialog();
+      } else {
+        _openingGallery = false;
       }
     } catch (e) {
       _openingGallery = false;
@@ -353,16 +360,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _pickAnyFile() async {
     try {
-      _openingGallery = true;
       final result = await FilePicker.platform.pickFiles(
         type: FileType.any,
         withData: false,
         withReadStream: false,
       );
-      _openingGallery = false;
       if (result != null && result.files.isNotEmpty) {
         setState(() => _selectedFile = result.files.first);
         _showFileReviewDialog();
+      } else {
+        _openingGallery = false;
       }
     } catch (e) {
       _openingGallery = false;
@@ -410,7 +417,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () { setState(() => _selectedFile = null); Navigator.pop(ctx); },
+                      onPressed: () { _openingGallery = false; setState(() => _selectedFile = null); Navigator.pop(ctx); },
                       style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
                       child: const Text('Cancelar'),
                     ),
@@ -432,8 +439,36 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     );
   }
 
+  /// Garantiza que la sesión esté conectada. Si se desconectó mientras el usuario
+  /// estaba en la galería/ficheros, reconecta completamente la sesión.
+  Future<bool> _ensureConnected() async {
+    if (_liveSession.state == LiveSessionState.connected) return true;
+
+    // Intentar reconexión completa si la sesión se cayó durante la galería
+    if (_state != AssistantState.inactive) {
+      try {
+        final token = await ref.read(firebaseServiceProvider).getIdToken();
+        if (token == null) return false;
+        _liveSession.disconnect();
+        await Future.delayed(const Duration(milliseconds: 300));
+        await _liveSession.connect(token);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    // Esperar hasta 8s a que conecte
+    int retries = 16;
+    while (_liveSession.state != LiveSessionState.connected && retries > 0) {
+      await Future.delayed(const Duration(milliseconds: 500));
+      retries--;
+    }
+    return _liveSession.state == LiveSessionState.connected;
+  }
+
   Future<void> _sendFileToAssistant() async {
     if (_selectedFile == null) return;
+    _openingGallery = false;
     try {
       final file = _selectedFile!;
       if (file.path == null) { _showMessage('No se puede leer el fichero.'); return; }
@@ -446,12 +481,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
       final fileBase64 = base64Encode(bytes);
 
-      int retries = 12;
-      while (_liveSession.state != LiveSessionState.connected && retries > 0) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        retries--;
-      }
-      if (_liveSession.state != LiveSessionState.connected) {
+      if (!await _ensureConnected()) {
         _showMessage('Sin conexión con hiBOB. Intenta de nuevo.');
         return;
       }
@@ -484,7 +514,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 children: [
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () { setState(() => _selectedGalleryImage = null); Navigator.pop(context); },
+                      onPressed: () { _openingGallery = false; setState(() => _selectedGalleryImage = null); Navigator.pop(context); },
                       style: OutlinedButton.styleFrom(foregroundColor: Colors.white70, side: const BorderSide(color: Colors.white24)),
                       child: const Text('Cancelar'),
                     ),
@@ -508,17 +538,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _sendImageToAssistant() async {
     if (_selectedGalleryImage == null) return;
+    _openingGallery = false;
     try {
       final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
       final frameBase64 = base64Encode(bytes);
 
-      // Esperar hasta 6s a que el socket esté conectado (reconexión automática)
-      int retries = 12;
-      while (_liveSession.state != LiveSessionState.connected && retries > 0) {
-        await Future.delayed(const Duration(milliseconds: 500));
-        retries--;
-      }
-      if (_liveSession.state != LiveSessionState.connected) {
+      if (!await _ensureConnected()) {
         _showMessage('Sin conexión con hiBOB. Intenta de nuevo.');
         return;
       }
