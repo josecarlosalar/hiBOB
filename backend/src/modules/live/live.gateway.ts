@@ -29,7 +29,7 @@ interface FramePayload {
   cors: { origin: '*' },
   namespace: 'live',
   pingInterval: 25000,
-  pingTimeout: 20000,
+  pingTimeout: 30000,
 })
 export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -131,11 +131,45 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           toolCall.functionCalls.map(async (fc: any) => {
             // open_gallery: flujo NO bloqueante para evitar desconexión al entrar en background
             if (fc.name === 'open_gallery') {
-              // Marcamos que el próximo frame que llegue es de galería (para procesarlo en handleFrame)
+              this.logger.log(`[Herramienta] Esperando imagen de la galería para ${client.id}...`);
               client.data.awaitingGalleryFrame = true;
-              // Enviamos comando directo al cliente (no frame_request que bloquea el socket)
               client.emit('command', { action: 'open_gallery' });
-              return { name: fc.name, id: fc.id, response: { content: 'Galería abierta. El usuario seleccionará una imagen y te la enviaré para que la analices.' } };
+              
+              // Esperamos hasta 60s a que el usuario elija la imagen
+              const frame = await this._waitForFrame(client, 60000);
+              client.data.awaitingGalleryFrame = false;
+
+              if (!frame) {
+                return { 
+                  name: fc.name, 
+                  id: fc.id, 
+                  response: { content: 'El usuario no seleccionó ninguna imagen o tardó demasiado.' } 
+                };
+              }
+
+              // Mostramos en la UI para feedback visual inmediato
+              client.emit('display_content', {
+                type: 'detail',
+                title: 'Analizando Imagen',
+                items: [{
+                    id: 'analysis_frame',
+                    title: 'Imagen de Galería',
+                    description: 'Procesando imagen con IA...',
+                    imageUrl: `data:image/jpeg;base64,${frame}`
+                }]
+              });
+
+              // Enviamos la imagen como contenido para que Gemini la tenga disponible en el contexto
+              session.sendClientContent([
+                { text: 'Aquí tienes la imagen de la galería que solicitaste. Analízala para responder al usuario.' },
+                { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+              ]);
+
+              return { 
+                name: fc.name, 
+                id: fc.id, 
+                response: { content: 'Imagen recibida con éxito de la galería. Ya puedes verla y analizarla.' } 
+              };
             }
 
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
