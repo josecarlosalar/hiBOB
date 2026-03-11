@@ -586,7 +586,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _sendImageToAssistant() async {
     if (_selectedGalleryImage == null) return;
     try {
-      final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
+      final imagePath = _selectedGalleryImage!.path;
+      final bytes = await File(imagePath).readAsBytes();
       final frameBase64 = base64Encode(bytes);
 
       if (!await _ensureConnected()) {
@@ -595,8 +596,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
 
       _liveSession.sendFrame(frameBase64: frameBase64);
-      
-      // Mostrar overlay de progreso con preview de la imagen
+
+      // Mostrar overlay de progreso con la ruta local (no base64) para evitar destellos
       setState(() {
         _structuredContent = {
           'type': 'file_scan',
@@ -604,8 +605,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           'items': [{
             'id': 'scan_progress',
             'title': 'Imagen de Galería',
-            'description': 'Subiendo imagen a hiBOB...',
-            'imageUrl': 'data:image/jpeg;base64,$frameBase64',
+            'description': 'Enviando imagen a hiBOB...',
+            'localPath': imagePath,
           }]
         };
         _selectedGalleryImage = null;
@@ -2181,6 +2182,7 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
     const accent = Color(0xFF40C4FF);
     final item = widget.items.isNotEmpty ? widget.items.first as Map<String, dynamic> : null;
     final imgUrl = item?['imageUrl'] as String?;
+    final localPath = item?['localPath'] as String?;
     final fileName = item?['title'] as String? ?? 'Archivo';
     final description = item?['description'] as String? ?? 'Analizando...';
 
@@ -2204,12 +2206,14 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
           child: Stack(
             alignment: Alignment.center,
             children: [
-              if (imgUrl != null)
+              if (imgUrl != null || localPath != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(19),
-                  child: imgUrl.startsWith('data:')
-                      ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
-                      : Image.network(imgUrl, width: double.infinity, height: double.infinity, fit: BoxFit.cover),
+                  child: localPath != null
+                      ? Image.file(File(localPath), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
+                      : (imgUrl!.startsWith('data:')
+                          ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
+                          : Image.network(imgUrl, width: double.infinity, height: double.infinity, fit: BoxFit.cover)),
                 )
               else
                 Column(
