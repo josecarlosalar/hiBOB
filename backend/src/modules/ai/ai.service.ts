@@ -232,10 +232,6 @@ export class GeminiLiveSession extends EventEmitter {
           },
         },
       },
-      // Forzamos el idioma de transcripción y respuesta a español de España
-      generationConfig: {
-        language: 'es-ES',
-      },
       inputAudioTranscription: {
         model: 'models/speech-to-text',
       },
