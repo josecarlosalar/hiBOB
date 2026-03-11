@@ -307,7 +307,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         });
       }
     } else if (action == 'open_gallery') {
-      _openGalleryPicker();
+      final source = cmd['source'] as String?;
+      if (source == 'gallery') {
+        _openingGallery = true;
+        _pickImageFromGallery();
+      } else if (source == 'files') {
+        _openingGallery = true;
+        _pickAnyFile();
+      } else {
+        _openGalleryPicker();
+      }
     }
   }
 
@@ -593,6 +602,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         );
         if (image == null) return null;
         final bytes = await File(image.path).readAsBytes();
+        return base64Encode(bytes);
+      }
+
+      if (source == 'files') {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.any,
+          withData: false,
+          withReadStream: false,
+        );
+        if (result == null || result.files.isEmpty || result.files.first.path == null) return null;
+        final bytes = await File(result.files.first.path!).readAsBytes();
         return base64Encode(bytes);
       }
 
