@@ -81,7 +81,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
           '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
           '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
-          '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto" o "imagen" que quiere enseñarte. Es la opción preferida para analizar SMS o correos ya recibidos. ' +
+          '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto", "imagen" o "fichero" que quiere enseñarte. ' +
+          '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
+          '  - Usa el argumento { source: "files" } para documentos, PDFs o ficheros arbitrarios. ' +
+          '  Es la opción preferida para analizar SMS o correos ya recibidos. ' +
           '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
 
           'REGLA DE IDIOMA: Detecta automáticamente el idioma del usuario y responde SIEMPRE en ese mismo idioma. ' +
@@ -131,8 +134,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           toolCall.functionCalls.map(async (fc: any) => {
             // open_gallery: flujo para obtener imagen de la galería
             if (fc.name === 'open_gallery') {
-              this.logger.log(`[Herramienta] Solicitando imagen de la galería para ${client.id}...`);
-              client.emit('command', { action: 'open_gallery' });
+              const source = fc.args.source || 'gallery';
+              this.logger.log(`[Herramienta] Solicitando imagen/fichero (${source}) para ${client.id}...`);
+              client.emit('command', { action: 'open_gallery', source });
               
               // Esperamos hasta 60s a que el usuario elija la imagen
               const payload = await this._waitForFrame(client, 60000);
@@ -142,14 +146,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 return { 
                   name: fc.name, 
                   id: fc.id, 
-                  response: { content: 'El usuario no seleccionó ninguna imagen o tardó demasiado.' } 
+                  response: { content: 'El usuario no seleccionó ningún elemento o tardó demasiado.' } 
                 };
               }
 
               // Si viene con fileName es un fichero arbitrario → analizar con VirusTotal
               if (payload?.fileName) {
                 const fileName = payload.fileName;
-                this.logger.log(`[Fichero] Fichero recibido desde galería: ${fileName}`);
+                this.logger.log(`[Fichero] Fichero recibido: ${fileName}`);
                 client.emit('display_content', {
                   type: 'file_scan',
                   title: 'Analizando Fichero',
@@ -256,23 +260,33 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               return { name: fc.name, id: fc.id, response: { content: 'QR capturado. Analizando URL extraída con VirusTotal automáticamente.' } };
             }
 
-            // ── Scan File: solicita archivo desde galería y lo sube a VT ──
+            // ── Scan File: solicita archivo y lo sube a VT ──
             if (fc.name === 'scan_file') {
-              client.emit('frame_request', { source: 'gallery' });
-              const payload = await this._waitForFrame(client, 30000);
+              this.logger.log(`[Herramienta] Solicitando fichero para VirusTotal para ${client.id}...`);
+              client.emit('command', { action: 'open_gallery', source: 'files' });
+              
+              const payload = await this._waitForFrame(client, 60000);
               const fileFrame = payload?.frameBase64 || payload?.frame;
+              
               if (!fileFrame) {
-                return { name: fc.name, id: fc.id, response: { content: 'No se recibió el archivo.' } };
+                return { name: fc.name, id: fc.id, response: { content: 'No se recibió el archivo o el usuario canceló.' } };
               }
+              
+              const fileName = payload.fileName || fc.args.fileName || 'archivo';
               client.emit('display_content', {
                 type: 'file_scan',
                 title: 'Analizando archivo...',
-                items: [{ id: 'scan_progress', title: fc.args.fileName ?? 'archivo', description: 'Subiendo a VirusTotal...' }],
+                items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
               });
-              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName: fc.args.fileName ?? 'archivo' }, client.id);
-              const data = JSON.parse(vtResult);
-              this._emitVtReport(client, data, fc.args.fileName ?? 'archivo');
-              return { name: fc.name, id: fc.id, response: { content: `Análisis completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla.` } };
+              
+              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName }, client.id);
+              try {
+                const data = JSON.parse(vtResult);
+                this._emitVtReport(client, data, fileName);
+                return { name: fc.name, id: fc.id, response: { content: `Análisis de "${fileName}" completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla.` } };
+              } catch {
+                return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
+              }
             }
 
             // Feedback visual de "pensando" para herramientas de red
