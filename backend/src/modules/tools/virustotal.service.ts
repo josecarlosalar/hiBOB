@@ -16,8 +16,13 @@ export class VirusTotalService {
   private readonly baseHeaders: Record<string, string>;
 
   constructor(private configService: ConfigService) {
-    this.apiKey = this.configService.get<string>('VIRUSTOTAL_API_KEY') ?? '';
+    this.apiKey = (this.configService.get<string>('VIRUSTOTAL_API_KEY') ?? '').trim().replace(/[\r\n\t]/g, '');
     this.baseHeaders = { 'x-apikey': this.apiKey };
+    if (this.apiKey) {
+      this.logger.log(`VirusTotal API Key cargada (${this.apiKey.length} chars)`);
+    } else {
+      this.logger.warn('VIRUSTOTAL_API_KEY no configurada');
+    }
   }
 
   private notConfigured(): VirusTotalReport {

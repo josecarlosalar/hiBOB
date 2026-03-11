@@ -27,8 +27,8 @@ interface FramePayload {
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: 'live',
-  pingInterval: 10000,
-  pingTimeout: 5000,
+  pingInterval: 25000,
+  pingTimeout: 20000,
 })
 export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
