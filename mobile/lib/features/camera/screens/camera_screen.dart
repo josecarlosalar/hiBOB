@@ -255,23 +255,44 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   bool _shouldForwardAudioChunk() {
-    // Si el dispositivo está vibrando o el agente está hablando (en perfil "Evitar cortes"),
-    // bloqueamos el envío de audio para evitar auto-interrupciones accidentales.
+    // Si el dispositivo está vibrando, bloqueamos el audio para evitar el ruido del motor.
+    // YA NO BLOQUEAMOS el audio si el agente habla, para que Gemini Live pueda detectar el barge-in del servidor.
     if (_isVibrating) return false;
-    if (_agentAudioActive && _conversationProfile == 'Evitar cortes') return false;
     return true;
   }
 
   void _handleAmplitudeSample(Amplitude amp) {
     if (mounted) setState(() => _micAmplitudeDb = amp.current);
-    if (!_agentAudioActive || _isVibrating) return;
+    
+    // Ignoramos la interrupción local si está vibrando.
+    if (_isVibrating) return;
+
     final now = DateTime.now();
-    final graceElapsed = _agentSpeechStartedAt != null && now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs;
+    
+    // El "Grace Period" es el tiempo que ignoramos el audio tras empezar a hablar 
+    // para evitar que el primer frame del altavoz nos corte de inmediato.
+    final graceElapsed = _agentSpeechStartedAt != null 
+        ? now.difference(_agentSpeechStartedAt!).inMilliseconds >= _agentSpeechGraceMs
+        : true;
+    
     if (!graceElapsed) return;
-    if (amp.current >= _bargeInThresholdDb) {
+
+    // LÓGICA DE DETECCIÓN DINÁMICA:
+    // Si el agente está hablando, el umbral debe ser mayor para no cortarse con su propio eco.
+    double dynamicThreshold = _agentAudioActive 
+        ? _bargeInThresholdDb + 6.0  // Somos menos sensibles (necesitas hablar más fuerte que el eco)
+        : _vadThresholdDb;           // Muy sensibles cuando hay silencio
+
+    if (amp.current >= dynamicThreshold) {
       _bargeInStartedAt ??= now;
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 900 && _bargeInEnabled) _stopSpeaking();
-    } else { _bargeInStartedAt = null; }
+      // Reducimos el tiempo de confirmación a 400ms para que sea más reactivo
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 400 && _bargeInEnabled) {
+        debugPrint('[BargeIn] Interrupción local detectada (${amp.current} dB)');
+        _stopSpeaking();
+      }
+    } else {
+      _bargeInStartedAt = null;
+    }
   }
 
   void _markAgentSpeechActive() {
