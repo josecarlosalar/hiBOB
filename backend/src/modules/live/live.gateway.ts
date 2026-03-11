@@ -174,14 +174,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 }
               }
 
-              // Mostramos en la UI para feedback visual inmediato
+              // Mostramos en la UI para feedback visual inmediato con preview
               client.emit('display_content', {
-                type: 'detail',
+                type: 'file_scan',
                 title: 'Analizando Imagen',
                 items: [{
-                    id: 'analysis_frame',
+                    id: 'scan_progress',
                     title: 'Imagen de Galería',
-                    description: 'Procesando imagen con IA...',
+                    description: 'Enviando a motores de análisis...',
                     imageUrl: `data:image/jpeg;base64,${frame}`
                 }]
               });
@@ -195,7 +195,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               return { 
                 name: fc.name, 
                 id: fc.id, 
-                response: { content: 'Imagen recibida con éxito de la galería. Ya puedes verla y analizarla.' } 
+                response: { content: 'Análisis de imagen completado con éxito. Ya puedes verla y responder.' } 
               };
             }
 

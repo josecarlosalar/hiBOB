@@ -147,30 +147,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return null;
   }
 
-  Future<void> _switchCamera(CameraLensDirection lensDirection) async {
-    if (_selectedLensDirection == lensDirection) return;
+  Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false}) async {
+    if (!force && _selectedLensDirection == lensDirection && _cameraCtrl != null && _cameraCtrl!.value.isInitialized) return;
     final selectedCamera = _findCameraForLens(lensDirection);
     if (selectedCamera == null) return;
+    
+    // Dispose old one first to avoid 'Camera already in use' on some Androids
+    await _cameraCtrl?.dispose();
+    _cameraCtrl = null;
+    if (mounted) setState(() {});
+
     final nextController = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
     try {
       await nextController.initialize();
-      final old = _cameraCtrl;
       _cameraCtrl = nextController;
       _selectedLensDirection = lensDirection;
       if (mounted) setState(() {});
-      await old?.dispose();
     } catch (_) { await nextController.dispose(); }
   }
 
   /// Cambia a cámara trasera, espera a que produzca frames reales y luego
   /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
   Future<void> _switchCameraForQr() async {
-    // Si ya está en trasera, reinicializar igualmente para garantizar frames frescos
-    if (_selectedLensDirection != CameraLensDirection.back) {
-      await _switchCamera(CameraLensDirection.back);
-    }
-    // Pequeña pausa para que el sensor produzca el primer frame visible
-    await Future.delayed(const Duration(milliseconds: 400));
+    // Forzamos reinicialización para asegurar que el stream de frames esté activo
+    await _switchCamera(CameraLensDirection.back, force: true);
+    
+    // Pausa para que el hardware se asiente
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     setState(() {
       _showCameraPreview = true;
@@ -515,8 +518,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
 
       _liveSession.sendFrame(frameBase64: fileBase64, fileName: file.name);
-      _showMessage('Analizando fichero...');
-      setState(() => _selectedFile = null);
+      
+      // Mostrar overlay de progreso inmediatamente
+      setState(() {
+        _structuredContent = {
+          'type': 'file_scan',
+          'title': 'Analizando Fichero',
+          'items': [{
+            'id': 'scan_progress',
+            'title': file.name,
+            'description': 'Subiendo archivo a hiBOB...',
+          }]
+        };
+        _selectedFile = null;
+      });
       _openingGallery = false;
     } catch (e) {
       _openingGallery = false;
@@ -580,8 +595,21 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
 
       _liveSession.sendFrame(frameBase64: frameBase64);
-      _showMessage('Analizando imagen...');
-      setState(() => _selectedGalleryImage = null);
+      
+      // Mostrar overlay de progreso con preview de la imagen
+      setState(() {
+        _structuredContent = {
+          'type': 'file_scan',
+          'title': 'Analizando Imagen',
+          'items': [{
+            'id': 'scan_progress',
+            'title': 'Imagen de Galería',
+            'description': 'Subiendo imagen a hiBOB...',
+            'imageUrl': 'data:image/jpeg;base64,$frameBase64',
+          }]
+        };
+        _selectedGalleryImage = null;
+      });
       // Solo liberamos la flag de "galería" tras enviar con éxito
       _openingGallery = false;
     } catch (e) {
@@ -812,36 +840,58 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-                    child: Text(
-                      'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Text(
+                          'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       _CircleButton(icon: Icons.close, onTap: _cancelManualCapture),
-                      const SizedBox(width: 40),
+                      const SizedBox(width: 32),
+                      // Botón de captura estilizado
                       GestureDetector(
                         onTap: _triggerManualCapture,
                         child: Container(
-                          width: 72, height: 72,
+                          width: 84, height: 84,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
+                            border: Border.all(color: Colors.white70, width: 4),
                           ),
                           child: Center(
-                            child: Container(width: 54, height: 54, decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white)),
+                            child: Container(
+                              width: 66, height: 66,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(
+                                  colors: [Colors.white, Color(0xFFE0E0E0)],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                                boxShadow: [BoxShadow(color: Colors.white38, blurRadius: 12, spreadRadius: 1)],
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 40),
+                      const SizedBox(width: 32),
                       _CircleButton(
-                        icon: ctrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off,
+                        icon: ctrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on_rounded : Icons.flashlight_off_rounded,
                         onTap: _toggleFlashLocally,
                       ),
                     ],
@@ -2120,7 +2170,7 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
   void initState() {
     super.initState();
     initSecurityAnims();
-    _scanLineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat();
+    _scanLineCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2000))..repeat();
   }
 
   @override
@@ -2131,76 +2181,141 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
     const accent = Color(0xFF40C4FF);
     final item = widget.items.isNotEmpty ? widget.items.first as Map<String, dynamic> : null;
     final imgUrl = item?['imageUrl'] as String?;
+    final fileName = item?['title'] as String? ?? 'Archivo';
+    final description = item?['description'] as String? ?? 'Analizando...';
 
     return overlayShell(accent: accent, children: [
       overlayHeader(
-        icon: Icons.qr_code_scanner_rounded,
+        icon: Icons.security_rounded,
         badge: 'ESCÁNER DE SEGURIDAD',
         title: widget.title,
         accent: accent,
       ),
-      if (imgUrl != null)
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+        child: Container(
+          width: double.infinity,
+          height: 180,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
           child: Stack(
             alignment: Alignment.center,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(14),
-                child: imgUrl.startsWith('data:')
-                    ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: 160, fit: BoxFit.cover)
-                    : Image.network(imgUrl, width: double.infinity, height: 160, fit: BoxFit.cover),
-              ),
-              // Línea de escaneo animada sobre la imagen
+              if (imgUrl != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(19),
+                  child: imgUrl.startsWith('data:')
+                      ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
+                      : Image.network(imgUrl, width: double.infinity, height: double.infinity, fit: BoxFit.cover),
+                )
+              else
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.insert_drive_file_rounded, color: accent.withValues(alpha: 0.5), size: 64),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Text(fileName, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold), textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
+              
+              // Capa de escaneo
               AnimatedBuilder(
                 animation: _scanLineCtrl,
                 builder: (_, __) => Positioned(
-                  top: _scanLineCtrl.value * 140,
+                  top: _scanLineCtrl.value * 180 - 2,
                   left: 0, right: 0,
                   child: Container(
-                    height: 2,
+                    height: 3,
                     decoration: BoxDecoration(
+                      boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.8), blurRadius: 10, spreadRadius: 2)],
                       gradient: LinearGradient(colors: [Colors.transparent, accent.withValues(alpha: 0.9), Colors.transparent]),
                     ),
                   ),
                 ),
               ),
-              // Esquinas del escáner
+              
+              // Esquinas
               ..._buildScanCorners(accent),
             ],
           ),
         ),
+      ),
       Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: [
-          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(accent))),
-          const SizedBox(width: 12),
-          Text(item?['description'] as String? ?? 'Analizando...', style: const TextStyle(color: Colors.white60, fontSize: 13)),
-        ]),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation(accent.withValues(alpha: 0.8))),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(description, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      const Text('Conectando con VirusTotal API...', style: TextStyle(color: Colors.white38, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // Pasos simulados o reales del proceso
+            _buildProcessStep(Icons.cloud_upload_outlined, 'Subida a hiBOB', true),
+            _buildProcessStep(Icons.biometric_view_rounded, 'Extracción de firma', description.contains('VT') || description.contains('Análisis')),
+            _buildProcessStep(Icons.Analytics_outlined, 'Veredicto motores VT', description.contains('completado')),
+          ],
+        ),
       ),
       overlayCloseButton(widget.onClose),
     ]);
   }
 
+  Widget _buildProcessStep(IconData icon, String label, bool active) {
+    final color = active ? const Color(0xFF40C4FF) : Colors.white12;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: active ? Colors.white70 : Colors.white24, fontSize: 12)),
+          const Spacer(),
+          if (active) Icon(Icons.check_circle_rounded, size: 14, color: color),
+        ],
+      ),
+    );
+  }
+
   List<Widget> _buildScanCorners(Color accent) {
-    const size = 20.0;
-    const thick = 3.0;
-    Widget corner(AlignmentGeometry align, BorderRadius br) => Positioned.fill(
+    const size = 24.0;
+    const thick = 3.5;
+    Widget corner(AlignmentGeometry align) => Positioned.fill(
       child: Align(alignment: align, child: Container(
         width: size, height: size,
         decoration: BoxDecoration(border: Border(
-          top: align == Alignment.topLeft || align == Alignment.topRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
-          bottom: align == Alignment.bottomLeft || align == Alignment.bottomRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
-          left: align == Alignment.topLeft || align == Alignment.bottomLeft ? BorderSide(color: accent, width: thick) : BorderSide.none,
-          right: align == Alignment.topRight || align == Alignment.bottomRight ? BorderSide(color: accent, width: thick) : BorderSide.none,
-        ), borderRadius: br),
+          top: (align == Alignment.topLeft || align == Alignment.topRight) ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          bottom: (align == Alignment.bottomLeft || align == Alignment.bottomRight) ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          left: (align == Alignment.topLeft || align == Alignment.bottomLeft) ? BorderSide(color: accent, width: thick) : BorderSide.none,
+          right: (align == Alignment.topRight || align == Alignment.bottomRight) ? BorderSide(color: accent, width: thick) : BorderSide.none,
+        )),
       )),
     );
     return [
-      corner(Alignment.topLeft, const BorderRadius.only(topLeft: Radius.circular(6))),
-      corner(Alignment.topRight, const BorderRadius.only(topRight: Radius.circular(6))),
-      corner(Alignment.bottomLeft, const BorderRadius.only(bottomLeft: Radius.circular(6))),
-      corner(Alignment.bottomRight, const BorderRadius.only(bottomRight: Radius.circular(6))),
+      corner(Alignment.topLeft),
+      corner(Alignment.topRight),
+      corner(Alignment.bottomLeft),
+      corner(Alignment.bottomRight),
     ];
   }
 }
@@ -2346,7 +2461,8 @@ class _QrViewfinderOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final boxSize = size.width * 0.65;
     final left = (size.width - boxSize) / 2;
-    final top = (size.height - boxSize) / 2; // Centrado exacto
+    // Centrado visual: un poco más arriba para compensar la barra de controles inferior
+    final top = (size.height - boxSize) / 2 - 40;
 
     return Positioned.fill(
       child: CustomPaint(
@@ -2397,10 +2513,14 @@ class _QrViewfinderOverlay extends StatelessWidget {
     }
 
     return [
+      // Top Left: No mirroring, starts at (left, top)
       corner(left, top, false, false),
-      corner(left + boxSize - arm, top, true, false),
-      corner(left, top + boxSize - arm, false, true),
-      corner(left + boxSize - arm, top + boxSize - arm, true, true),
+      // Top Right: Flipped on X. To end at (left+boxSize), must start at (left+boxSize)
+      corner(left + boxSize, top, true, false),
+      // Bottom Left: Flipped on Y. To end at (top+boxSize), must start at (top+boxSize)
+      corner(left, top + boxSize, false, true),
+      // Bottom Right: Flipped on X and Y.
+      corner(left + boxSize, top + boxSize, true, true),
     ];
   }
 }
