@@ -1,5 +1,5 @@
-name: gemini_agent
-description: "A new Flutter project."
+name: hibob
+description: "hiBOB Cybersecurity AI Application"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -75,7 +75,9 @@ dependency_overrides:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/app_icon.png"
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logo.png"
   min_sdk_android: 21
   web:
     generate: false
