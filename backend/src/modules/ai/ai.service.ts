@@ -238,7 +238,18 @@ export class GeminiLiveSession extends EventEmitter {
       },
       inputAudioTranscription: {
         model: 'models/speech-to-text',
-      }, 
+      },
+      // Reducir sensibilidad del VAD servidor para evitar que el eco del altavoz
+      // sea interpretado como interrupción del usuario.
+      realtimeInputConfig: {
+        automaticActivityDetection: {
+          disabled: false,
+          startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+          endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+          prefixPaddingMs: 300,
+          silenceDurationMs: 600,
+        },
+      },
     };
 
     try {
