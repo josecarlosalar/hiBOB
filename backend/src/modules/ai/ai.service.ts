@@ -31,8 +31,17 @@ const GET_LOCATION_FUNCTION: FunctionDeclaration = {
 
 const DESCRIBE_VISION_FUNCTION: FunctionDeclaration = {
   name: 'describe_camera_view',
-  description: 'Describe lo que ve la cámara frontal o trasera.',
-  parameters: { type: Type.OBJECT, properties: {} },
+  description: 'Mira y analiza lo que hay frente a la cámara (trasera o frontal). Usa esta herramienta automáticamente cuando el usuario te pida ver algo de su entorno, analizar un objeto físico, o mirarle a él.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      direction: {
+        type: Type.STRING,
+        enum: ['front', 'back'],
+        description: 'La lente a usar. Usa "back" para ver objetos externos/entorno y "front" para ver al usuario frontalmente. Si no estás seguro, omite este parámetro.'
+      }
+    }
+  },
 };
 
 const TOGGLE_FLASHLIGHT_FUNCTION: FunctionDeclaration = {
@@ -445,19 +454,20 @@ export class AiService implements OnModuleInit {
     if (name === 'analyze_security_url') {
       const rep = await this.virusTotalService.analyzeUrl(args.url);
       
-      // Mejora: si VT dice que es seguro o sospechoso (poco claro), cruzamos con búsqueda web
-      // para detectar reportes de phishing muy nuevos.
-      if (rep.status === 'safe' || rep.status === 'suspicious') {
-        const searchRes = await this.braveSearchService.search(`"${args.url}" phishing scam report`);
-        const recentReports = searchRes.map(r => r.content).join('\n').slice(0, 500);
-        if (recentReports.length > 50) {
-          rep.details = JSON.stringify({
-            ...JSON.parse(rep.details),
-            web_search_context: `Búsqueda web encontró información adicional: ${recentReports}`
-          });
-        }
+      // Realizamos SIEMPRE una búsqueda web cruzada para dar contexto unificado de internet y VT
+      let recentReports = '';
+      try {
+        const hostname = new URL(args.url).hostname || args.url;
+        const searchRes = await this.braveSearchService.search(`"${hostname}" opiniones OR scam OR phishing report`);
+        recentReports = searchRes.map(r => r.content).join(' | ').slice(0, 800);
+      } catch (e: any) {
+        this.logger.error(`Error buscando info web de URL: ${e.message}`);
       }
-      return rep.details || JSON.stringify({ positives: rep.positives, total: rep.total, url: args.url });
+
+      const detailsObj = rep.details ? JSON.parse(rep.details) : { positives: rep.positives, total: rep.total, url: args.url };
+      detailsObj.internet_context = recentReports ? `Lo que se dice en Internet sobre esta web: ${recentReports}` : 'No hay quejas o reportes recientes destacables en la web abierta.';
+      
+      return JSON.stringify(detailsObj);
     }
 
     if (name === 'analyze_ip') {
