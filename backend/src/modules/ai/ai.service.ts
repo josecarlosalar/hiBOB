@@ -220,13 +220,18 @@ export class GeminiLiveSession extends EventEmitter {
         }] 
       },
       tools: AGENT_TOOLS,
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: 'Puck', // Voz estable para español
+      generationConfig: {
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: 'Puck', // Voz estable para español
+            },
           },
         },
       },
+      automaticActivityDetection: {
+        disabled: true,
+      }
     };
 
     try {
@@ -279,6 +284,20 @@ export class GeminiLiveSession extends EventEmitter {
     try {
       this.session.sendRealtimeInput({ audio: { mimeType, data: base64Audio } as any });
     } catch (e) { this.logger.error(`Error enviando audio: ${e.message}`); }
+  }
+
+  /**
+   * Envía una señal manual de inicio de actividad para interrumpir al agente.
+   */
+  async sendActivityStart() {
+    if (this.closed || !this.session) return;
+    try {
+      // En @google/genai v1.0.0, se envía RealtimeInput para señalizar actividad manual
+      await this.session.send({ realtimeInput: { activityStart: {} } });
+      this.logger.log('Enviada señal manual de ActivityStart (Interrupción)');
+    } catch (e) {
+      this.logger.error(`Error al enviar ActivityStart: ${e.message}`);
+    }
   }
 
   sendImageFrame(base64Image: string, mimeType = 'image/jpeg') {

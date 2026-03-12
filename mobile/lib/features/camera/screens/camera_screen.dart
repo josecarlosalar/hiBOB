@@ -266,33 +266,63 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // 2. Hold-off post-playback: esperar a que el eco del altavoz decaiga
     //    antes de reanudar el envío del micrófono a Gemini.
     if (_inEchoHoldOff) return false;
+
+    // 3. Si el agente está hablando, solo enviamos audio si supera el umbral de barge-in.
+    // Esto permite que el usuario interrumpa pero evita que el propio eco del agente 
+    // provoque una auto-interrupción accidental.
+    if (_agentAudioActive || _state == AssistantState.speaking) {
+      return _micAmplitudeDb >= _bargeInThresholdDb;
+    }
+
     return true;
   }
 
+  bool _manualActivitySignaled = false; // Evita enviar múltiples señales por el mismo turno de habla
+
   void _handleAmplitudeSample(Amplitude amp) {
     if (mounted) setState(() => _micAmplitudeDb = amp.current);
-    
-    // Si el agente está en modo habla, desactivamos el VAD local para evitar cortes por eco.
-    if (_state == AssistantState.speaking || _agentAudioActive || _isVibrating) return;
+    if (_isVibrating) return;
 
     final now = DateTime.now();
+    final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking;
     
-    if (amp.current >= _vadThresholdDb) {
+    // Umbral dinámico agresivo mientras el agente habla para ignorar su eco.
+    // -15dB es un nivel de voz humana fuerte cerca del micrófono.
+    final threshold = isAgentTalking ? -15.0 : _vadThresholdDb;
+    final requiredDurationMs = isAgentTalking ? 300 : 350;
+
+    if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= 350 && _bargeInEnabled) {
-        _setStateIfMounted(AssistantState.listening);
+      if (now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs && _bargeInEnabled) {
+        // En modo manual, notificamos al backend el inicio de actividad si no lo hemos hecho ya.
+        if (!_manualActivitySignaled) {
+          debugPrint('[VAD] Actividad manual detectada (> $threshold dB por ${requiredDurationMs}ms)');
+          _liveSession.sendActivityStart();
+          _manualActivitySignaled = true;
+          
+          // Si el agente NO está hablando, forzamos el estado visual a listening.
+          // Si SÍ está hablando, Gemini nos interrumpirá y el estado cambiará vía socket.
+          if (!isAgentTalking) _setStateIfMounted(AssistantState.listening);
+        }
       }
     } else {
       _bargeInStartedAt = null;
+      // Resetear la señal cuando el volumen baja (fin de frase del usuario)
+      if (amp.current < _vadThresholdDb - 5) {
+        _manualActivitySignaled = false;
+      }
     }
   }
 
   void _markAgentSpeechActive() {
     _agentSpeechStartedAt ??= DateTime.now();
     _agentAudioActive = true;
-    _inEchoHoldOff = true;
-    // Cancelar cualquier hold-off previo mientras sigan llegando chunks
+    
+    // Al empezar a recibir audio del agente, nos aseguramos de que el hold-off 
+    // esté desactivado para permitir interrupciones (barge-in).
     _echoHoldOffTimer?.cancel();
+    _inEchoHoldOff = false;
+
     _agentSpeechIdleTimer?.cancel();
     _agentSpeechIdleTimer = Timer(const Duration(milliseconds: 7000), _handleAgentSpeechEnded);
   }
@@ -301,11 +331,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _agentSpeechIdleTimer?.cancel();
     _agentAudioActive = false;
     if (_state != AssistantState.inactive) _setStateIfMounted(AssistantState.listening);
-    // Mantener hold-off ~250 ms adicionales para que el eco residual del
-    // altavoz decaiga antes de que Gemini vuelva a recibir audio del micro.
+    
+    // Activar hold-off SOLO al terminar de hablar para evitar que el eco final
+    // residual del altavoz sea interpretado como una nueva interrupción.
     _echoHoldOffTimer?.cancel();
-    _echoHoldOffTimer = Timer(const Duration(milliseconds: 250), () {
-      _inEchoHoldOff = false;
+    _inEchoHoldOff = true;
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) setState(() => _inEchoHoldOff = false);
     });
   }
 
