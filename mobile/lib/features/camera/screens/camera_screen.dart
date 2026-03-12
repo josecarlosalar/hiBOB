@@ -36,10 +36,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   
   static const String _settingsFileName = 'conversation_settings.json';
   
-  static const double _defaultVadThresholdDb = -55.0;
-  static const double _defaultBargeInThresholdDb = -15.0;
+  static const double _defaultVadThresholdDb = -50.0;
+  static const double _defaultBargeInThresholdDb = -1.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultAgentSpeechGraceMs = 1200;
+  static const int _defaultAgentSpeechGraceMs = 1500;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -289,7 +289,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Umbral dinámico de seguridad extrema contra eco.
     // -4 dB es un nivel muy alto, solo voz cercana lo activa.
     final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
-    final requiredDurationMs = isAgentTalking ? 800 : 350;
+    final requiredDurationMs = isAgentTalking ? 1500 : 350;
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
@@ -337,9 +337,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = true;
     
-    // Incrementamos el tiempo de espera a 800ms para asegurar que el buffer de hardware
+    // Incrementamos el tiempo de espera a 1500ms para asegurar que el buffer de hardware
     // se ha vaciado completamente y el eco ha desaparecido de la sala.
-    _echoHoldOffTimer = Timer(const Duration(milliseconds: 800), () {
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _inEchoHoldOff = false);
     });
   }

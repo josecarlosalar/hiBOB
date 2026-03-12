@@ -227,10 +227,11 @@ export class GeminiLiveSession extends EventEmitter {
           },
         },
       },
-      automaticActivityDetection: {
-        disabled: true,
+      voiceActivityDetection: {
+        automaticActivityDetection: {
+          disabled: true,
+        },
       },
-      inputAudioTranscription: {}, // Habilitar sincronización de turnos
     };
 
     try {
@@ -240,7 +241,10 @@ export class GeminiLiveSession extends EventEmitter {
         callbacks: {
           onmessage: (msg: any) => {
             // Log para ver si recibimos algo del modelo
-            if (msg.serverContent) this.logger.log('Recibido contenido del servidor Gemini');
+            if (msg.serverContent) {
+              const { turnComplete, interrupted } = msg.serverContent;
+              this.logger.log(`[Servidor] Contenido Recibido (turnComplete=${turnComplete}, interrupted=${interrupted})`);
+            }
             this._handleSdkMessage(msg);
           },
           onerror: (err: any) => { 
@@ -273,7 +277,10 @@ export class GeminiLiveSession extends EventEmitter {
         }
       }
       if (turnComplete) this.emit('done');
-      if (interrupted) this.emit('interruption');
+      if (interrupted) {
+        this.logger.warn('[Gemini] Interrupción detectada por el servidor');
+        this.emit('interruption');
+      }
     }
     if (msg.toolCall) this.emit('tool_call', msg.toolCall);
   }
