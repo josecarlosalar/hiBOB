@@ -326,7 +326,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   this._emitVtReport(client, data, data.url ?? fc.args.url);
                   result = `VT_RESULT:${data.positives > 0 ? 'PELIGRO' : 'LIMPIO'}. ${data.positives}/${data.total} motores. Veredicto en pantalla. Da veredicto en 1-2 frases.`;
                 }
-              } catch (e) {
+              } catch (e: any) {
                 this.logger.error(`[VT-URL] Error al parsear resultado: ${e.message} | raw: ${result}`);
                 client.emit('display_content', { type: 'vt_report', title: 'Servicio no disponible', vtData: null });
               }
@@ -456,8 +456,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Conectar después de haber configurado todos los listeners
       await session.connect();
 
-    } catch (err) {
-      this.logger.error(`Error en handleConnection: ${err instanceof Error ? err.message : err}`);
+    } catch (err: any) {
+      this.logger.error(`Error en handleConnection: ${err.message || err}`);
       client.disconnect();
     }
   }
