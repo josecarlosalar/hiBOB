@@ -80,7 +80,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
           'PRESENTACIÓN DE CAPACIDADES VISUALES (CRÍTICO): ' +
           'Si el usuario te pregunta "cómo puedes ayudarme", "qué sabes hacer", "explícame qué haces" o similares, DEBES usar OBLIGATORIAMENTE la herramienta "display_content" al mismo tiempo que inicias tu respuesta de voz. ' +
-          'Llama a "display_content" con el argumento { "type": "features_slider", "title": "Mis Capacidades" } y añade al menos 4 "items" interactivos que describan tus funciones principales (ej: Análisis VirusTotal, Revisión de Contraseñas Filtradas, Protección de Red, Modo Copiloto). ' +
+          'Llama a "display_content" con el argumento { "type": "features_slider", "title": "Mis Capacidades" } y añade al menos 4 "items" interactivos asegurándote de rellenar los campos "id", "title", y "description" de cada uno detallando tus funciones (ej: Análisis VirusTotal, Revisión de Contraseñas Filtradas, Protección de Red, Modo Copiloto). ' +
           'Mientras envías el comando visual, explica por voz y con detalle TODO lo que puedes hacer usando tu acceso a VirusTotal, Have I Been Pwned y la búsqueda web. Esto generará un carrusel slider en pantalla sincronizado con tu voz. ' +
 
           'REGLAS CRÍTICAS DE SEGURIDAD: ' +
@@ -103,6 +103,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '  - Usa el argumento { source: "files" } para documentos, PDFs o ficheros arbitrarios. ' +
           '  Es la opción preferida para analizar SMS o correos ya recibidos. ' +
           '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
+          '• toggle_flashlight → Úsala cuando el usuario te pida encender (enabled: true) o apagar (enabled: false) la luz / linterna del móvil. ' +
+          '• switch_camera → Úsala para cambiar entre la cámara delantera (front) y trasera (back). ' +
+          '• trigger_haptic_feedback → Úsala para hacer vibrar el teléfono del usuario en momentos clave de peligro o alertas. ' +
 
           'FLUJO DE SEGURIDAD: Cuando el usuario mencione un enlace, IP, dominio o archivo sospechoso, ACTÚA inmediatamente con la herramienta correspondiente sin pedir permiso. ' +
           'Cuando veas una URL en pantalla, analízala con analyze_security_url. ' +
@@ -195,7 +198,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 }
               }
 
-              // Mostramos en la UI para feedback visual inmediato (sin base64 para evitar destellos)
+              // Mostramos en la UI para feedback visual inmediato (sin base64 gigante para evitar que Flutter colapse o se caiga el WebSocket)
               client.emit('display_content', {
                 type: 'file_scan',
                 title: 'Analizando Imagen',
@@ -203,7 +206,6 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                     id: 'scan_progress',
                     title: 'Imagen de Galería',
                     description: 'Enviando imagen a Gemini para su diagnóstico...',
-                    imageUrl: `data:image/jpeg;base64,${frame}`
                 }]
               });
 
@@ -570,7 +572,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       client.emit('display_content', {
         type: 'file_scan',
         title: 'Analizando Imagen',
-        items: [{ id: 'scan_progress', title: 'Imagen de Galería', description: 'Obteniendo diagnóstico del agente...', imageUrl: `data:image/jpeg;base64,${frame}` }]
+        items: [{ id: 'scan_progress', title: 'Imagen de Galería', description: 'Obteniendo diagnóstico del agente...' }]
       });
       session.sendClientContent([
         { text: 'El usuario te ha enviado esta imagen para que la analices. Descríbela e identifica cualquier amenaza (URLs, estafas, datos sensibles). IMPORTANTE: Usa SIEMPRE la herramienta "display_content" para actualizar la UI del usuario con tu diagnóstico final; de lo contrario, la interfaz se quedará cargando.' },
