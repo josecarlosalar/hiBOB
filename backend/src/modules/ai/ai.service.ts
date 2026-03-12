@@ -311,10 +311,20 @@ export class GeminiLiveSession extends EventEmitter {
     if (this.closed || !this.session) return;
     try {
       // En @google/genai v1.0.0, se envía RealtimeInput para señalizar actividad manual
-      await this.session.send({ realtimeInput: { activityStart: {} } });
+      await this.session.send({ realtimeInput: { activity_start: {} } as any });
       this.logger.log('Enviada señal manual de ActivityStart (Interrupción)');
     } catch (e: any) {
       this.logger.error(`Error al enviar ActivityStart: ${e.message}`);
+    }
+  }
+
+  async sendActivityEnd() {
+    if (this.closed || !this.session) return;
+    try {
+      await this.session.send({ realtimeInput: { activity_end: {} } as any });
+      this.logger.log('Enviada señal manual de ActivityEnd');
+    } catch (e: any) {
+      this.logger.error(`Error al enviar ActivityEnd: ${e.message}`);
     }
   }
 

@@ -601,6 +601,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('activity_end')
+  handleActivityEnd(@ConnectedSocket() client: Socket) {
+    const session = client.data.geminiSession as GeminiLiveSession;
+    if (session && !session.isClosed()) {
+      this.logger.log(`[VAD Manual] Recibida señal de fin de actividad del cliente ${client.id}`);
+      session.sendActivityEnd();
+    }
+  }
+
   @SubscribeMessage('update_settings')
   async handleUpdateSettings(@MessageBody() settings: any, @ConnectedSocket() client: Socket) {
     const uid = client.data.uid;
