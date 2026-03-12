@@ -56,7 +56,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _silenceMs = _defaultSilenceMs;
   int _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
   String _conversationProfile = 'Equilibrado';
-  String _selectedVoice = 'Puck';
 
   StreamSubscription<String>? _audioStreamSub;
   StreamSubscription<Amplitude>? _amplitudeSub;
@@ -243,7 +242,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       ]);
 
       await hiBOBBackgroundService.startForeground();
-      await _liveSession.connect(token, voiceName: _selectedVoice);
+      await _liveSession.connect(token);
       unawaited(_startLocationUpdates());
     } catch (e) { _stopSession(); _showMessage('Error al iniciar: $e'); }
   }
@@ -353,7 +352,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final action = cmd['action'] as String?;
     if (action == 'flashlight') {
       final enabled = cmd['enabled'] as bool? ?? false;
-      await _setFlashlight(enabled);
+      try { if (enabled) await TorchLight.enableTorch(); else await TorchLight.disableTorch(); } catch (_) {}
     } else if (action == 'switch_camera') {
       await _switchCamera(cmd['direction'] == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'vibrate') {
@@ -533,7 +532,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         if (token == null) return false;
         _liveSession.disconnect();
         await Future.delayed(const Duration(milliseconds: 300));
-        await _liveSession.connect(token, voiceName: _selectedVoice);
+        await _liveSession.connect(token);
       } catch (_) {
         return false;
       }
@@ -763,20 +762,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
   }
 
-  Future<void> _setFlashlight(bool enable) async {
-    if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return;
-    try {
-      await _cameraCtrl!.setFlashMode(enable ? FlashMode.torch : FlashMode.off);
-      if (mounted) setState(() {});
-    } catch (e) {
-      debugPrint('[Flashlight] Error: $e');
-      // Fallback de emergencia
-      try {
-        if (enable) await TorchLight.enableTorch(); else await TorchLight.disableTorch();
-      } catch (_) {}
-    }
-  }
-
   void _showMessage(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -784,8 +769,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _toggleFlashLocally() async {
     if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return;
-    final isCurrentlyOn = _cameraCtrl!.value.flashMode == FlashMode.torch;
-    await _setFlashlight(!isCurrentlyOn);
+    final newMode = _cameraCtrl!.value.flashMode == FlashMode.torch ? FlashMode.off : FlashMode.torch;
+    await _cameraCtrl!.setFlashMode(newMode);
+    setState(() {});
   }
 
   Future<void> _signOut() async { _stopSession(); await ref.read(firebaseServiceProvider).signOut(); }
@@ -1219,17 +1205,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _applyConversationProfile(String profile) {
     _conversationProfile = profile;
     if (profile == 'Evitar cortes') { 
-      _vadThresholdDb = -64; 
-      _bargeInThresholdDb = -4.0; // Nivel máximo de seguridad
+      _vadThresholdDb = -66; 
       _agentSpeechGraceMs = 1500;
     } else if (profile == 'Interrupcion facil') { 
       _vadThresholdDb = -68; 
-      _bargeInThresholdDb = -16.0; // Más sensible, para entornos silenciosos
+      _bargeInThresholdDb = -18;
       _agentSpeechGraceMs = 600;
     } else { 
-      // Equilibrado
       _vadThresholdDb = _defaultVadThresholdDb; 
-      _bargeInThresholdDb = -9.0; // Nivel intermedio seguro
+      _bargeInThresholdDb = _defaultBargeInThresholdDb;
       _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
     }
   }
@@ -1253,26 +1237,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             const SizedBox(height: 24),
             _SettingSlider(label: 'Sensibilidad VAD', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: -30, divisions: 50, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
             _SettingSlider(label: 'Umbral Interrupción', valueLabel: '${_bargeInThresholdDb.toInt()} dB', value: _bargeInThresholdDb, min: -50, max: 0, divisions: 50, onChanged: (v) => updateSettings(() => _bargeInThresholdDb = v)),
-            const SizedBox(height: 24),
-            const Text('Voz del Asistente', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              _VoiceChip(label: 'Puck', isSelected: _selectedVoice == 'Puck', onTap: () => updateSettings(() => _selectedVoice = 'Puck')),
-              _VoiceChip(label: 'Charon', isSelected: _selectedVoice == 'Charon', onTap: () => updateSettings(() => _selectedVoice = 'Charon')),
-              _VoiceChip(label: 'Kore', isSelected: _selectedVoice == 'Kore', onTap: () => updateSettings(() => _selectedVoice = 'Kore')),
-              _VoiceChip(label: 'Fenrir', isSelected: _selectedVoice == 'Fenrir', onTap: () => updateSettings(() => _selectedVoice = 'Fenrir')),
-              _VoiceChip(label: 'Aoide', isSelected: _selectedVoice == 'Aoide', onTap: () => updateSettings(() => _selectedVoice = 'Aoide')),
-            ]),
-            ])));
-            const Text('Voz del Asistente', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              _VoiceChip(label: 'Puck', isSelected: _selectedVoice == 'Puck', onTap: () => updateSettings(() => _selectedVoice = 'Puck')),
-              _VoiceChip(label: 'Charon', isSelected: _selectedVoice == 'Charon', onTap: () => updateSettings(() => _selectedVoice = 'Charon')),
-              _VoiceChip(label: 'Kore', isSelected: _selectedVoice == 'Kore', onTap: () => updateSettings(() => _selectedVoice = 'Kore')),
-              _VoiceChip(label: 'Fenrir', isSelected: _selectedVoice == 'Fenrir', onTap: () => updateSettings(() => _selectedVoice = 'Fenrir')),
-              _VoiceChip(label: 'Aoide', isSelected: _selectedVoice == 'Aoide', onTap: () => updateSettings(() => _selectedVoice = 'Aoide')),
-            ]),
           ])));
         });
       },
@@ -1289,7 +1253,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; 
         _vadThresholdDb = (json['vadThresholdDb'] ?? _defaultVadThresholdDb).toDouble(); 
         _bargeInThresholdDb = (json['bargeInThresholdDb'] ?? _defaultBargeInThresholdDb).toDouble();
-        _selectedVoice = json['selectedVoice'] ?? 'Puck';
       });
     } catch (_) {}
   }
@@ -1298,7 +1261,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       'conversationProfile': _conversationProfile, 
       'vadThresholdDb': _vadThresholdDb,
       'bargeInThresholdDb': _bargeInThresholdDb,
-      'selectedVoice': _selectedVoice,
     })); } catch (_) {}
   }
 }
@@ -2729,15 +2691,6 @@ class _CornerPainter extends CustomPainter {
 }
 
 // ─── Thinking Skeleton Overlay ──────────────────────────────────────────────
-
-class _VoiceChip extends StatelessWidget {
-  final String label; final bool isSelected; final VoidCallback onTap;
-  const _VoiceChip({required this.label, required this.isSelected, required this.onTap});
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: isSelected ? Colors.cyanAccent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(20), border: Border.all(color: isSelected ? Colors.cyanAccent : Colors.white12)), child: Text(label, style: TextStyle(color: isSelected ? Colors.cyanAccent : Colors.white70, fontSize: 13, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))));
-  }
-}
 
 class _ThinkingSkeletonOverlay extends StatefulWidget {
   final String message;

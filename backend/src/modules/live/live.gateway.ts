@@ -60,11 +60,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const firstName = fullDisplayName.trim().split(' ')[0];
       this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid}, name=${fullDisplayName}, usedName=${firstName})`);
 
-      const voiceName = client.handshake.query.voiceName as string | undefined;
-
       const session = this.aiService.createLiveSession({
-        voiceName: voiceName || 'Puck', // Usa la voz elegida o Puck por defecto
-      });
         systemInstruction:
           `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${firstName}. ` +
           `Ya le conoces — eres su guardián digital de confianza. Salúdale de forma proactiva, breve y natural por su nombre en cuanto se conecte, como quien retoma una conversación. ` +
