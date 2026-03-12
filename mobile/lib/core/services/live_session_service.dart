@@ -144,6 +144,13 @@ class LiveSessionService {
     _socket?.emit('activity_start');
   }
 
+  /// Notifica al servidor que el usuario ha terminado de hablar (VAD Manual).
+  void sendActivityEnd() {
+    if (_state != LiveSessionState.connected) return;
+    debugPrint('[LiveSessionService] Sending activity_end');
+    _socket?.emit('activity_end');
+  }
+
   /// Envía un frame de cámara, imagen de galería o fichero arbitrario.
   void sendFrame({required String frameBase64, String? prompt, String? fileName}) {
     if (_state != LiveSessionState.connected) return;

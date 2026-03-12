@@ -252,7 +252,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _setStateIfMounted(AssistantState.listening);
     _audioStreamSub?.cancel();
     _amplitudeSub?.cancel();
-    unawaited(_audio.startStreamingRecording(intervalMs: 200));
+    unawaited(_audio.startStreamingRecording(intervalMs: 50));
     _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
     _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
       if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
@@ -296,21 +296,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
       if (now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs && _bargeInEnabled) {
-        // En modo manual, notificamos al backend el inicio de actividad si no lo hemos hecho ya.
         if (!_manualActivitySignaled) {
-          debugPrint('[VAD] Actividad manual detectada (> $threshold dB por ${requiredDurationMs}ms)');
+          debugPrint('[VAD] ActivityStart manual (> $threshold dB por ${requiredDurationMs}ms)');
           _liveSession.sendActivityStart();
           _manualActivitySignaled = true;
-          
-          // Si el agente NO está hablando, forzamos el estado visual a listening.
           if (!isAgentTalking) _setStateIfMounted(AssistantState.listening);
         }
       }
     } else {
       _bargeInStartedAt = null;
-      // Resetear la señal cuando el volumen baja de forma clara respecto al umbral usado
-      // Un margen de 12dB asegura que la frase ha terminado realmente.
-      if (amp.current < threshold - 12) {
+      // Si estábamos en medio de una actividad manual y el volumen baja, enviamos fin de actividad.
+      // Usamos un margen (histeresis) para evitar ruidos pequeños cortando la frase.
+      if (_manualActivitySignaled && amp.current < threshold - 15) {
+        debugPrint('[VAD] ActivityEnd manual (< ${threshold - 15} dB)');
+        _liveSession.sendActivityEnd();
         _manualActivitySignaled = false;
       }
     }
