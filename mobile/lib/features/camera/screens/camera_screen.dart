@@ -36,8 +36,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   
   static const String _settingsFileName = 'conversation_settings.json';
   
-  static const double _defaultVadThresholdDb = -50.0;
-  static const double _defaultBargeInThresholdDb = -8.0;
+  static const double _defaultVadThresholdDb = -40.0;
+  static const double _defaultBargeInThresholdDb = -18.0;
   static const int _defaultSilenceMs = 650;
   static const int _defaultAgentSpeechGraceMs = 3000;
 
@@ -1211,15 +1211,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   void _applyConversationProfile(String profile) {
     _conversationProfile = profile;
     if (profile == 'Evitar cortes') { 
-      _vadThresholdDb = -66; 
-      _agentSpeechGraceMs = 1500;
+      _vadThresholdDb = -35; 
+      _bargeInThresholdDb = -12;
+      _agentSpeechGraceMs = 2500;
     } else if (profile == 'Interrupcion facil') { 
-      _vadThresholdDb = -68; 
-      _bargeInThresholdDb = -18;
-      _agentSpeechGraceMs = 600;
+      _vadThresholdDb = -45; 
+      _bargeInThresholdDb = -25;
+      _agentSpeechGraceMs = 800;
     } else { 
-      _vadThresholdDb = _defaultVadThresholdDb; 
-      _bargeInThresholdDb = _defaultBargeInThresholdDb;
+      _vadThresholdDb = -40; 
+      _bargeInThresholdDb = -18;
       _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
     }
   }
