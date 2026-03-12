@@ -220,12 +220,10 @@ export class GeminiLiveSession extends EventEmitter {
         }] 
       },
       tools: AGENT_TOOLS,
-      generationConfig: {
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: {
-              voiceName: 'Puck', // Voz estable para español
-            },
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: 'Puck', // Voz estable para español
           },
         },
       },
