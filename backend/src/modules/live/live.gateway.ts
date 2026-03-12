@@ -102,6 +102,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
           '  - Usa el argumento { source: "files" } para documentos, PDFs o ficheros arbitrarios. ' +
           '  Es la opción preferida para analizar SMS o correos ya recibidos. ' +
+          '• describe_camera_view → Úsala para ver de forma invisible con la cámara usando { direction: "front" } (para el usuario) o { direction: "back" } (para el mundo). Usa ESTO en vez de "scan_qr_code" si te pide "mirar", "leer" o "analizar la vista". ' +
           '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
           '• toggle_flashlight → Úsala cuando el usuario te pida encender (enabled: true) o apagar (enabled: false) la luz / linterna del móvil. ' +
           '• switch_camera → Úsala para cambiar entre la cámara delantera (front) y trasera (back). ' +
@@ -111,7 +112,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Cuando veas una URL en pantalla, analízala con analyze_security_url. ' +
           'Ante un QR desconocido, usa scan_qr_code antes de que el usuario lo escanee. ' +
 
-          'RESPUESTAS CORTAS: 1-3 frases máximo. Los datos numéricos y gráficos ya se muestran en pantalla, no los repitas. Tras cualquier análisis, da solo el veredicto y la recomendación de acción.'
+          'INTERFAZ GRÁFICA Y DIAGNÓSTICO (MUY IMPORTANTE): ' +
+          '1. Cuando uses herramientas de análisis (analyze_security_url, analyze_domain, analyze_file_hash, analyze_ip, scan_file), NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente por sí solo la UI moderna con los gráficos de VirusTotal. Si mandas tú otro "display_content", romperás la interfaz y la pantalla se pondrá negra. ' +
+          '2. Tu trabajo, tras usar la herramienta, es dar un diagnóstico PROFESIONAL por voz. El sistema te devolverá el JSON de VirusTotal y los resultados de búsqueda web. Debes UNIFICAR ambas informaciones: explica de forma clara el veredicto técnico y da contexto sobre qué dice internet de ese sitio, justificando el nivel de riesgo.'
       });
 
       client.data.geminiSession = session;
@@ -225,6 +228,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
             if (fc.name === 'capture_device_screen' || fc.name === 'describe_camera_view') {
               const source = fc.name === 'capture_device_screen' ? 'screen' : 'camera';
+              
+              if (fc.name === 'describe_camera_view' && fc.args.direction) {
+                client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
+                await new Promise(resolve => setTimeout(resolve, 800)); // Esperamos a que la cámara cambie de lente
+              }
+
               client.emit('frame_request', { source });
 
               const timeout = fc.name === 'describe_camera_view' ? 40000 : 10000;
@@ -262,7 +271,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
             // ── QR Code: activa cámara y luego analiza la URL extraída ──────
             if (fc.name === 'scan_qr_code') {
-              client.emit('frame_request', { source: 'camera' });
+              client.emit('frame_request', { source: 'manual_camera' });
               const payload = await this._waitForFrame(client, 40000);
               const qrFrame = payload?.frameBase64 || payload?.frame;
               if (!qrFrame) {

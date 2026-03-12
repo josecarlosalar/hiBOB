@@ -230,7 +230,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onFrameRequest.listen((data) async {
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
-          if (source == 'camera') {
+          if (source == 'manual_camera') {
             // Cambiar a cámara trasera y esperar a que esté lista antes de mostrar preview
             await _switchCameraForQr();
             _manualCaptureCompleter = Completer<String?>();
@@ -392,7 +392,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final action = cmd['action'] as String?;
     if (action == 'flashlight') {
       final enabled = cmd['enabled'] as bool? ?? false;
-      try { if (enabled) await TorchLight.enableTorch(); else await TorchLight.disableTorch(); } catch (_) {}
+      try {
+        if (_cameraCtrl != null && _cameraCtrl!.value.isInitialized) {
+          await _cameraCtrl!.setFlashMode(enabled ? FlashMode.torch : FlashMode.off);
+          if (mounted) setState(() {});
+        } else {
+          if (enabled) await TorchLight.enableTorch(); else await TorchLight.disableTorch();
+        }
+      } catch (e) {
+        debugPrint('Error toggle flashlight: $e');
+      }
     } else if (action == 'switch_camera') {
       await _switchCamera(cmd['direction'] == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
     } else if (action == 'vibrate') {
