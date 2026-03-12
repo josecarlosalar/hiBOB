@@ -584,4 +584,13 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+
+  @SubscribeMessage('activity_start')
+  handleActivityStart(@ConnectedSocket() client: Socket) {
+    const session = client.data.geminiSession as GeminiLiveSession;
+    if (session && !session.isClosed()) {
+      this.logger.log(`[VAD Manual] Recibida señal de actividad del cliente ${client.id} - Interrumpiendo Gemini...`);
+      session.sendActivityStart();
+    }
+  }
 }
