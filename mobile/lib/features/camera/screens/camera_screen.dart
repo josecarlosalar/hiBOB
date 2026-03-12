@@ -880,14 +880,36 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 colors.secondary.withValues(alpha: 0.8),
               ],
             ).createShader(bounds),
-            child: const Text(
-              'hiBOB',
-              style: TextStyle(
-                fontSize: 68,
-                fontWeight: FontWeight.w900,
-                color: Colors.white,
-                letterSpacing: 10,
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // El Escudo fundido
+                Image.asset(
+                  'assets/images/logo.png',
+                  height: 120,
+                  fit: BoxFit.contain,
+                ),
+                const SizedBox(height: 16),
+                // El Texto exacto del logo
+                const Text(
+                  'hiBOB',
+                  style: TextStyle(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: 4,
+                  ),
+                ),
+                const Text(
+                  'CYBERSECURITY AI',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 2.5,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
