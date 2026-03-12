@@ -37,9 +37,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const String _settingsFileName = 'conversation_settings.json';
   
   static const double _defaultVadThresholdDb = -50.0;
-  static const double _defaultBargeInThresholdDb = -1.0;
+  static const double _defaultBargeInThresholdDb = -8.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultAgentSpeechGraceMs = 1500;
+  static const int _defaultAgentSpeechGraceMs = 1200;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -271,9 +271,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Esto permite que el usuario interrumpa pero evita que el propio eco del agente 
     // provoque una auto-interrupción accidental.
     if (_agentAudioActive || _state == AssistantState.speaking) {
-      // DEBUG: Bloqueo total de audio mientras hiBOB habla para descartar eco.
-      // return _micAmplitudeDb >= _bargeInThresholdDb;
-      return false;
+      // Permitimos que pase el audio si supera el umbral de interrupción
+      return _micAmplitudeDb >= _bargeInThresholdDb;
     }
 
     return true;
@@ -291,7 +290,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Umbral dinámico de seguridad extrema contra eco.
     // -4 dB es un nivel muy alto, solo voz cercana lo activa.
     final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
-    final requiredDurationMs = isAgentTalking ? 1500 : 350;
+    final requiredDurationMs = isAgentTalking ? 500 : 350;
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
@@ -339,9 +338,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = true;
     
-    // Incrementamos el tiempo de espera a 1500ms para asegurar que el buffer de hardware
-    // se ha vaciado completamente y el eco ha desaparecido de la sala.
-    _echoHoldOffTimer = Timer(const Duration(milliseconds: 1500), () {
+    // Bajamos el hold-off a 600ms para ser más responsivos
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 600), () {
       if (mounted) setState(() => _inEchoHoldOff = false);
     });
   }
