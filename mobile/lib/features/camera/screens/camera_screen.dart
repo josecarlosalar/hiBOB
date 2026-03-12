@@ -286,10 +286,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final now = DateTime.now();
     final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking;
     
-    // Umbral dinámico agresivo mientras el agente habla para ignorar su eco.
-    // -15dB es un nivel de voz humana fuerte cerca del micrófono.
-    final threshold = isAgentTalking ? -15.0 : _vadThresholdDb;
-    final requiredDurationMs = isAgentTalking ? 300 : 350;
+    // Umbral dinámico basado en la configuración (por defecto -9 dB).
+    // Esto evita que el eco del altavoz a volumen alto dispare la interrupción.
+    final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
+    final requiredDurationMs = isAgentTalking ? 450 : 350;
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
@@ -301,14 +301,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           _manualActivitySignaled = true;
           
           // Si el agente NO está hablando, forzamos el estado visual a listening.
-          // Si SÍ está hablando, Gemini nos interrumpirá y el estado cambiará vía socket.
           if (!isAgentTalking) _setStateIfMounted(AssistantState.listening);
         }
       }
     } else {
       _bargeInStartedAt = null;
-      // Resetear la señal cuando el volumen baja (fin de frase del usuario)
-      if (amp.current < _vadThresholdDb - 5) {
+      // Resetear la señal cuando el volumen baja de forma clara respecto al umbral usado
+      if (amp.current < threshold - 8) {
         _manualActivitySignaled = false;
       }
     }
