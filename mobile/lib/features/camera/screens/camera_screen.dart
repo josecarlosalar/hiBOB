@@ -37,7 +37,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const String _settingsFileName = 'conversation_settings.json';
   
   static const double _defaultVadThresholdDb = -68.0;
-  static const double _defaultBargeInThresholdDb = -9.0;
+  static const double _defaultBargeInThresholdDb = -4.0;
   static const int _defaultSilenceMs = 650;
   static const int _defaultAgentSpeechGraceMs = 900;
 
@@ -286,10 +286,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     final now = DateTime.now();
     final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking;
     
-    // Umbral dinámico basado en la configuración (por defecto -9 dB).
-    // Esto evita que el eco del altavoz a volumen alto dispare la interrupción.
+    // Umbral dinámico de seguridad extrema contra eco.
+    // -4 dB es un nivel muy alto, solo voz cercana lo activa.
     final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
-    final requiredDurationMs = isAgentTalking ? 450 : 350;
+    final requiredDurationMs = isAgentTalking ? 800 : 350;
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
@@ -307,7 +307,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } else {
       _bargeInStartedAt = null;
       // Resetear la señal cuando el volumen baja de forma clara respecto al umbral usado
-      if (amp.current < threshold - 8) {
+      // Un margen de 12dB asegura que la frase ha terminado realmente.
+      if (amp.current < threshold - 12) {
         _manualActivitySignaled = false;
       }
     }
