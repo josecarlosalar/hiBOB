@@ -231,7 +231,8 @@ export class GeminiLiveSession extends EventEmitter {
       },
       automaticActivityDetection: {
         disabled: true,
-      }
+      },
+      inputAudioTranscription: {}, // Habilitar sincronización de turnos
     };
 
     try {
