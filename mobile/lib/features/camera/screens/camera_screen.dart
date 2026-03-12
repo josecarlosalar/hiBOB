@@ -37,7 +37,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const String _settingsFileName = 'conversation_settings.json';
   
   static const double _defaultVadThresholdDb = -68.0;
-  static const double _defaultBargeInThresholdDb = -10.0;
+  static const double _defaultBargeInThresholdDb = -9.0;
   static const int _defaultSilenceMs = 650;
   static const int _defaultAgentSpeechGraceMs = 900;
 
