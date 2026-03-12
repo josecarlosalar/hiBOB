@@ -61,7 +61,7 @@ const DISPLAY_CONTENT_FUNCTION: FunctionDeclaration = {
     properties: {
       type: { type: Type.STRING, enum: ['list', 'detail', 'features_slider'] },
       title: { type: Type.STRING },
-      items: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, title: { type: Type.STRING }, description: { type: Type.STRING }, url: { type: Type.STRING }, imageUrl: { type: Type.STRING } } } },
+      items: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, title: { type: Type.STRING }, description: { type: Type.STRING }, url: { type: Type.STRING }, imageUrl: { type: Type.STRING } }, required: ['id', 'title', 'description'] } },
     },
     required: ['type', 'title', 'items'],
   },
@@ -317,8 +317,7 @@ DIRECTRICES PRINCIPALES:
   async sendActivityStart() {
     if (this.closed || !this.session) return;
     try {
-      // En @google/genai v1.0.0, se envía RealtimeInput para señalizar actividad manual
-      await this.session.send({ realtimeInput: { activity_start: {} } as any });
+      this.session.sendRealtimeInput({ activity_start: {} } as any);
       this.logger.log('Enviada señal manual de ActivityStart (Interrupción)');
     } catch (e: any) {
       this.logger.error(`Error al enviar ActivityStart: ${e.message}`);
@@ -328,7 +327,7 @@ DIRECTRICES PRINCIPALES:
   async sendActivityEnd() {
     if (this.closed || !this.session) return;
     try {
-      await this.session.send({ realtimeInput: { activity_end: {} } as any });
+      this.session.sendRealtimeInput({ activity_end: {} } as any);
       this.logger.log('Enviada señal manual de ActivityEnd');
     } catch (e: any) {
       this.logger.error(`Error al enviar ActivityEnd: ${e.message}`);
