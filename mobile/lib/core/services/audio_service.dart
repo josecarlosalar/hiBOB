@@ -31,7 +31,7 @@ class AudioService {
         sampleRate: 16000,
         echoCancel: true,
         noiseSuppress: true,
-        autoGain: true,
+        autoGain: false,
       ),
       path: _currentPath!,
     );
@@ -48,7 +48,7 @@ class AudioService {
         sampleRate: 16000,
         echoCancel: true,
         noiseSuppress: true,
-        autoGain: true,
+        autoGain: false,
       ),
     );
 
