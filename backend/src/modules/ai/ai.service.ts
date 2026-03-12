@@ -258,7 +258,7 @@ export class GeminiLiveSession extends EventEmitter {
         },
       });
       this.logger.log('Conexión con Gemini Live API establecida con éxito');
-    } catch (error) {
+    } catch (error: any) {
       this.logger.error(`Fallo crítico al conectar con Gemini Live: ${error.message}`);
       throw error;
     }
@@ -283,7 +283,7 @@ export class GeminiLiveSession extends EventEmitter {
     if (this.closed || !this.session) return;
     try {
       this.session.sendRealtimeInput({ audio: { mimeType, data: base64Audio } as any });
-    } catch (e) { this.logger.error(`Error enviando audio: ${e.message}`); }
+    } catch (e: any) { this.logger.error(`Error enviando audio: ${e.message}`); }
   }
 
   /**
@@ -295,7 +295,7 @@ export class GeminiLiveSession extends EventEmitter {
       // En @google/genai v1.0.0, se envía RealtimeInput para señalizar actividad manual
       await this.session.send({ realtimeInput: { activityStart: {} } });
       this.logger.log('Enviada señal manual de ActivityStart (Interrupción)');
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(`Error al enviar ActivityStart: ${e.message}`);
     }
   }
@@ -304,17 +304,17 @@ export class GeminiLiveSession extends EventEmitter {
     if (this.closed || !this.session) return;
     try {
       this.session.sendRealtimeInput({ video: { mimeType, data: base64Image } as any });
-    } catch (e) { this.logger.error(`Error enviando imagen: ${e.message}`); }
+    } catch (e: any) { this.logger.error(`Error enviando imagen: ${e.message}`); }
   }
 
   sendClientContent(parts: any[], turnComplete = true) {
     if (this.closed || !this.session) return;
-    try { this.session.sendClientContent({ turns: [{ role: 'user', parts }], turnComplete }); } catch (e) { this.logger.error(`Error enviando client content: ${e.message}`); }
+    try { this.session.sendClientContent({ turns: [{ role: 'user', parts }], turnComplete }); } catch (e: any) { this.logger.error(`Error enviando client content: ${e.message}`); }
   }
 
   sendToolResponse(toolResponses: any[]) {
     if (this.closed || !this.session) return;
-    try { this.session.sendToolResponse({ functionResponses: toolResponses }); } catch (e) { this.logger.error(`Error enviando tool response: ${e.message}`); }
+    try { this.session.sendToolResponse({ functionResponses: toolResponses }); } catch (e: any) { this.logger.error(`Error enviando tool response: ${e.message}`); }
   }
 
   close() { this.closed = true; this.session?.close(); }
@@ -326,10 +326,10 @@ export class GeminiLiveSession extends EventEmitter {
 @Injectable()
 export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
-  private ai: GoogleGenAI;
-  private modelName: string;
-  private maxOutputTokens: number;
-  private temperature: number;
+  private ai!: GoogleGenAI;
+  private modelName!: string;
+  private maxOutputTokens!: number;
+  private temperature!: number;
   private memory: Map<string, string> = new Map();
 
   constructor(
@@ -394,7 +394,7 @@ export class AiService implements OnModuleInit {
     try {
       const streamResult = await this.ai.models.generateContentStream({ model: this.modelName, contents, config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS } });
       for await (const chunk of streamResult) if (chunk.text) onChunk(chunk.text);
-    } catch (e) { this.logger.error(`Error streaming: ${e.message}`); throw e; }
+    } catch (e: any) { this.logger.error(`Error streaming: ${e.message}`); throw e; }
   }
 
   async processAudio(audioBase64: string, mimeType: string): Promise<string> {
