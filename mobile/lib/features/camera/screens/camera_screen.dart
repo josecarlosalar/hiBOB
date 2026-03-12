@@ -39,7 +39,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const double _defaultVadThresholdDb = -50.0;
   static const double _defaultBargeInThresholdDb = -8.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultAgentSpeechGraceMs = 1200;
+  static const int _defaultAgentSpeechGraceMs = 3000;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -56,6 +56,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   int _silenceMs = _defaultSilenceMs;
   int _agentSpeechGraceMs = _defaultAgentSpeechGraceMs;
   String _conversationProfile = 'Equilibrado';
+  String _voiceName = 'Puck';
 
   StreamSubscription<String>? _audioStreamSub;
   StreamSubscription<Amplitude>? _amplitudeSub;
@@ -325,7 +326,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _inEchoHoldOff = false;
 
     _agentSpeechIdleTimer?.cancel();
-    _agentSpeechIdleTimer = Timer(const Duration(milliseconds: 7000), _handleAgentSpeechEnded);
+    // Este temporizador detecta SI EL SERVIDOR deja de mandar audio durante 2.5s
+    // (margen suficiente para procesado largo o pausas naturales de pensamiento).
+    _agentSpeechIdleTimer = Timer(const Duration(milliseconds: 2500), _handleAgentSpeechEnded);
   }
 
   void _handleAgentSpeechEnded() {
@@ -1240,10 +1243,37 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             const SizedBox(height: 24),
             _SettingSlider(label: 'Sensibilidad VAD', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: -30, divisions: 50, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
             _SettingSlider(label: 'Umbral Interrupción', valueLabel: '${_bargeInThresholdDb.toInt()} dB', value: _bargeInThresholdDb, min: -50, max: 0, divisions: 50, onChanged: (v) => updateSettings(() => _bargeInThresholdDb = v)),
+            const SizedBox(height: 24),
+            const Align(alignment: Alignment.centerLeft, child: Text('Voz del Asistente', style: TextStyle(color: Colors.white, fontSize: 14))),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _CalibrationChip(label: 'Puck (Clara)', isSelected: _voiceName == 'Puck', onTap: () => _updateVoice(updateSettings, 'Puck')),
+                  const SizedBox(width: 8),
+                  _CalibrationChip(label: 'Charon (Sabia)', isSelected: _voiceName == 'Charon', onTap: () => _updateVoice(updateSettings, 'Charon')),
+                  const SizedBox(width: 8),
+                  _CalibrationChip(label: 'Kore (Suave)', isSelected: _voiceName == 'Kore', onTap: () => _updateVoice(updateSettings, 'Kore')),
+                  const SizedBox(width: 8),
+                  _CalibrationChip(label: 'Fenrir (Seria)', isSelected: _voiceName == 'Fenrir', onTap: () => _updateVoice(updateSettings, 'Fenrir')),
+                  const SizedBox(width: 8),
+                  _CalibrationChip(label: 'Aoede (Fluida)', isSelected: _voiceName == 'Aoede', onTap: () => _updateVoice(updateSettings, 'Aoede')),
+                ],
+              ),
+            ),
           ])));
         });
       },
     );
+  }
+
+  void _updateVoice(Function(VoidCallback) updateSettings, String voice) {
+    updateSettings(() => _voiceName = voice);
+    if (_liveSession.state == LiveSessionState.connected) {
+      _liveSession.updateSettings({'voiceName': voice});
+    }
   }
 
   Future<File> _settingsFile() async { final dir = await getApplicationSupportDirectory(); return File('${dir.path}/$_settingsFileName'); }
@@ -1256,6 +1286,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _conversationProfile = json['conversationProfile'] ?? 'Equilibrado'; 
         _vadThresholdDb = (json['vadThresholdDb'] ?? _defaultVadThresholdDb).toDouble(); 
         _bargeInThresholdDb = (json['bargeInThresholdDb'] ?? _defaultBargeInThresholdDb).toDouble();
+        _voiceName = json['voiceName'] ?? 'Puck';
       });
     } catch (_) {}
   }
@@ -1264,6 +1295,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       'conversationProfile': _conversationProfile, 
       'vadThresholdDb': _vadThresholdDb,
       'bargeInThresholdDb': _bargeInThresholdDb,
+      'voiceName': _voiceName,
     })); } catch (_) {}
   }
 }

@@ -165,6 +165,13 @@ class LiveSessionService {
     });
   }
 
+  /// Actualiza los ajustes persistentes del usuario (ej. voz).
+  void updateSettings(Map<String, dynamic> settings) {
+    if (_state != LiveSessionState.connected) return;
+    debugPrint('[LiveSessionService] Updating settings: $settings');
+    _socket?.emit('update_settings', settings);
+  }
+
   void disconnect() {
     _socket?.disconnect();
     _socket?.dispose();

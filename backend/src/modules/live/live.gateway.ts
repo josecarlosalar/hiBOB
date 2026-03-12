@@ -59,8 +59,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const fullDisplayName = userRecord.displayName || userRecord.email?.split('@')[0] || 'amigo';
       const firstName = fullDisplayName.trim().split(' ')[0];
       this.logger.log(`Cliente conectado: ${client.id} (uid=${decoded.uid}, name=${fullDisplayName}, usedName=${firstName})`);
+      
+      // Obtener preferencias del usuario desde Firestore
+      const userSettingsSnap = await admin.firestore().collection('users').doc(decoded.uid).get();
+      const userSettings = userSettingsSnap.data() || {};
+      const voiceName = userSettings.voiceName || 'Puck';
+      this.logger.log(`Preferencias de usuario: voiceName=${voiceName}`);
 
       const session = this.aiService.createLiveSession({
+        voiceName,
         systemInstruction:
           `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${firstName}. ` +
           `Ya le conoces — eres su guardián digital de confianza. Salúdale de forma proactiva, breve y natural por su nombre en cuanto se conecte, como quien retoma una conversación. ` +
@@ -592,5 +599,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.logger.log(`[VAD Manual] Recibida señal de actividad del cliente ${client.id} - Interrumpiendo Gemini...`);
       session.sendActivityStart();
     }
+  }
+
+  @SubscribeMessage('update_settings')
+  async handleUpdateSettings(@MessageBody() settings: any, @ConnectedSocket() client: Socket) {
+    const uid = client.data.uid;
+    if (!uid) return;
+    
+    this.logger.log(`Actualizando ajustes para usuario ${uid}: ${JSON.stringify(settings)}`);
+    await admin.firestore().collection('users').doc(uid).set(settings, { merge: true });
+    client.emit('settings_updated', { status: 'ok' });
   }
 }
