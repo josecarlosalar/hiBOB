@@ -64,6 +64,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _agentSpeechIdleTimer;
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
+  DateTime? _agentSpeechEstimatedEndTime;
   bool _agentAudioActive = false;
   bool _isVibrating = false;
   // Post-playback hold-off: tiempo de silencio adicional tras el último chunk
@@ -206,12 +207,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         }),
         _liveSession.onAudioChunk.listen((audioChunk) {
           if (!mounted) return;
+          final data = audioChunk['data'] as String? ?? '';
+          if (data.isNotEmpty) {
+            try {
+              final bytesLength = (data.length * 3) ~/ 4 - (data.endsWith('==') ? 2 : (data.endsWith('=') ? 1 : 0));
+              final sampleCount = bytesLength ~/ 2;
+              final extraMillis = (sampleCount / 24000.0 * 1000).toInt();
+              
+              final now = DateTime.now();
+              if (_agentSpeechEstimatedEndTime == null || now.isAfter(_agentSpeechEstimatedEndTime!)) {
+                _agentSpeechEstimatedEndTime = now;
+              }
+              _agentSpeechEstimatedEndTime = _agentSpeechEstimatedEndTime!.add(Duration(milliseconds: extraMillis));
+            } catch (_) {}
+          }
           _markAgentSpeechActive();
           _setStateIfMounted(AssistantState.speaking);
-          _pcmAudio.feedBase64(audioChunk['data'] ?? '', mimeType: audioChunk['mimeType']);
+          _pcmAudio.feedBase64(data, mimeType: audioChunk['mimeType']);
         }),
         _liveSession.onInterruption.listen((_) { if (mounted) _stopSpeaking(); }),
-        _liveSession.onDone.listen((_) { if (mounted) _handleAgentSpeechEnded(); }),
+        _liveSession.onDone.listen((_) { if (mounted) _scheduleAgentSpeechEnd(); }),
         _liveSession.onFrameRequest.listen((data) async {
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
@@ -264,14 +279,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _shouldForwardAudioChunk() {
     // 1. Bloqueo por vibración (ruido de hardware)
     if (_isVibrating) return false;
+    
+    final now = DateTime.now();
+    final isAudioHardwarePlaying = _agentSpeechEstimatedEndTime != null && now.isBefore(_agentSpeechEstimatedEndTime!);
+
     // 2. Hold-off post-playback: esperar a que el eco del altavoz decaiga
     //    antes de reanudar el envío del micrófono a Gemini.
-    if (_inEchoHoldOff) return false;
+    if (_inEchoHoldOff && !isAudioHardwarePlaying) return false;
 
     // 3. Si el agente está hablando, solo enviamos audio si supera el umbral de barge-in.
     // Esto permite que el usuario interrumpa pero evita que el propio eco del agente 
     // provoque una auto-interrupción accidental.
-    if (_agentAudioActive || _state == AssistantState.speaking) {
+    final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking || isAudioHardwarePlaying;
+
+    if (isAgentTalking) {
       // Permitimos que pase el audio si supera el umbral de interrupción
       return _micAmplitudeDb >= _bargeInThresholdDb;
     }
@@ -286,10 +307,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_isVibrating) return;
 
     final now = DateTime.now();
-    final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking;
+    final isAudioHardwarePlaying = _agentSpeechEstimatedEndTime != null && now.isBefore(_agentSpeechEstimatedEndTime!);
+    final isAgentTalking = _agentAudioActive || _state == AssistantState.speaking || isAudioHardwarePlaying;
     
     // Umbral dinámico de seguridad extrema contra eco.
-    // -4 dB es un nivel muy alto, solo voz cercana lo activa.
     final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
     final requiredDurationMs = isAgentTalking ? 500 : 350;
 
@@ -324,10 +345,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = false;
 
+    _scheduleAgentSpeechEnd(idleTimeoutMs: 2500);
+  }
+
+  void _scheduleAgentSpeechEnd({int idleTimeoutMs = 0}) {
     _agentSpeechIdleTimer?.cancel();
-    // Este temporizador detecta SI EL SERVIDOR deja de mandar audio durante 2.5s
-    // (margen suficiente para procesado largo o pausas naturales de pensamiento).
-    _agentSpeechIdleTimer = Timer(const Duration(milliseconds: 2500), _handleAgentSpeechEnded);
+    
+    final now = DateTime.now();
+    int delayMs = idleTimeoutMs;
+    
+    if (_agentSpeechEstimatedEndTime != null && _agentSpeechEstimatedEndTime!.isAfter(now)) {
+      final remainingMs = _agentSpeechEstimatedEndTime!.difference(now).inMilliseconds;
+      if (remainingMs > delayMs) {
+        delayMs = remainingMs;
+      }
+    }
+    
+    // Añadimos 200ms extra de padding de seguridad para asegurar que el buffer se vació.
+    _agentSpeechIdleTimer = Timer(Duration(milliseconds: delayMs + 200), _handleAgentSpeechEnded);
   }
 
   void _handleAgentSpeechEnded() {
@@ -736,6 +771,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _stopSpeaking() {
     _pcmAudio.stop();
+    _agentSpeechEstimatedEndTime = null;
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = false;
     _handleAgentSpeechEnded();
@@ -746,6 +782,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _amplitudeSub?.cancel();
     _agentSpeechIdleTimer?.cancel();
     _echoHoldOffTimer?.cancel();
+    _agentSpeechEstimatedEndTime = null;
     _inEchoHoldOff = false;
     _showCameraPreview = false;
     unawaited(_audio.stopRecording());
