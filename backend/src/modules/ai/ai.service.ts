@@ -232,6 +232,15 @@ export class GeminiLiveSession extends EventEmitter {
           disabled: true,
         },
       },
+      // Variaciones adicionales para asegurar compatibilidad con modelos experimentales
+      automaticActivityDetection: {
+        disabled: true,
+      },
+      voice_activity_detection: {
+        automatic_activity_detection: {
+          disabled: true,
+        },
+      },
     };
 
     try {
@@ -240,11 +249,14 @@ export class GeminiLiveSession extends EventEmitter {
         config: liveConfig,
         callbacks: {
           onmessage: (msg: any) => {
-            // Log para ver si recibimos algo del modelo
+            // Log exhaustivo para depurar estados de interrupción persistentes
             if (msg.serverContent) {
-              const { turnComplete, interrupted } = msg.serverContent;
-              this.logger.log(`[Servidor] Contenido Recibido (turnComplete=${turnComplete}, interrupted=${interrupted})`);
+              const { turnComplete, interrupted, modelTurn } = msg.serverContent;
+              if (interrupted || turnComplete) {
+                this.logger.log(`[Servidor] Evento: turnComplete=${turnComplete}, interrupted=${interrupted}`);
+              }
             }
+            if (msg.setupComplete) this.logger.log('[Servidor] Setup Complete');
             this._handleSdkMessage(msg);
           },
           onerror: (err: any) => { 

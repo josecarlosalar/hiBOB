@@ -271,7 +271,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // Esto permite que el usuario interrumpa pero evita que el propio eco del agente 
     // provoque una auto-interrupción accidental.
     if (_agentAudioActive || _state == AssistantState.speaking) {
-      return _micAmplitudeDb >= _bargeInThresholdDb;
+      // DEBUG: Bloqueo total de audio mientras hiBOB habla para descartar eco.
+      // return _micAmplitudeDb >= _bargeInThresholdDb;
+      return false;
     }
 
     return true;
