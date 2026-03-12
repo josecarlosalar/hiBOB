@@ -36,10 +36,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   
   static const String _settingsFileName = 'conversation_settings.json';
   
-  static const double _defaultVadThresholdDb = -68.0;
-  static const double _defaultBargeInThresholdDb = -4.0;
+  static const double _defaultVadThresholdDb = -55.0;
+  static const double _defaultBargeInThresholdDb = -15.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultAgentSpeechGraceMs = 900;
+  static const int _defaultAgentSpeechGraceMs = 1200;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -336,7 +336,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     // residual del altavoz sea interpretado como una nueva interrupción.
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = true;
-    _echoHoldOffTimer = Timer(const Duration(milliseconds: 300), () {
+    
+    // Incrementamos el tiempo de espera a 800ms para asegurar que el buffer de hardware
+    // se ha vaciado completamente y el eco ha desaparecido de la sala.
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _inEchoHoldOff = false);
     });
   }
