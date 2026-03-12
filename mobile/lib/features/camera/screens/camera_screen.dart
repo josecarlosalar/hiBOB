@@ -1241,7 +1241,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               _CalibrationChip(label: 'Interrupción fácil', isSelected: _conversationProfile == 'Interrupcion facil', onTap: () => updateSettings(() => _applyConversationProfile('Interrupcion facil'))),
             ]),
             const SizedBox(height: 24),
-            _SettingSlider(label: 'Sensibilidad VAD', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: -30, divisions: 50, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
+            _SettingSlider(label: 'Sensibilidad VAD', valueLabel: '${_vadThresholdDb.toInt()} dB', value: _vadThresholdDb, min: -80, max: 0, divisions: 80, onChanged: (v) => updateSettings(() => _vadThresholdDb = v)),
             _SettingSlider(label: 'Umbral Interrupción', valueLabel: '${_bargeInThresholdDb.toInt()} dB', value: _bargeInThresholdDb, min: -50, max: 0, divisions: 50, onChanged: (v) => updateSettings(() => _bargeInThresholdDb = v)),
             const SizedBox(height: 24),
             const Align(alignment: Alignment.centerLeft, child: Text('Voz del Asistente', style: TextStyle(color: Colors.white, fontSize: 14))),
