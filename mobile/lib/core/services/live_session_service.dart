@@ -38,7 +38,7 @@ class LiveSessionService {
   Stream<String> get onError => _errorController.stream;
   LiveSessionState get state => _state;
 
-  Future<void> connect(String idToken) async {
+  Future<void> connect(String idToken, {String? voiceName}) async {
     _setState(LiveSessionState.connecting);
 
     final authData = {'token': idToken};
@@ -49,6 +49,7 @@ class LiveSessionService {
       io.OptionBuilder()
           .setTransports(['websocket'])
           .setAuth(authData)
+          .setQuery({'voiceName': voiceName ?? 'Puck'}) // <--- Añadido
           .setExtraHeaders({
             'Authorization': 'Bearer $idToken',
             'authorization': 'Bearer $idToken',

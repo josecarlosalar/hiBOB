@@ -224,7 +224,7 @@ export class GeminiLiveSession extends EventEmitter {
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: 'Puck', // Voz estable para español
+              voiceName: this.options.voiceName ?? 'Puck', // Voz configurable (Puck, Charon, Kore, etc.)
             },
           },
         },
