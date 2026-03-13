@@ -113,9 +113,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Ante un QR desconocido, usa scan_qr_code antes de que el usuario lo escanee. ' +
 
           'INTERFAZ GRÁFICA Y DIAGNÓSTICO (MUY IMPORTANTE): ' +
-          '1. Cuando uses herramientas de análisis de RED (analyze_security_url, analyze_domain, analyze_file_hash, analyze_ip, scan_file), NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente la UI de VirusTotal. Tu trabajo es dar un diagnóstico PROFESIONAL por voz. ' +
-          '2. Cuando analices una imagen de galería que el usuario te envía directamente, SÍ DEBES usar la herramienta "display_content" con { "contentType": "detail", "title": "Diagnóstico de Imagen", "items": [{ "id": "img_result", "title": "Veredicto", "description": "<tu diagnóstico aquí>" }] } para mostrar el resultado en pantalla además de explicarlo por voz. ' +
-          '3. El sistema te devolverá el JSON de VirusTotal y los resultados de búsqueda web. Debes UNIFICAR ambas informaciones: explica de forma clara el veredicto técnico y da contexto, justificando el nivel de riesgo.'
+          '1. Cuando analices URL, dominios, IPs, hashes, ficheros o imágenes, NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente el panel de métricas de VirusTotal. Tu único trabajo es dar un diagnóstico PROFESIONAL y calmado por voz. ' +
+          '2. El sistema te proporcionará siempre el JSON de VirusTotal junto al fichero/imagen. Explica de forma clara el veredicto técnico y justifica el riesgo detectado.'
       });
 
       client.data.geminiSession = session;
@@ -176,59 +175,40 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 };
               }
 
-              // Si viene con fileName es un fichero arbitrario → analizar con VirusTotal
-              if (payload?.fileName) {
-                const fileName = payload.fileName;
-                this.logger.log(`[Fichero] Fichero recibido: ${fileName}`);
-                client.emit('display_content', {
-                  type: 'file_scan',
-                  title: 'Analizando Fichero',
-                  items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }]
-                });
-
-                const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
-                client.emit('display_content', {
-                  type: 'file_scan',
-                  title: 'Analizando Fichero',
-                  items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }]
-                });
-                try {
-                  const data = JSON.parse(vtResult);
-                  this._emitVtReport(client, data, fileName);
-                  // Pequeño delay para que el display_content llegue al cliente ANTES de que Gemini empiece a hablar
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                  return {
-                    name: fc.name,
-                    id: fc.id,
-                    response: { content: `Fichero "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla. Da el diagnóstico en 2-3 frases.` }
-                  };
-                } catch {
-                  return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
-                }
-              }
-
-              // Mostramos en la UI para feedback visual inmediato (sin base64 gigante para evitar que Flutter colapse o se caiga el WebSocket)
+              const fileName = payload?.fileName || (source === 'gallery' ? 'Imagen_Galeria.jpg' : 'Archivo_Desconocido');
+              this.logger.log(`[Fichero/Imagen] Analizando: ${fileName} con VirusTotal`);
               client.emit('display_content', {
                 type: 'file_scan',
-                title: 'Analizando Imagen',
-                items: [{
-                    id: 'scan_progress',
-                    title: 'Imagen de Galería',
-                    description: 'Enviando imagen a Gemini para su diagnóstico...',
-                }]
+                title: source === 'gallery' ? 'Analizando Imagen' : 'Analizando Fichero',
+                items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }]
               });
 
-              // Guardar imagen para enviar DESPUÉS del sendToolResponse (evita race condition)
-              pendingClientContent = [
-                { text: 'Aquí tienes la imagen de la galería que el usuario quiere que analices. Analízala detalladamente: identifica textos, URLs, mensajes sospechosos, datos sensibles o cualquier indicador de amenaza. Responde en español por voz con tu diagnóstico. Además, usa la herramienta "display_content" con contentType:"detail" para mostrar un resumen visual del resultado en pantalla.' },
-                { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-              ];
+              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
+              client.emit('display_content', {
+                type: 'file_scan',
+                title: source === 'gallery' ? 'Analizando Imagen' : 'Analizando Fichero',
+                items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }]
+              });
+              try {
+                const data = JSON.parse(vtResult);
+                this._emitVtReport(client, data, fileName);
+                // Pequeño delay para que el display_content llegue al cliente ANTES de que Gemini empiece a hablar
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Pasamos la imagen a Gemini opcionalmente si queremos que también "vea" el contenido
+                pendingClientContent = [
+                  { text: `Aquí tienes la imagen/archivo que acabo de analizar con VirusTotal (${data.positives}/${data.total} motores con amenaza). Analiza su contenido visual si es posible para complementar el reporte y da tu veredicto por voz.` },
+                  { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+                ];
 
-              return {
-                name: fc.name,
-                id: fc.id,
-                response: { content: 'Imagen recibida. Analizando ahora...' }
-              };
+                return {
+                  name: fc.name,
+                  id: fc.id,
+                  response: { content: `Elemento "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en el panel. Da el diagnóstico por voz.` }
+                };
+              } catch (err) {
+                return { name: fc.name, id: fc.id, response: { content: `Error analizando con VirusTotal: ${vtResult}` } };
+              }
             }
 
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
@@ -478,6 +458,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               });
             }
 
+            // Limpiar el skeleton de "pensando" siempre que la herramienta termine
+            client.emit('thinking_state', null);
+
             return { name: fc.name, id: fc.id, response: { content: result } };
           }),
         );
@@ -596,19 +579,27 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    // PRIORIDAD 2: El usuario envió una imagen manualmente (botón de galería en la UI).
-    // Si viene con prompt 'analyze_image', instruir a Gemini para que la analice.
-    if (payload?.prompt === 'analyze_image') {
-      this.logger.log(`[Visión] Imagen manual recibida para análisis directo en ${client.id}`);
-      client.emit('display_content', {
-        type: 'file_scan',
-        title: 'Analizando Imagen',
-        items: [{ id: 'scan_progress', title: 'Imagen de Galería', description: 'Obteniendo diagnóstico del agente...' }]
-      });
-      session.sendClientContent([
-        { text: 'El usuario te ha enviado esta imagen para que la analices. Analízala en detalle: identifica textos, URLs, mensajes sospechosos, datos sensibles o cualquier indicador de amenaza. Da tu diagnóstico por voz en español. Además, usa la herramienta "display_content" con contentType:"detail" para mostrar el resumen del resultado en pantalla.' },
-        { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-      ], true);
+    // PRIORIDAD 2: El usuario envió una imagen o un fichero manualmente (botón UI).
+    if (payload?.prompt === 'analyze_image' || payload?.fileName) {
+      const fileName = payload?.fileName || 'Imagen_Galeria.jpg';
+      this.logger.log(`[Visión] Análisis manual recibido para ${fileName} en ${client.id}`);
+      
+      this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id)
+        .then((vtResult) => {
+          try {
+            const data = JSON.parse(vtResult);
+            this._emitVtReport(client, data, fileName);
+            session.sendClientContent([
+              { text: `El usuario acaba de enviarte manualmente este elemento: "${fileName}". Resultados de VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Obsérvalo visualmente si es una imagen y da tu diagnóstico profesional por voz unificando VirusTotal y el contenido de la imagen. NUNCA uses la herramienta "display_content", porque el panel de métricas de seguridad ya se muestra en pantalla automáticamente.` },
+              { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+            ], true);
+          } catch (e) {
+            this.logger.error(`Error parseando resultado de VirusTotal para ${fileName}: ${e}`);
+          }
+        })
+        .catch((err) => {
+          this.logger.error(`Error procesando manual upload ${fileName}: ${err}`);
+        });
       return;
     }
 
