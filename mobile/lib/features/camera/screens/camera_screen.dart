@@ -443,6 +443,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
     } else if (action == 'switch_camera') {
       await _switchCamera(cmd['direction'] == 'front' ? CameraLensDirection.front : CameraLensDirection.back);
+      if (mounted) setState(() => _showCameraPreview = true);
+    } else if (action == 'close_camera') {
+      if (mounted) setState(() => _showCameraPreview = false);
     } else if (action == 'vibrate') {
       if (await Vibration.hasVibrator()) {
         setState(() => _isVibrating = true);
@@ -1079,6 +1082,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return Positioned(top: 40, left: 20, right: 20, child: Row(children: [
       _StatusBadge(state: _state), 
       const Spacer(),
+      if (_showCameraPreview && !_awaitingManualCapture) ...[
+        _CircleButton(icon: Icons.videocam_off_rounded, onTap: () => setState(() => _showCameraPreview = false)),
+        const SizedBox(width: 10),
+      ],
       _CircleButton(icon: Icons.tune_rounded, onTap: _openFineTuningPanel),
       const SizedBox(width: 10),
       _CircleButton(icon: Icons.logout_rounded, onTap: _signOut),
