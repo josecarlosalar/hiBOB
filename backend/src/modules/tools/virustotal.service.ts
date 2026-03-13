@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import * as crypto from 'crypto';
 
 export interface VirusTotalReport {
   status: 'safe' | 'dangerous' | 'suspicious' | 'unknown';
@@ -160,9 +161,29 @@ export class VirusTotalService {
   async analyzeFile(fileBase64: string, fileName: string): Promise<VirusTotalReport> {
     if (!this.apiKey) return this.notConfigured();
     try {
-      this.logger.log(`Subiendo archivo a VirusTotal: ${fileName}`);
       const buffer = Buffer.from(fileBase64, 'base64');
+      const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+      
+      this.logger.log(`[VT] Comprobando hash SHA256: ${hash} (${fileName})`);
+      
+      // 1. Intentar obtener reporte por hash primero (Gratis y rápido)
+      try {
+        const res = await axios.get(`https://www.virustotal.com/api/v3/files/${hash}`, {
+          headers: this.baseHeaders,
+        });
+        this.logger.log(`[VT] ¡Reporte encontrado por hash!`);
+        const attr = res.data.data.attributes;
+        return this.buildStats(attr.last_analysis_stats, { 
+          fileName, 
+          fileType: attr.type_description,
+          fileSize: attr.size ? `${Math.round(attr.size / 1024)} KB` : '??'
+        });
+      } catch (e: any) {
+        if (e.response?.status !== 404) throw e;
+        this.logger.log(`[VT] Hash no encontrado. Procediendo a subir archivo...`);
+      }
 
+      // 2. Si no existe, subir el archivo
       const FormData = (await import('form-data')).default;
       const form = new FormData();
       form.append('file', buffer, { filename: fileName });
@@ -171,9 +192,11 @@ export class VirusTotalService {
         headers: { ...this.baseHeaders, ...form.getHeaders() },
         maxContentLength: 32 * 1024 * 1024,
       });
+      
       const analysisId = uploadRes.data.data.id;
+      this.logger.log(`[VT] Subida completada. AnalysisId: ${analysisId}`);
 
-      // Esperar resultado (poll hasta 6 intentos con 3s de pausa = 18s máx)
+      // Polling de resultados (poll hasta 6 intentos con 3s de pausa = 18s máx)
       for (let i = 0; i < 6; i++) {
         await new Promise(r => setTimeout(r, 3000));
         const reportRes = await axios.get(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, {
@@ -192,9 +215,9 @@ export class VirusTotalService {
         total: 0, 
         details: JSON.stringify({ pending: true, fileName, message: 'El análisis de archivo está en progreso en VirusTotal. Intenta de nuevo en unos segundos.' }) 
       };
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(`Error VT archivo: ${e.message} | status: ${e.response?.status}`);
-      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo analizar el archivo.', fileName }) };
+      return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: true, message: e.message, fileName }) };
     }
   }
 }
