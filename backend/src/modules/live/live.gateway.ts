@@ -160,55 +160,45 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // open_gallery: flujo para obtener imagen de la galería
             if (fc.name === 'open_gallery') {
               const source = fc.args.source || 'gallery';
-              this.logger.log(`[Herramienta] Solicitando imagen/fichero (${source}) para ${client.id}...`);
+              this.logger.log(`[Herramienta] Solicitando ${source} para ${client.id}...`);
               client.emit('command', { action: 'open_gallery', source });
               
-              // Esperamos hasta 60s a que el usuario elija la imagen
               const payload = await this._waitForFrame(client, 60000);
               const frame = payload?.frameBase64 || payload?.frame;
 
               if (!frame) {
-                return { 
-                  name: fc.name, 
-                  id: fc.id, 
-                  response: { content: 'El usuario no seleccionó ningún elemento o tardó demasiado.' } 
-                };
+                return { name: fc.name, id: fc.id, response: { content: 'El usuario canceló la selección.' } };
               }
 
-              const fileName = payload?.fileName || (source === 'gallery' ? 'Imagen_Galeria.jpg' : 'Archivo_Desconocido');
-              this.logger.log(`[Fichero/Imagen] Analizando: ${fileName} con VirusTotal`);
-              client.emit('display_content', {
-                type: 'file_scan',
-                title: source === 'gallery' ? 'Analizando Imagen' : 'Analizando Fichero',
-                items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }]
-              });
+              const fileName = payload?.fileName || (source === 'gallery' ? 'imagen.jpg' : 'archivo.dat');
 
-              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
-              client.emit('display_content', {
-                type: 'file_scan',
-                title: source === 'gallery' ? 'Analizando Imagen' : 'Analizando Fichero',
-                items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }]
-              });
-              try {
-                const data = JSON.parse(vtResult);
-                this._emitVtReport(client, data, fileName);
-                // Pequeño delay para que el display_content llegue al cliente ANTES de que Gemini empiece a hablar
-                await new Promise(resolve => setTimeout(resolve, 300));
-                
-                // Pasamos la imagen a Gemini opcionalmente si queremos que también "vea" el contenido
-                pendingClientContent = [
-                  { text: `Aquí tienes la imagen/archivo que acabo de analizar con VirusTotal (${data.positives}/${data.total} motores con amenaza). Analiza su contenido visual si es posible para complementar el reporte y da tu veredicto por voz.` },
-                  { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-                ];
-
-                return {
-                  name: fc.name,
-                  id: fc.id,
-                  response: { content: `Elemento "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en el panel. Da el diagnóstico por voz.` }
-                };
-              } catch (err) {
-                return { name: fc.name, id: fc.id, response: { content: `Error analizando con VirusTotal: ${vtResult}` } };
+              // --- FLUJO A: ARCHIVOS (PDF, APK, etc.) ---
+              if (source === 'files' || fileName.toLowerCase().endsWith('.apk') || fileName.toLowerCase().endsWith('.pdf')) {
+                this.logger.log(`[Fichero] Analizando archivo malicioso: ${fileName}`);
+                const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
+                try {
+                  const data = JSON.parse(vtResult);
+                  if (data.error || data.pending) return { name: fc.name, id: fc.id, response: { content: 'Análisis de archivo pendiente o fallido.' } };
+                  this._emitVtReport(client, data, fileName);
+                  return { name: fc.name, id: fc.id, response: { content: `Archivo analizado: ${data.malicious} positivos. Resultado en pantalla.` } };
+                } catch { return { name: fc.name, id: fc.id, response: { content: 'Error en análisis de archivo.' } }; }
               }
+
+              // --- FLUJO B: IMÁGENES (Búsqueda de Phishing/URLs) ---
+              this.logger.log(`[Visión] Enviando imagen a Gemini para extraer amenazas visuales...`);
+              client.emit('display_content', {
+                type: 'file_scan',
+                title: 'Analizando Imagen',
+                items: [{ id: 'scan_progress', title: fileName, description: 'Buscando URLs y amenazas visuales...' }]
+              });
+
+              // Enviamos la imagen como contenido del cliente para que Gemini la procese
+              session.sendClientContent([
+                { text: `El usuario ha seleccionado esta imagen ("${fileName}"). Búscala visualmente en busca de URLs, dominios, códigos QR o mensajes sospechosos. Si encuentras una URL, analízala con la herramienta pertinente. Si no hay nada sospechoso, informa al usuario y dale un consejo de seguridad.` },
+                { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+              ], true);
+
+              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida. Estoy analizándola visualmente ahora mismo.' } };
             }
 
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
