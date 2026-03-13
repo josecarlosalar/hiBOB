@@ -68,11 +68,11 @@ const DISPLAY_CONTENT_FUNCTION: FunctionDeclaration = {
   parameters: {
     type: Type.OBJECT,
     properties: {
-      type: { type: Type.STRING, enum: ['list', 'detail', 'features_slider'] },
-      title: { type: Type.STRING },
+      contentType: { type: Type.STRING, enum: ['list', 'detail', 'features_slider'], description: 'El tipo de visualización a mostrar.' },
+      title: { type: Type.STRING, description: 'Título del panel.' },
       items: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, title: { type: Type.STRING }, description: { type: Type.STRING }, url: { type: Type.STRING }, imageUrl: { type: Type.STRING } }, required: ['id', 'title', 'description'] } },
     },
-    required: ['type', 'title', 'items'],
+    required: ['contentType', 'title', 'items'],
   },
 };
 
@@ -248,16 +248,6 @@ DIRECTRICES PRINCIPALES:
           disabled: true,
         },
       },
-      // Variaciones adicionales para asegurar compatibilidad con modelos experimentales
-      automaticActivityDetection: {
-        disabled: true,
-      },
-      voice_activity_detection: {
-        automatic_activity_detection: {
-          disabled: true,
-        },
-      },
-      inputAudioTranscription: {},
     };
 
     try {
@@ -328,7 +318,7 @@ DIRECTRICES PRINCIPALES:
   async sendActivityStart() {
     if (this.closed || !this.session) return;
     try {
-      this.session.sendRealtimeInput({ activity_start: {} } as any);
+      this.session.sendRealtimeInput({ activityStart: {} } as any);
       this.logger.log('Enviada señal manual de ActivityStart (Interrupción)');
     } catch (e: any) {
       this.logger.error(`Error al enviar ActivityStart: ${e.message}`);
@@ -338,7 +328,7 @@ DIRECTRICES PRINCIPALES:
   async sendActivityEnd() {
     if (this.closed || !this.session) return;
     try {
-      this.session.sendRealtimeInput({ activity_end: {} } as any);
+      this.session.sendRealtimeInput({ activityEnd: {} } as any);
       this.logger.log('Enviada señal manual de ActivityEnd');
     } catch (e: any) {
       this.logger.error(`Error al enviar ActivityEnd: ${e.message}`);
