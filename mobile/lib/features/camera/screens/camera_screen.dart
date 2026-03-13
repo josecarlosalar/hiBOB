@@ -346,26 +346,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
-      // Hay voz: cancelar el timer de silencio si estaba corriendo
       _silenceEndTimer?.cancel();
       _silenceEndTimer = null;
-      if (now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs && _bargeInEnabled) {
-        if (!_manualActivitySignaled) {
-          debugPrint('[VAD] ActivityStart manual (> $threshold dB por ${requiredDurationMs}ms)');
-          _liveSession.sendActivityStart();
-          _manualActivitySignaled = true;
-          if (!isAgentTalking) _setStateIfMounted(AssistantState.listening);
-        }
+      // Con VAD automático de Gemini, solo enviamos ActivityStart para INTERRUMPIR
+      // al agente cuando está hablando. Gemini detecta el turno del usuario solo.
+      if (isAgentTalking &&
+          now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs &&
+          _bargeInEnabled &&
+          !_manualActivitySignaled) {
+        debugPrint('[VAD] ActivityStart para interrupción (> $threshold dB por ${requiredDurationMs}ms)');
+        _liveSession.sendActivityStart();
+        _manualActivitySignaled = true;
       }
     } else {
       _bargeInStartedAt = null;
-      // Si estábamos en medio de una actividad y el volumen bajó, iniciar timer de silencio.
-      // Pasados 800ms de silencio sostenido, cerramos el turno aunque haya ruido de fondo residual.
       if (_manualActivitySignaled) {
         if (amp.current < threshold - 15) {
-          _silenceEndTimer ??= Timer(const Duration(milliseconds: 800), () {
+          _silenceEndTimer ??= Timer(const Duration(milliseconds: 600), () {
             if (_manualActivitySignaled) {
-              debugPrint('[VAD] ActivityEnd por silencio sostenido (800ms)');
+              debugPrint('[VAD] ActivityEnd tras silencio');
               _liveSession.sendActivityEnd();
               _manualActivitySignaled = false;
             }
