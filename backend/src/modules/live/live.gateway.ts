@@ -102,10 +102,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
           '  - Usa el argumento { source: "files" } para documentos, PDFs o ficheros arbitrarios. ' +
           '  Es la opción preferida para analizar SMS o correos ya recibidos. ' +
-          '• describe_camera_view → Úsala para ver de forma invisible con la cámara usando { direction: "front" } (para el usuario) o { direction: "back" } (para el mundo). Usa ESTO en vez de "scan_qr_code" si te pide "mirar", "leer" o "analizar la vista". ' +
+          '• describe_camera_view → Úsala SOLO cuando el usuario te PREGUNTE qué ves, qué hay delante, o deba analizar su entorno/cara. Pide "direction: front" o "back". Primero abrirá la cámara si no lo estaba, hará una captura y emitirá su diagnóstico por voz. ' +
           '• web_search → para información actualizada sobre amenazas, vulnerabilidades o empresas. Úsala también si VirusTotal da "limpio" pero sospechas que es una estafa muy nueva. ' +
           '• toggle_flashlight → Úsala cuando el usuario te pida encender (enabled: true) o apagar (enabled: false) la luz / linterna del móvil. ' +
-          '• switch_camera → Úsala para cambiar entre la cámara delantera (front) y trasera (back). ' +
+          '• switch_camera → Úsala para ACTIVAR o CAMBIAR la vista de vídeo en vivo a pantalla completa (direction: "front" o "back"). Úsala cuando el usuario quiera VER su cámara de forma activa (ej. "Activa la cámara", "Abre la cámara trasera"). NUNCA uses "describe_camera_view" si el usuario SOLO pide activar o encender la cámara. ' +
+          '• close_camera → Úsala para desactivar y cerrar la cámara en pantalla completa cuando el usuario pida cerrarla o desactivarla. ' +
           '• trigger_haptic_feedback → Úsala para hacer vibrar el teléfono del usuario en momentos clave de peligro o alertas. ' +
 
           'FLUJO DE SEGURIDAD: Cuando el usuario mencione un enlace, IP, dominio o archivo sospechoso, ACTÚA inmediatamente con la herramienta correspondiente sin pedir permiso. ' +
@@ -224,25 +225,32 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 };
               }
 
-              // MOSTRAR EN PANTALLA (UI)
-              client.emit('display_content', {
-                type: 'detail',
-                title: `Analizando ${source === 'screen' ? 'Captura' : 'Cámara'}`,
-                items: [{
-                    id: 'analysis_frame',
-                    title: 'Imagen Capturada',
-                    description: 'Procesando imagen con IA (esperando respuesta visual)...',
-                    imageUrl: `data:image/jpeg;base64,${frame}`
-                }]
-              });
+              // MOSTRAR EN PANTALLA (UI) - Solo para pantalla, porque la cámara ya se muestra en grande de fondo
+              if (source === 'screen') {
+                client.emit('display_content', {
+                  type: 'detail',
+                  title: `Analizando Captura`,
+                  items: [{
+                      id: 'analysis_frame',
+                      title: 'Imagen Capturada',
+                      description: 'Procesando imagen con IA (esperando respuesta visual)...',
+                      imageUrl: `data:image/jpeg;base64,${frame}`
+                  }]
+                });
 
-              // Enviamos la imagen como contenido del cliente para que Gemini la "vea"
-              session.sendClientContent([
-                { text: `Aquí tienes la imagen solicitada (${source}). Analízala cuidadosamente. IMPORTANTE: Tras procesarla, usa OBLIGATORIAMENTE la herramienta "display_content" para actualizar la pantalla con un resumen de tus hallazgos.` },
-                { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-              ]);
+                session.sendClientContent([
+                  { text: `Aquí tienes la imagen solicitada (screen). Analízala cuidadosamente. IMPORTANTE: Tras procesarla, usa OBLIGATORIAMENTE la herramienta "display_content" para actualizar la pantalla con un resumen de tus hallazgos.` },
+                  { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+                ]);
+              } else {
+                client.emit('thinking_state', { tool: fc.name, message: 'Procesando captura...' });
+                session.sendClientContent([
+                  { text: `Aquí tienes la captura que has tomado de tu cámara. Analízala visualmente. IMPORTANTE: Ya que el usuario te está viendo en vivo en pantalla completa, NO uses "display_content" (la solaparía), simplemente responde por voz.` },
+                  { inlineData: { data: frame, mimeType: 'image/jpeg' } }
+                ]);
+              }
 
-              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y mostrada en pantalla. Ya puedes verla.' } };
+              return { name: fc.name, id: fc.id, response: { content: source === 'screen' ? 'Imagen recibida y mostrada en pantalla.' : 'Captura analizada, procede a responder por voz.' } };
             }
 
             // ── QR Code: activa cámara y luego analiza la URL extraída ──────
@@ -437,6 +445,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
               client.emit('command', { action: 'switch_camera', direction: fc.args.direction });
+            } else if (fc.name === 'close_camera') {
+              client.emit('command', { action: 'close_camera' });
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
             } else if (fc.name === 'display_content') {

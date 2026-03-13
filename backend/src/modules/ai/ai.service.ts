@@ -31,14 +31,14 @@ const GET_LOCATION_FUNCTION: FunctionDeclaration = {
 
 const DESCRIBE_VISION_FUNCTION: FunctionDeclaration = {
   name: 'describe_camera_view',
-  description: 'Mira y analiza lo que hay frente a la cámara (trasera o frontal). Usa esta herramienta automáticamente cuando el usuario te pida ver algo de su entorno, analizar un objeto físico, o mirarle a él.',
+  description: 'Mira y analiza lo que hay frente a la cámara (trasera o frontal). Úsala EXCLUSIVAMENTE cuando el usuario te PREGUNTE qué ves, te pida analizar su entorno o le mires a la cara. IMPORTANTE: NO uses esta herramienta si el usuario SOLO te pide "activa la cámara", usa "switch_camera".',
   parameters: {
     type: Type.OBJECT,
     properties: {
       direction: {
         type: Type.STRING,
         enum: ['front', 'back'],
-        description: 'La lente a usar. Usa "back" para ver objetos externos/entorno y "front" para ver al usuario frontalmente. Si no estás seguro, omite este parámetro.'
+        description: 'La lente a usar.'
       }
     }
   },
@@ -58,8 +58,14 @@ const TRIGGER_HAPTIC_FEEDBACK_FUNCTION: FunctionDeclaration = {
 
 const SWITCH_CAMERA_FUNCTION: FunctionDeclaration = {
   name: 'switch_camera',
-  description: 'Cambia entre cámara frontal y trasera.',
+  description: 'Activa la cámara a pantalla completa o cambia entre cámara frontal y trasera. Úsala cuando el usuario te pida explícitamente encender, abrir o activar la cámara para ver.',
   parameters: { type: Type.OBJECT, properties: { direction: { type: Type.STRING, enum: ['front', 'back'] } }, required: ['direction'] },
+};
+
+const CLOSE_CAMERA_FUNCTION: FunctionDeclaration = {
+  name: 'close_camera',
+  description: 'Apaga y oculta la previsualización de la cámara en pantalla grande.',
+  parameters: { type: Type.OBJECT, properties: {} },
 };
 
 const DISPLAY_CONTENT_FUNCTION: FunctionDeclaration = {
@@ -177,6 +183,7 @@ const AGENT_TOOLS: Tool[] = [
       TOGGLE_FLASHLIGHT_FUNCTION,
       TRIGGER_HAPTIC_FEEDBACK_FUNCTION,
       SWITCH_CAMERA_FUNCTION,
+      CLOSE_CAMERA_FUNCTION,
       DISPLAY_CONTENT_FUNCTION,
       CAPTURE_SCREEN_FUNCTION,
       ANALYZE_SECURITY_URL_FUNCTION,
