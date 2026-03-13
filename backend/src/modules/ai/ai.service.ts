@@ -243,7 +243,7 @@ DIRECTRICES PRINCIPALES:
           },
         },
       },
-      voiceActivityDetection: {
+      realtimeInputConfig: {
         automaticActivityDetection: {
           disabled: true,
         },
