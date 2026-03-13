@@ -244,9 +244,6 @@ DIRECTRICES PRINCIPALES:
         },
       },
       realtimeInputConfig: {
-        automaticActivityDetection: {
-          disabled: true,
-        },
         activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
       },
     };
