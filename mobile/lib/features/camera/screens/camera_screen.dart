@@ -883,30 +883,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // El Escudo fundido
-                Image.asset(
-                  'assets/images/logo.png',
-                  height: 120,
-                  fit: BoxFit.contain,
-                ),
-                const SizedBox(height: 16),
-                // El Texto exacto del logo
+                // El Texto exacto del logo (sin el escudo)
                 const Text(
                   'hiBOB',
                   style: TextStyle(
-                    fontSize: 42,
+                    fontSize: 56,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: 4,
+                    letterSpacing: 6,
                   ),
                 ),
                 const Text(
                   'CYBERSECURITY AI',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
-                    letterSpacing: 2.5,
+                    letterSpacing: 3,
                   ),
                 ),
               ],
@@ -1044,10 +1037,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _StatusBadge(state: _state), 
       const Spacer(),
       _CircleButton(icon: Icons.tune_rounded, onTap: _openFineTuningPanel),
-      const SizedBox(width: 10),
-      _CircleButton(icon: Icons.photo_library_rounded, onTap: _openGalleryPicker),
-      const SizedBox(width: 10),
-      _CircleButton(icon: _cameraCtrl?.value.flashMode == FlashMode.torch ? Icons.flashlight_on : Icons.flashlight_off, onTap: _toggleFlashLocally),
       const SizedBox(width: 10),
       _CircleButton(icon: Icons.logout_rounded, onTap: _signOut),
     ]));
@@ -2559,7 +2548,7 @@ class _CopilotBanner extends StatelessWidget {
     final label = isSpeaking ? 'hiBOB te habla…' : 'Copiloto activo — te escucho';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(20),
