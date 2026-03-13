@@ -500,23 +500,32 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private _emitVtReport(client: Socket, data: any, label: string) {
-    const isDanger = (data.positives ?? 0) > 0;
-    const threatLevel = data.positives === 0 ? 'clean'
-      : data.positives <= 3 ? 'suspicious'
-      : data.positives <= 10 ? 'dangerous'
+    const malicious = data.malicious ?? data.positives ?? 0;
+    const suspicious = data.suspicious ?? 0;
+    const harmless = data.harmless ?? 0;
+    const undetected = data.undetected ?? 0;
+    const total = data.total ?? (malicious + suspicious + harmless + undetected);
+    
+    const isDanger = malicious > 0;
+    const threatLevel = malicious === 0 ? (suspicious > 0 ? 'suspicious' : 'clean')
+      : malicious <= 3 ? 'dangerous'
       : 'critical';
+
     const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    
+    this.logger.log(`[VT-Report] Enviando reporte a ${client.id}: ${malicious}/${total} positivos (${threatLevel})`);
+
     client.emit('display_content', {
       type: 'vt_report',
-      title: isDanger ? 'Amenaza Detectada' : 'Análisis Limpio',
+      title: isDanger ? 'Amenaza Detectada' : (threatLevel === 'suspicious' ? 'Actividad Sospechosa' : 'Análisis Limpio'),
       vtData: {
         url: label,
-        positives: data.positives ?? 0,
-        total: data.total ?? 0,
-        harmless: data.harmless ?? 0,
-        suspicious: data.suspicious ?? 0,
-        malicious: data.malicious ?? 0,
-        undetected: data.undetected ?? 0,
+        positives: malicious + suspicious,
+        total: total,
+        harmless: harmless,
+        suspicious: suspicious,
+        malicious: malicious,
+        undetected: undetected,
         fileName: data.fileName,
         fileType: data.fileType,
         fileSize: data.fileSize,

@@ -173,19 +173,25 @@ export class VirusTotalService {
       });
       const analysisId = uploadRes.data.data.id;
 
-      // Esperar resultado (poll hasta 3 intentos con 3s de pausa)
-      for (let i = 0; i < 3; i++) {
+      // Esperar resultado (poll hasta 6 intentos con 3s de pausa = 18s máx)
+      for (let i = 0; i < 6; i++) {
         await new Promise(r => setTimeout(r, 3000));
         const reportRes = await axios.get(`https://www.virustotal.com/api/v3/analyses/${analysisId}`, {
           headers: this.baseHeaders,
         });
         const status = reportRes.data.data.attributes.status;
+        this.logger.log(`[VT-File] Estado: ${status} (intento ${i + 1}/6)`);
         if (status === 'completed') {
           const stats = reportRes.data.data.attributes.stats;
           return this.buildStats(stats, { fileName });
         }
       }
-      return { status: 'unknown', positives: 0, total: 0, details: 'Análisis en progreso. Intenta de nuevo en unos segundos.' };
+      return { 
+        status: 'unknown', 
+        positives: 0, 
+        total: 0, 
+        details: JSON.stringify({ pending: true, fileName, message: 'El análisis de archivo está en progreso en VirusTotal. Intenta de nuevo en unos segundos.' }) 
+      };
     } catch (e) {
       this.logger.error(`Error VT archivo: ${e.message} | status: ${e.response?.status}`);
       return { status: 'unknown', positives: 0, total: 0, details: JSON.stringify({ error: 'No se pudo analizar el archivo.', fileName }) };
