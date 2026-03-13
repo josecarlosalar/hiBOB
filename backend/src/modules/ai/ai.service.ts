@@ -247,6 +247,7 @@ DIRECTRICES PRINCIPALES:
         automaticActivityDetection: {
           disabled: true,
         },
+        activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
       },
     };
 

@@ -62,6 +62,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   StreamSubscription<Amplitude>? _amplitudeSub;
   final List<StreamSubscription<dynamic>> _subs = [];
   Timer? _agentSpeechIdleTimer;
+  Timer? _silenceEndTimer; // Cierra el turno del usuario si hay silencio sostenido
   DateTime? _bargeInStartedAt;
   DateTime? _agentSpeechStartedAt;
   DateTime? _agentSpeechEstimatedEndTime;
@@ -127,6 +128,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _pcmAudio.dispose();
     _agentSpeechIdleTimer?.cancel();
     _echoHoldOffTimer?.cancel();
+    _silenceEndTimer?.cancel();
     _hideCameraTimer?.cancel();
     for (final sub in _subs) sub.cancel();
     super.dispose();
@@ -327,6 +329,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
+      // Hay voz: cancelar el timer de silencio si estaba corriendo
+      _silenceEndTimer?.cancel();
+      _silenceEndTimer = null;
       if (now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs && _bargeInEnabled) {
         if (!_manualActivitySignaled) {
           debugPrint('[VAD] ActivityStart manual (> $threshold dB por ${requiredDurationMs}ms)');
@@ -337,12 +342,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
     } else {
       _bargeInStartedAt = null;
-      // Si estábamos en medio de una actividad manual y el volumen baja, enviamos fin de actividad.
-      // Usamos un margen (histeresis) para evitar ruidos pequeños cortando la frase.
-      if (_manualActivitySignaled && amp.current < threshold - 15) {
-        debugPrint('[VAD] ActivityEnd manual (< ${threshold - 15} dB)');
-        _liveSession.sendActivityEnd();
-        _manualActivitySignaled = false;
+      // Si estábamos en medio de una actividad y el volumen bajó, iniciar timer de silencio.
+      // Pasados 800ms de silencio sostenido, cerramos el turno aunque haya ruido de fondo residual.
+      if (_manualActivitySignaled) {
+        if (amp.current < threshold - 15) {
+          _silenceEndTimer ??= Timer(const Duration(milliseconds: 800), () {
+            if (_manualActivitySignaled) {
+              debugPrint('[VAD] ActivityEnd por silencio sostenido (800ms)');
+              _liveSession.sendActivityEnd();
+              _manualActivitySignaled = false;
+            }
+            _silenceEndTimer = null;
+          });
+        }
       }
     }
   }
@@ -793,6 +805,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _pcmAudio.stop();
     _agentSpeechEstimatedEndTime = null;
     _echoHoldOffTimer?.cancel();
+    _silenceEndTimer?.cancel();
+    _silenceEndTimer = null;
     _inEchoHoldOff = false;
     _handleAgentSpeechEnded();
   }
@@ -802,6 +816,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _amplitudeSub?.cancel();
     _agentSpeechIdleTimer?.cancel();
     _echoHoldOffTimer?.cancel();
+    _silenceEndTimer?.cancel();
+    _silenceEndTimer = null;
     _agentSpeechEstimatedEndTime = null;
     _inEchoHoldOff = false;
     _showCameraPreview = false;
