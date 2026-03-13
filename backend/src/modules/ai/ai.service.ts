@@ -257,6 +257,7 @@ DIRECTRICES PRINCIPALES:
           disabled: true,
         },
       },
+      inputAudioTranscription: {},
     };
 
     try {
@@ -297,8 +298,9 @@ DIRECTRICES PRINCIPALES:
 
   private _handleSdkMessage(msg: any) {
     if (msg.serverContent) {
-      const { modelTurn, turnComplete, interrupted, inputTranscription } = msg.serverContent;
-      if (inputTranscription?.text) this.emit('transcription', inputTranscription.text);
+      const { modelTurn, turnComplete, interrupted, inputTranscription, inputAudioTranscription } = msg.serverContent;
+      const transcription = inputTranscription?.text || inputAudioTranscription?.text;
+      if (transcription) this.emit('transcription', transcription);
       if (modelTurn?.parts) {
         for (const part of modelTurn.parts) {
           if (part.inlineData?.data) this.emit('audio', { data: part.inlineData.data, mimeType: part.inlineData.mimeType });
