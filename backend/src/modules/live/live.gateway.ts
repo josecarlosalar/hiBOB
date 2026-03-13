@@ -238,19 +238,26 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   }]
                 });
 
-                session.sendClientContent([
+                pendingClientContent = [
                   { text: `Aquí tienes la imagen solicitada (screen). Analízala cuidadosamente. IMPORTANTE: Tras procesarla, usa OBLIGATORIAMENTE la herramienta "display_content" para actualizar la pantalla con un resumen de tus hallazgos.` },
                   { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-                ]);
+                ];
               } else {
-                client.emit('thinking_state', { tool: fc.name, message: 'Procesando captura...' });
-                session.sendClientContent([
-                  { text: `Aquí tienes la captura que has tomado de tu cámara. Analízala visualmente. IMPORTANTE: Ya que el usuario te está viendo en vivo en pantalla completa, NO uses "display_content" (la solaparía), simplemente responde por voz.` },
+                pendingClientContent = [
+                  { text: `Aquí tienes la captura que has tomado de tu cámara. Analízala visualmente AHORA. IMPORTANTE: NO uses "display_content" (la solaparía), simplemente responde por voz detallando exactamente lo que ves en la imagen.` },
                   { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-                ]);
+                ];
               }
 
-              return { name: fc.name, id: fc.id, response: { content: source === 'screen' ? 'Imagen recibida y mostrada en pantalla.' : 'Captura analizada, procede a responder por voz.' } };
+              return { 
+                name: fc.name, 
+                id: fc.id, 
+                response: { 
+                  content: source === 'screen' 
+                    ? 'Captura en camino. NO hables hasta que recibas la imagen en el próximo turno.' 
+                    : 'Captura de cámara en camino. NO hables ni inventes nada hasta que recibas la imagen en el próximo mensaje.' 
+                } 
+              };
             }
 
             // ── QR Code: activa cámara y luego analiza la URL extraída ──────
