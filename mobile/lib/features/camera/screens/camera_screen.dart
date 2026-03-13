@@ -342,7 +342,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     
     // Umbral dinámico de seguridad extrema contra eco.
     final threshold = isAgentTalking ? _bargeInThresholdDb : _vadThresholdDb;
-    final requiredDurationMs = isAgentTalking ? 500 : 350;
+    final requiredDurationMs = isAgentTalking ? 800 : 350;
 
     if (amp.current >= threshold) {
       _bargeInStartedAt ??= now;
@@ -353,7 +353,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       if (isAgentTalking &&
           now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs &&
           _bargeInEnabled &&
-          !_manualActivitySignaled) {
+          !_manualActivitySignaled &&
+          !_inEchoHoldOff) {
         debugPrint('[VAD] ActivityStart para interrupción (> $threshold dB por ${requiredDurationMs}ms)');
         _liveSession.sendActivityStart();
         _manualActivitySignaled = true;
@@ -414,8 +415,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _echoHoldOffTimer?.cancel();
     _inEchoHoldOff = true;
     
-    // Bajamos el hold-off a 600ms para ser más responsivos
-    _echoHoldOffTimer = Timer(const Duration(milliseconds: 600), () {
+    _echoHoldOffTimer = Timer(const Duration(milliseconds: 1200), () {
       if (mounted) setState(() => _inEchoHoldOff = false);
     });
   }
