@@ -107,7 +107,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     unawaited(_loadConversationSettings());
     
     _liveSession.onDisplayContent.listen((data) {
-      if (mounted) setState(() {
+      if (!mounted) return;
+      setState(() {
+        // Si el servidor manda un file_scan de progreso pero ya tenemos uno local con imagen,
+        // preservar el localPath para no perder la previsualización de la imagen del usuario.
+        final incomingType = data['type'] as String? ?? data['contentType'] as String? ?? '';
+        final existingType = _structuredContent?['type'] as String? ?? _structuredContent?['contentType'] as String? ?? '';
+        if (incomingType == 'file_scan' && existingType == 'file_scan') {
+          final existingItems = _structuredContent?['items'] as List<dynamic>?;
+          final incomingItems = data['items'] as List<dynamic>?;
+          if (existingItems != null && existingItems.isNotEmpty &&
+              incomingItems != null && incomingItems.isNotEmpty) {
+            final existingFirst = existingItems.first as Map<String, dynamic>;
+            final existingLocalPath = existingFirst['localPath'] as String?;
+            if (existingLocalPath != null) {
+              (incomingItems.first as Map<String, dynamic>)['localPath'] = existingLocalPath;
+            }
+          }
+        }
         _structuredContent = data;
         _thinkingData = null;
       });
