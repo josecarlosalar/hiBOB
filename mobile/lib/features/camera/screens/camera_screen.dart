@@ -956,7 +956,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildCopilotBanner(ColorScheme colors) {
     if (_state == AssistantState.inactive) return const SizedBox.shrink();
     return Positioned(
-      top: 100,
+      top: 140,
       left: 24,
       right: 24,
       child: FadeTransition(
