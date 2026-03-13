@@ -113,8 +113,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           'Ante un QR desconocido, usa scan_qr_code antes de que el usuario lo escanee. ' +
 
           'INTERFAZ GRÁFICA Y DIAGNÓSTICO (MUY IMPORTANTE): ' +
-          '1. Cuando uses herramientas de análisis (analyze_security_url, analyze_domain, analyze_file_hash, analyze_ip, scan_file), NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente por sí solo la UI moderna con los gráficos de VirusTotal. Si mandas tú otro "display_content", romperás la interfaz y la pantalla se pondrá negra. ' +
-          '2. Tu trabajo, tras usar la herramienta, es dar un diagnóstico PROFESIONAL por voz. El sistema te devolverá el JSON de VirusTotal y los resultados de búsqueda web. Debes UNIFICAR ambas informaciones: explica de forma clara el veredicto técnico y da contexto sobre qué dice internet de ese sitio, justificando el nivel de riesgo.'
+          '1. Cuando uses herramientas de análisis de RED (analyze_security_url, analyze_domain, analyze_file_hash, analyze_ip, scan_file), NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente la UI de VirusTotal. Tu trabajo es dar un diagnóstico PROFESIONAL por voz. ' +
+          '2. Cuando analices una imagen de galería que el usuario te envía directamente, SÍ DEBES usar la herramienta "display_content" con { "contentType": "detail", "title": "Diagnóstico de Imagen", "items": [{ "id": "img_result", "title": "Veredicto", "description": "<tu diagnóstico aquí>" }] } para mostrar el resultado en pantalla además de explicarlo por voz. ' +
+          '3. El sistema te devolverá el JSON de VirusTotal y los resultados de búsqueda web. Debes UNIFICAR ambas informaciones: explica de forma clara el veredicto técnico y da contexto, justificando el nivel de riesgo.'
       });
 
       client.data.geminiSession = session;
@@ -194,10 +195,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 try {
                   const data = JSON.parse(vtResult);
                   this._emitVtReport(client, data, fileName);
+                  // Pequeño delay para que el display_content llegue al cliente ANTES de que Gemini empiece a hablar
+                  await new Promise(resolve => setTimeout(resolve, 300));
                   return {
                     name: fc.name,
                     id: fc.id,
-                    response: { content: `Fichero "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado en pantalla.` }
+                    response: { content: `Fichero "${fileName}" analizado. VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla. Da el diagnóstico en 2-3 frases.` }
                   };
                 } catch {
                   return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
@@ -217,7 +220,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
               // Guardar imagen para enviar DESPUÉS del sendToolResponse (evita race condition)
               pendingClientContent = [
-                { text: 'Aquí tienes la imagen de la galería. Analízala detalladamente. IMPORTANTE: Usa OBLIGATORIAMENTE la herramienta "display_content" para actualizar la UI con un resumen visual de tu diagnóstico. Así el usuario sabrá que has terminado.' },
+                { text: 'Aquí tienes la imagen de la galería que el usuario quiere que analices. Analízala detalladamente: identifica textos, URLs, mensajes sospechosos, datos sensibles o cualquier indicador de amenaza. Responde en español por voz con tu diagnóstico. Además, usa la herramienta "display_content" con contentType:"detail" para mostrar un resumen visual del resultado en pantalla.' },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
               ];
 
@@ -323,7 +326,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               try {
                 const data = JSON.parse(vtResult);
                 this._emitVtReport(client, data, fileName);
-                return { name: fc.name, id: fc.id, response: { content: `Análisis de "${fileName}" completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla.` } };
+                await new Promise(resolve => setTimeout(resolve, 300));
+                return { name: fc.name, id: fc.id, response: { content: `Análisis de "${fileName}" completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla. Da el diagnóstico en 2-3 frases.` } };
               } catch {
                 return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
               }
@@ -477,6 +481,16 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             return { name: fc.name, id: fc.id, response: { content: result } };
           }),
         );
+        // Delay para que el display_content llegue y se renderice en el cliente
+        // ANTES de que Gemini procese el tool response y empiece a generar audio
+        const hasDisplayContent = results.some(r =>
+          ['analyze_security_url','analyze_ip','analyze_domain','analyze_file_hash',
+           'scan_file','check_password_breach','generate_password'].includes((r as any).name)
+        );
+        if (hasDisplayContent) {
+          await new Promise(resolve => setTimeout(resolve, 350));
+        }
+
         session.sendToolResponse(results);
 
         // Enviar imagen DESPUÉS del tool response para que Gemini la reciba en el turno correcto
@@ -592,7 +606,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         items: [{ id: 'scan_progress', title: 'Imagen de Galería', description: 'Obteniendo diagnóstico del agente...' }]
       });
       session.sendClientContent([
-        { text: 'El usuario te ha enviado esta imagen para que la analices. Descríbela e identifica cualquier amenaza (URLs, estafas, datos sensibles). IMPORTANTE: Usa SIEMPRE la herramienta "display_content" para actualizar la UI del usuario con tu diagnóstico final; de lo contrario, la interfaz se quedará cargando.' },
+        { text: 'El usuario te ha enviado esta imagen para que la analices. Analízala en detalle: identifica textos, URLs, mensajes sospechosos, datos sensibles o cualquier indicador de amenaza. Da tu diagnóstico por voz en español. Además, usa la herramienta "display_content" con contentType:"detail" para mostrar el resumen del resultado en pantalla.' },
         { inlineData: { data: frame, mimeType: 'image/jpeg' } }
       ], true);
       return;
