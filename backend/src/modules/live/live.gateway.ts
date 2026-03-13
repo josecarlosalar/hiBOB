@@ -80,7 +80,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
           'PRESENTACIÓN DE CAPACIDADES VISUALES (CRÍTICO): ' +
           'Si el usuario te pregunta "cómo puedes ayudarme", "qué sabes hacer", "explícame qué haces" o similares, DEBES usar OBLIGATORIAMENTE la herramienta "display_content" al mismo tiempo que inicias tu respuesta de voz. ' +
-          'Llama a "display_content" con el argumento { "type": "features_slider", "title": "Mis Capacidades" } y añade al menos 4 "items" interactivos asegurándote de rellenar los campos "id", "title", y "description" de cada uno detallando tus funciones (ej: Análisis VirusTotal, Revisión de Contraseñas Filtradas, Protección de Red, Modo Copiloto). ' +
+          'Llama a "display_content" con el argumento { "contentType": "features_slider", "title": "Mis Capacidades" } y añade al menos 4 "items" interactivos asegurándote de rellenar los campos "id", "title", y "description" de cada uno detallando tus funciones (ej: Análisis VirusTotal, Revisión de Contraseñas Filtradas, Protección de Red, Modo Copiloto). ' +
           'Mientras envías el comando visual, explica por voz y con detalle TODO lo que puedes hacer usando tu acceso a VirusTotal, Have I Been Pwned y la búsqueda web. Esto generará un carrusel slider en pantalla sincronizado con tu voz. ' +
 
           'REGLAS CRÍTICAS DE SEGURIDAD: ' +
@@ -144,7 +144,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       session.on('close', () => {
         this.logger.warn(`[Gemini] Sesión cerrada para cliente ${client.id}`);
-        // No desconectamos el socket automáticamente, permitimos reconexión de sesión si fuera necesario
+        // Notificamos al cliente para que no se quede colgado en estado 'speaking' o 'loading'
+        if (client.connected) {
+           client.emit('error', { message: 'La conexión con el núcleo de IA se ha cerrado inesperadamente.' });
+        }
       });
 
       session.on('tool_call', async (toolCall) => {
@@ -463,7 +466,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             } else if (fc.name === 'trigger_haptic_feedback') {
               client.emit('command', { action: 'vibrate', pattern: fc.args.pattern });
             } else if (fc.name === 'display_content') {
-              client.emit('display_content', { type: fc.args.type, title: fc.args.title, items: fc.args.items });
+              // Mantenemos 'type' para el cliente de Flutter por compatibilidad, pero lo extraemos de 'contentType'
+              client.emit('display_content', { 
+                type: fc.args.contentType || fc.args.type, 
+                title: fc.args.title, 
+                items: fc.args.items 
+              });
             }
 
             return { name: fc.name, id: fc.id, response: { content: result } };

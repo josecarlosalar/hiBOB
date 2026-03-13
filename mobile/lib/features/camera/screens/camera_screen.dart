@@ -202,11 +202,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
           else if (s == LiveSessionState.connected) _startStreaming();
-          else if (s == LiveSessionState.error) { _stopSession(); _showMessage('Error de conexión'); }
+          else if (s == LiveSessionState.error) { 
+            _stopSession(); 
+            _setStateIfMounted(AssistantState.inactive);
+            _showMessage('Error de conexión con el núcleo'); 
+          }
           else if (s == LiveSessionState.disconnected) { 
             if (_state != AssistantState.inactive && !_openingGallery) {
               // En lugar de cerrar sesión, marcamos como reconectando para dar oportunidad a Socket.IO
               _setStateIfMounted(AssistantState.connecting);
+            } else {
+              _setStateIfMounted(AssistantState.inactive);
             }
           }
         }),
@@ -1180,7 +1186,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
     }
     
-    final type = _structuredContent!['type'] as String? ?? 'detail';
+    final type = _structuredContent!['contentType'] as String? ?? _structuredContent!['type'] as String? ?? 'detail';
     void onClose() => setState(() { _structuredContent = null; _selectedItem = null; });
 
     if (type == 'vt_report') {
