@@ -261,10 +261,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
           if (source == 'manual_camera') {
-            // Cambiar a cámara trasera y esperar a que esté lista antes de mostrar preview
             await _switchCameraForQr();
             _manualCaptureCompleter = Completer<String?>();
-            // Countdown de 30s
             _manualCaptureTimer?.cancel();
             _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
               if (!mounted) { t.cancel(); return; }
@@ -275,9 +273,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               }
             });
             final frame = await _manualCaptureCompleter!.future;
-            // Volver a cámara frontal tras capturar
             unawaited(_switchCamera(CameraLensDirection.front));
-            if (frame != null) _liveSession.sendFrame(frameBase64: frame);
+            if (frame != null) {
+              // Mostrar overlay de progreso localmente para evitar el "hueco" visual
+              setState(() {
+                _structuredContent = {
+                  'type': 'file_scan',
+                  'title': 'Escaneando QR',
+                  'items': [{
+                    'id': 'qr_progress',
+                    'title': 'Código QR',
+                    'description': 'Analizando código QR...',
+                    'imageUrl': 'data:image/jpeg;base64,$frame', // Usamos el frame directamente
+                  }]
+                };
+              });
+              _liveSession.sendFrame(frameBase64: frame);
+            }
           } else {
             final frame = await _captureFrame(source: source);
             if (frame != null) _liveSession.sendFrame(frameBase64: frame);
@@ -1225,7 +1237,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
     }
     
-    final type = _structuredContent!['contentType'] as String? ?? _structuredContent!['type'] as String? ?? 'detail';
+    final rawType = (_structuredContent!['contentType'] as String? ?? _structuredContent!['type'] as String? ?? 'detail').toLowerCase();
+    
+    // Mapeo flexible de tipos para asegurar que se muestran los paneles correctos
+    String type = 'detail';
+    if (rawType.contains('vt') || rawType.contains('virustotal') || rawType.contains('report_scan')) {
+      type = 'vt_report';
+    } else if (rawType.contains('ip_report')) {
+      type = 'ip_report';
+    } else if (rawType.contains('domain_report')) {
+      type = 'domain_report';
+    } else if (rawType.contains('password_check') || rawType.contains('pwned')) {
+      type = 'password_check';
+    } else if (rawType.contains('password_gen')) {
+      type = 'password_generated';
+    } else if (rawType.contains('slider') || rawType.contains('features')) {
+      type = 'features_slider';
+    } else if (rawType.contains('scan') || rawType.contains('progress')) {
+      type = 'qr_scan';
+    }
+    
     void onClose() => setState(() { _structuredContent = null; _selectedItem = null; });
 
     if (type == 'vt_report') {
@@ -1305,7 +1336,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return ListView.separated(padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: items.length, separatorBuilder: (_, __) => const SizedBox(height: 12), itemBuilder: (context, index) {
       final item = items[index] as Map<String, dynamic>;
       return InkWell(onTap: () => setState(() => _selectedItem = item), borderRadius: BorderRadius.circular(16), child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(16)), child: Row(children: [
-        if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(8), child: item['imageUrl'].toString().startsWith('data:') ? Image.memory(base64Decode(item['imageUrl'].toString().split(',').last), width: 50, height: 50, fit: BoxFit.cover) : Image.network(item['imageUrl'].toString(), width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_,__,___) => const Icon(Icons.image, color: Colors.white24))),
+        if (item['imageUrl'] != null) ClipRRect(borderRadius: BorderRadius.circular(8), child: item['imageUrl'].toString().startsWith('data:') ? Image.memory(base64Decode(item['imageUrl'].toString().split(',').last), width: 50, height: 50, fit: BoxFit.cover, gaplessPlayback: true) : Image.network(item['imageUrl'].toString(), width: 50, height: 50, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_,__,___) => const Icon(Icons.image, color: Colors.white24))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(item['title'] ?? '', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)), Text(item['description'] ?? '', style: const TextStyle(color: Colors.white60, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis)]))
       ])));
@@ -1315,7 +1346,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Widget _buildDetailView(Map<String, dynamic> item, ColorScheme colors) {
     final imgUrl = item['imageUrl'] as String?;
     return SingleChildScrollView(padding: const EdgeInsets.all(20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (imgUrl != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: imgUrl.startsWith('data:') ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: 200, fit: BoxFit.contain) : Image.network(imgUrl, width: double.infinity, height: 150, fit: BoxFit.cover)),
+      if (imgUrl != null) ClipRRect(borderRadius: BorderRadius.circular(16), child: imgUrl.startsWith('data:') ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: 200, fit: BoxFit.contain, gaplessPlayback: true) : Image.network(imgUrl, width: double.infinity, height: 150, fit: BoxFit.cover, gaplessPlayback: true)),
       const SizedBox(height: 16),
       Text(item['description'] ?? '', style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.4)),
     ]));
@@ -2463,10 +2494,10 @@ class _ScanProgressOverlayState extends State<_ScanProgressOverlay>
                 ClipRRect(
                   borderRadius: BorderRadius.circular(19),
                   child: localPath != null
-                      ? Image.file(File(localPath), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
+                      ? Image.file(File(localPath), width: double.infinity, height: double.infinity, fit: BoxFit.cover, gaplessPlayback: true)
                       : (imgUrl!.startsWith('data:')
-                          ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: double.infinity, fit: BoxFit.cover)
-                          : Image.network(imgUrl, width: double.infinity, height: double.infinity, fit: BoxFit.cover)),
+                          ? Image.memory(base64Decode(imgUrl.split(',').last), width: double.infinity, height: double.infinity, fit: BoxFit.cover, gaplessPlayback: true)
+                          : Image.network(imgUrl, width: double.infinity, height: double.infinity, fit: BoxFit.cover, gaplessPlayback: true)),
                 )
               else
                 Column(
