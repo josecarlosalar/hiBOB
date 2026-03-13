@@ -203,7 +203,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
           else if (s == LiveSessionState.connected) _startStreaming();
           else if (s == LiveSessionState.error) { _stopSession(); _showMessage('Error de conexión'); }
-          else if (s == LiveSessionState.disconnected) { if (_state != AssistantState.inactive && !_openingGallery) _stopSession(); }
+          else if (s == LiveSessionState.disconnected) { 
+            if (_state != AssistantState.inactive && !_openingGallery) {
+              // En lugar de cerrar sesión, marcamos como reconectando para dar oportunidad a Socket.IO
+              _setStateIfMounted(AssistantState.connecting);
+            }
+          }
         }),
         _liveSession.onAudioChunk.listen((audioChunk) {
           if (!mounted) return;
@@ -1209,6 +1214,13 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (type == 'password_generated') {
       return _PasswordGeneratedOverlay(
         passwordData: _structuredContent!['passwordData'] as Map<String, dynamic>?,
+        onClose: onClose,
+      );
+    }
+    if (type == 'features_slider') {
+      return _FeaturesSliderOverlay(
+        title: _structuredContent!['title'] as String? ?? 'Capacidades',
+        items: _structuredContent!['items'] as List<dynamic>? ?? [],
         onClose: onClose,
       );
     }
@@ -2929,5 +2941,183 @@ class _ThinkingSkeletonOverlayState extends State<_ThinkingSkeletonOverlay>
         );
       },
     );
+  }
+}
+
+// ─── Widgets de Contenido Premium ──────────────────────────────────────────
+
+class _FeaturesSliderOverlay extends StatefulWidget {
+  final String title;
+  final List<dynamic> items;
+  final VoidCallback onClose;
+
+  const _FeaturesSliderOverlay({required this.title, required this.items, required this.onClose});
+
+  @override
+  State<_FeaturesSliderOverlay> createState() => _FeaturesSliderOverlayState();
+}
+
+class _FeaturesSliderOverlayState extends State<_FeaturesSliderOverlay> {
+  final PageController _pageCtrl = PageController(viewportFraction: 0.85);
+  int _currentPage = 0;
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Título del Slider
+          Text(
+            widget.title.toUpperCase(),
+            style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2),
+          ),
+          const SizedBox(height: 24),
+          
+          // Carrusel de Capacidades
+          SizedBox(
+            height: 380,
+            child: PageView.builder(
+              controller: _pageCtrl,
+              itemCount: widget.items.length,
+              onPageChanged: (v) => setState(() => _currentPage = v),
+              itemBuilder: (context, index) {
+                final itemData = widget.items[index] as Map<String, dynamic>;
+                final bool isCurrent = _currentPage == index;
+                
+                return AnimatedScale(
+                  scale: isCurrent ? 1.0 : 0.9,
+                  duration: const Duration(milliseconds: 300),
+                  child: _FeatureItemCard(item: itemData, colors: colors),
+                );
+              },
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Botón Cerrar Estilizado
+          GestureDetector(
+            onTap: widget.onClose,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.close, color: Colors.white70, size: 18),
+                  SizedBox(width: 8),
+                  Text('CERRAR', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 100), // Espacio para que no tape la barra inferior
+        ],
+      ),
+    );
+  }
+}
+
+class _FeatureItemCard extends StatelessWidget {
+  final Map<String, dynamic> item;
+  final ColorScheme colors;
+
+  const _FeatureItemCard({required this.item, required this.colors});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121212).withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(
+            color: colors.primary.withValues(alpha: 0.15),
+            blurRadius: 30,
+            spreadRadius: -10,
+          )
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(32),
+        child: Stack(
+          children: [
+            // Fondo con gradiente sutil
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      colors.primary.withValues(alpha: 0.05),
+                      Colors.transparent,
+                      colors.secondary.withValues(alpha: 0.05),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Icono / ID visual
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      color: colors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(_getIconForFeature(item['id']), color: colors.primary, size: 28),
+                  ),
+                  const Spacer(),
+                  // Título
+                  Text(
+                    item['title'] as String? ?? 'Capacidad',
+                    style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold, height: 1.1),
+                  ),
+                  const SizedBox(height: 12),
+                  // Descripción
+                  Text(
+                    item['description'] as String? ?? '',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, height: 1.4),
+                    maxLines: 4,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _getIconForFeature(dynamic id) {
+    final sId = id.toString().toLowerCase();
+    if (sId.contains('virus') || sId.contains('scan')) return Icons.security;
+    if (sId.contains('pass') || sId.contains('filtr')) return Icons.password;
+    if (sId.contains('net') || sId.contains('red')) return Icons.lan;
+    if (sId.contains('copilot') || sId.contains('guide')) return Icons.support_agent;
+    if (sId.contains('camera') || sId.contains('vision')) return Icons.visibility;
+    return Icons.star_outline;
   }
 }
