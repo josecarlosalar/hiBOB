@@ -20,7 +20,7 @@ class LiveSessionService {
   final _doneController = StreamController<void>.broadcast();
   final _commandController = StreamController<Map<String, dynamic>>.broadcast();
   final _contentController = StreamController<Map<String, dynamic>>.broadcast();
-  final _thinkingController = StreamController<Map<String, dynamic>>.broadcast();
+  final _thinkingController = StreamController<Map<String, dynamic>?>.broadcast();
   final _frameRequestController = StreamController<Map<String, dynamic>>.broadcast();
   final _errorController = StreamController<String>.broadcast();
 
@@ -32,7 +32,7 @@ class LiveSessionService {
   Stream<Map<String, dynamic>> get onCommand => _commandController.stream;
   Stream<Map<String, dynamic>> get onDisplayContent => _contentController.stream;
   /// Notifica cuando el asistente está procesando una herramienta (ej. VirusTotal).
-  Stream<Map<String, dynamic>> get onThinkingState => _thinkingController.stream;
+  Stream<Map<String, dynamic>?> get onThinkingState => _thinkingController.stream;
   /// El backend solicita un frame; el payload incluye `source` ('camera' o 'screen').
   Stream<Map<String, dynamic>> get onFrameRequest => _frameRequestController.stream;
   Stream<String> get onError => _errorController.stream;
@@ -115,7 +115,7 @@ class LiveSessionService {
         _contentController.add(Map<String, dynamic>.from(data as Map));
       })
       ..on('thinking_state', (data) {
-        _thinkingController.add(Map<String, dynamic>.from(data as Map));
+        _thinkingController.add(data == null ? null : Map<String, dynamic>.from(data as Map));
       })
       ..on('error', (data) {
         final message = (data as Map<String, dynamic>)['message'] as String? ?? 'Error desconocido';

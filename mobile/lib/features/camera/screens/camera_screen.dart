@@ -131,7 +131,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     });
 
     _liveSession.onThinkingState.listen((data) {
-      if (mounted) setState(() => _thinkingData = data);
+      if (mounted) setState(() => _thinkingData = data);  // null limpia el skeleton
     });
   }
 
