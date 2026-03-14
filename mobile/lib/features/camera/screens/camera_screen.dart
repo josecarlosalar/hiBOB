@@ -45,7 +45,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
   CameraLensDirection _selectedLensDirection = CameraLensDirection.back;
-  ResolutionPreset _currentResolutionPreset = ResolutionPreset.medium;
+  ResolutionPreset _currentResolutionPreset = ResolutionPreset.high;
 
   final LiveSessionService _liveSession = LiveSessionService();
   final AudioService _audio = AudioService();
@@ -179,7 +179,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_availableCameras.isEmpty) return;
     final selectedCamera = _findCameraForLens(_selectedLensDirection) ?? _availableCameras.first;
     _selectedLensDirection = selectedCamera.lensDirection;
-    _currentResolutionPreset = ResolutionPreset.medium;
+    _currentResolutionPreset = ResolutionPreset.high;
     _cameraCtrl = CameraController(selectedCamera, _currentResolutionPreset, enableAudio: false);
     await _cameraCtrl!.initialize();
     if (mounted) setState(() {});
@@ -190,7 +190,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return null;
   }
 
-  Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false, ResolutionPreset resolution = ResolutionPreset.medium}) async {
+  Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false, ResolutionPreset resolution = ResolutionPreset.high}) async {
     if (!force &&
         _selectedLensDirection == lensDirection &&
         _currentResolutionPreset == resolution &&
@@ -287,7 +287,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               // de cámara/audio que pueden cortar el socket en algunos dispositivos.
               final needsQrReconfigure =
                   _selectedLensDirection != CameraLensDirection.back ||
-                  _currentResolutionPreset != ResolutionPreset.high ||
                   _cameraCtrl == null ||
                   !_cameraCtrl!.value.isInitialized;
 
