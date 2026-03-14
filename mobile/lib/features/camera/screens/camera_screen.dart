@@ -85,6 +85,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _openingGallery = false;
   Completer<String?>? _manualCaptureCompleter;
   Timer? _manualCaptureTimer;
+  Timer? _autoQrTimer;
   int _manualCaptureCountdown = 30;
 
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
@@ -109,10 +110,20 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     
     _liveSession.onDisplayContent.listen((data) {
       if (!mounted) return;
+      // Cuando el backend detecta el QR (emite qr_scan con URL), cancelar el modo captura
+      final incomingType = data['type'] as String? ?? data['contentType'] as String? ?? '';
+      if (incomingType == 'qr_scan' && _awaitingManualCapture) {
+        _autoQrTimer?.cancel();
+        _manualCaptureTimer?.cancel();
+        if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+          _manualCaptureCompleter!.complete(null);
+        }
+        _awaitingManualCapture = false;
+        _showCameraPreview = false;
+      }
       setState(() {
         // Si el servidor manda un file_scan de progreso pero ya tenemos uno local con imagen,
         // preservar el localPath para no perder la previsualización de la imagen del usuario.
-        final incomingType = data['type'] as String? ?? data['contentType'] as String? ?? '';
         final existingType = _structuredContent?['type'] as String? ?? _structuredContent?['contentType'] as String? ?? '';
         if (incomingType == 'file_scan' && existingType == 'file_scan') {
           final existingItems = _structuredContent?['items'] as List<dynamic>?;
@@ -274,6 +285,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 if (_manualCaptureCountdown <= 0) {
                   t.cancel();
                   _cancelManualCapture();
+                }
+              });
+              // Auto-scan: captura y envía frame cada 2s para que el backend detecte el QR con jsQR
+              // sin requerir que el usuario pulse el botón ni que el agente llame trigger_qr_capture.
+              _autoQrTimer?.cancel();
+              _autoQrTimer = Timer.periodic(const Duration(seconds: 2), (t) async {
+                if (!mounted || !_awaitingManualCapture) { t.cancel(); return; }
+                final autoFrame = await _captureFrame(source: 'camera');
+                if (autoFrame != null && mounted && _awaitingManualCapture) {
+                  _liveSession.sendFrame(frameBase64: autoFrame);
                 }
               });
               final frame = await _manualCaptureCompleter!.future;
@@ -843,6 +864,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _triggerManualCapture() async {
     if (!_awaitingManualCapture || _manualCaptureCompleter == null) return;
     _manualCaptureTimer?.cancel();
+    _autoQrTimer?.cancel();
     try {
       final frame = await _captureFrame(source: 'camera');
       if (mounted) setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
@@ -857,6 +879,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _cancelManualCapture() {
     _manualCaptureTimer?.cancel();
+    _autoQrTimer?.cancel();
     setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
     if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
       _manualCaptureCompleter!.complete(null);
