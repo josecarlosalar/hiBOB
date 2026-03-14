@@ -175,17 +175,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     return null;
   }
 
-  Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false}) async {
+  Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false, ResolutionPreset resolution = ResolutionPreset.medium}) async {
     if (!force && _selectedLensDirection == lensDirection && _cameraCtrl != null && _cameraCtrl!.value.isInitialized) return;
     final selectedCamera = _findCameraForLens(lensDirection);
     if (selectedCamera == null) return;
-    
+
     // Dispose old one first to avoid 'Camera already in use' on some Androids
     await _cameraCtrl?.dispose();
     _cameraCtrl = null;
     if (mounted) setState(() {});
 
-    final nextController = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
+    final nextController = CameraController(selectedCamera, resolution, enableAudio: false);
     try {
       await nextController.initialize();
       _cameraCtrl = nextController;
@@ -197,8 +197,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// Cambia a cámara trasera, espera a que produzca frames reales y luego
   /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
   Future<void> _switchCameraForQr() async {
-    // Forzamos reinicialización para asegurar que el stream de frames esté activo
-    await _switchCamera(CameraLensDirection.back, force: true);
+    // Forzamos reinicialización con resolución alta para que jsQR pueda leer el QR
+    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
     
     // Pausa para que el hardware se asiente
     await Future.delayed(const Duration(milliseconds: 500));
@@ -468,6 +468,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (mounted) setState(() => _isVibrating = false);
         });
       }
+    } else if (action == 'trigger_capture') {
+      _triggerManualCapture();
     } else if (action == 'open_url') {
       final url = cmd['url'] as String?;
       if (url != null) {
