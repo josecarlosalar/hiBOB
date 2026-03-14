@@ -641,8 +641,11 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
         }
 
         if (!qrData?.data) {
-          // No hay QR en este frame — volver a esperar el siguiente (auto-scan periódico)
-          this.logger.log(`[QR] Frame sin QR detectado para ${client.id}, esperando siguiente frame...`);
+          this.logger.log(`[QR] Frame sin QR detectado para ${client.id}. Solicitando nueva captura manual...`);
+          client.emit('frame_request', { source: 'manual_camera' });
+          session.sendClientContent([{
+            text: 'No he podido leer el código QR en la última captura. Pide al usuario que lo centre mejor en el recuadro y que diga "listo" o pulse capturar para intentarlo de nuevo.'
+          }], true);
           return tryNextFrame();
         }
 
