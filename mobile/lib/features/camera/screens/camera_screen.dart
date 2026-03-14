@@ -39,7 +39,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   static const double _defaultVadThresholdDb = -40.0;
   static const double _defaultBargeInThresholdDb = -18.0;
   static const int _defaultSilenceMs = 650;
-  static const int _defaultAgentSpeechGraceMs = 3000;
+  static const int _defaultAgentSpeechGraceMs = 5000;
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
@@ -366,7 +366,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           now.difference(_bargeInStartedAt!).inMilliseconds >= requiredDurationMs &&
           _bargeInEnabled &&
           !_manualActivitySignaled &&
-          !_inEchoHoldOff) {
+          !_inEchoHoldOff &&
+          amp.current > _bargeInThresholdDb + 5) { // Un poco más de margen si está hablando
         debugPrint('[VAD] ActivityStart para interrupción (> $threshold dB por ${requiredDurationMs}ms)');
         _liveSession.sendActivityStart();
         _manualActivitySignaled = true;
@@ -413,8 +414,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       }
     }
     
-    // Añadimos 200ms extra de padding de seguridad para asegurar que el buffer se vació.
-    _agentSpeechIdleTimer = Timer(Duration(milliseconds: delayMs + 200), _handleAgentSpeechEnded);
+    // Añadimos 600ms extra de padding de seguridad para asegurar que el buffer se vació por completo.
+    _agentSpeechIdleTimer = Timer(Duration(milliseconds: delayMs + 600), _handleAgentSpeechEnded);
   }
 
   void _handleAgentSpeechEnded() {
@@ -1241,7 +1242,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     
     // Mapeo flexible de tipos para asegurar que se muestran los paneles correctos
     String type = 'detail';
-    if (rawType.contains('vt') || rawType.contains('virustotal') || rawType.contains('report_scan')) {
+    if (rawType.contains('vt') || rawType.contains('virustotal') || rawType.contains('threat') || rawType.contains('security') || rawType.contains('scan')) {
       type = 'vt_report';
     } else if (rawType.contains('ip_report')) {
       type = 'ip_report';
@@ -1253,7 +1254,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       type = 'password_generated';
     } else if (rawType.contains('slider') || rawType.contains('features')) {
       type = 'features_slider';
-    } else if (rawType.contains('scan') || rawType.contains('progress')) {
+    } else if (rawType.contains('progress')) {
       type = 'qr_scan';
     }
     
