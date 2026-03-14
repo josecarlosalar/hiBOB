@@ -741,7 +741,100 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
       return;
     }
 
-    // PRIORIDAD 2a: El usuario envió una IMAGEN manualmente (botón UI con prompt 'analyze_image').
+    // PRIORIDAD 2a: El usuario envió una captura manual de QR.
+    // Este path cubre reconexiones donde el socket original perdió la espera pendiente.
+    if (payload?.prompt === 'qr_scan') {
+      this.logger.log(`[QR] Captura manual recibida en ${client.id}. Analizando QR...`);
+
+      (async () => {
+        try {
+          const imageBuffer = Buffer.from(frame, 'base64');
+          const image = await Jimp.fromBuffer(imageBuffer);
+          this.logger.log(`[QR] Imagen manual cargada: ${image.bitmap.width}x${image.bitmap.height}px`);
+
+          const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
+            new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
+
+          const prepareImage = (src: typeof image): typeof image => {
+            const clone = src.clone();
+            const { width, height } = clone.bitmap;
+            const minDim = Math.min(width, height);
+            const maxDim = Math.max(width, height);
+            if (maxDim < 400) { clone.scale(Math.ceil(400 / maxDim)); }
+            else if (minDim > 1200) { clone.scaleToFit({ w: 1200, h: 1200 }); }
+            return clone;
+          };
+
+          const strategies = [
+            prepareImage(image),
+            prepareImage(image).contrast(1.0),
+            prepareImage(image).greyscale().contrast(0.5).threshold({ max: 128 }),
+          ];
+          const rotations = [0, 90, 180, 270];
+
+          let qrData: ReturnType<typeof jsQR> = null;
+          outerLoop:
+          for (const strategy of strategies) {
+            for (const rotation of rotations) {
+              const attempt = rotation === 0 ? strategy.clone() : strategy.clone().rotate(rotation);
+              const bmp = attempt.bitmap;
+              const rgba = getBitmapRgba(bmp);
+              qrData = jsQR(rgba, bmp.width, bmp.height);
+              if (qrData?.data) {
+                this.logger.log(`[QR] QR manual decodificado con éxito (rotación ${rotation}°)`);
+                break outerLoop;
+              }
+            }
+          }
+
+          if (!qrData?.data) {
+            client.emit('frame_request', { source: 'manual_camera' });
+            session.sendClientContent([{
+              text: 'No he podido leer el código QR en la última captura. Pide al usuario que lo centre mejor en el recuadro y que diga "listo" o pulse capturar para intentarlo de nuevo.'
+            }], true);
+            return;
+          }
+
+          const url = qrData.data.trim();
+          this.logger.log(`[QR] URL detectada desde captura manual: "${url}". Iniciando análisis de seguridad...`);
+
+          client.emit('display_content', {
+            type: 'qr_scan',
+            title: 'Analizando URL...',
+            items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal y reputación web...' }],
+          });
+
+          const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+          const data = JSON.parse(vtRaw);
+          if (data.error) throw new Error(data.error);
+
+          this.logger.log(`[QR] Análisis manual completado para ${url}: ${data.positives} positivos`);
+          this._emitVtReport(client, data, url);
+
+          const isSafe = data.positives === 0;
+          if (isSafe) {
+            this.logger.log(`[QR] URL segura por VirusTotal. Solicitando apertura en navegador...`);
+            client.emit('command', { action: 'open_url', url });
+          }
+
+          session.sendClientContent([{
+            text: `Análisis de código QR finalizado.
+URL detectada: "${url}"
+Resultado VirusTotal: ${data.positives}/${data.total} motores detectaron amenazas.
+Contexto de Internet: ${data.internet_context || 'No se encontró información adicional.'}
+Acción realizada: ${isSafe ? 'Se ha abierto la URL automáticamente por reputación limpia en VT.' : 'Bloqueado por seguridad.'}
+
+Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. Si VirusTotal es 0 pero el contexto de internet menciona estafas o phishing, advierte al usuario seriamente y no digas que es seguro.`
+          }], true);
+        } catch (err: any) {
+          this.logger.error(`Error procesando captura manual de QR para ${client.id}: ${err.message || err}`);
+          session.sendClientContent([{ text: 'Hubo un error técnico al analizar el código QR. Informa al usuario y pide una nueva captura.' }], true);
+        }
+      })();
+      return;
+    }
+
+    // PRIORIDAD 2b: El usuario envió una IMAGEN manualmente (botón UI con prompt 'analyze_image').
     if (payload?.prompt === 'analyze_image') {
       const fileName = payload?.fileName || 'Imagen_Galeria.jpg';
       this.logger.log(`[Visión] Imagen manual recibida para ${fileName} en ${client.id}`);
@@ -765,7 +858,7 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
       return;
     }
 
-    // PRIORIDAD 2b: El usuario envió un FICHERO manualmente (botón UI con fileName sin prompt).
+    // PRIORIDAD 2c: El usuario envió un FICHERO manualmente (botón UI con fileName sin prompt).
     // Este path también cubre el caso donde scan_file reconectó y el fichero llega en nueva sesión.
     if (payload?.fileName) {
       const fileName = payload.fileName;
