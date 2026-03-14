@@ -268,19 +268,55 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               if (!qrFrame) {
                 return { name: fc.name, id: fc.id, response: { content: 'No se recibió imagen de la cámara.' } };
               }
-              // Mostramos la imagen capturada con animación de escaneo
+              // Feedback visual inmediato en el app
               client.emit('display_content', {
                 type: 'qr_scan',
                 title: 'Escaneando QR...',
                 items: [{ id: 'qr_frame', title: 'Imagen capturada', imageUrl: `data:image/jpeg;base64,${qrFrame}` }],
               });
-              // Pedimos a Gemini que extraiga la URL del QR
-              const session = client.data.geminiSession as any;
-              session?.sendClientContent([
-                { text: 'Extrae la URL o texto de este código QR. Responde SOLO con la URL, sin nada más.' },
-                { inlineData: { data: qrFrame, mimeType: 'image/jpeg' } },
-              ]);
-              return { name: fc.name, id: fc.id, response: { content: 'QR capturado. Analizando URL extraída con VirusTotal automáticamente.' } };
+
+              try {
+                // Paso 1: Extraer la URL proactivamente usando Gemini (modelo flash rápido)
+                this.logger.log(`[QR] Extrayendo URL de la imagen para el cliente ${client.id}...`);
+                const extractionPrompt = 'Analiza esta imagen y busca un código QR. Extrae la URL o el texto que contiene. Responde ÚNICAMENTE con la URL o el texto encontrado. Si no hay nada, responde "NONE".';
+                const extractedText = await this.aiService.generateContent(extractionPrompt, [qrFrame]);
+                
+                const urlMatch = extractedText.match(/https?:\/\/[^\s]+/);
+                const url = urlMatch ? urlMatch[0] : extractedText.trim();
+
+                if (!url || url.toUpperCase() === 'NONE') {
+                  return { name: fc.name, id: fc.id, response: { content: 'No he podido extraer una URL válida del código QR. Asegúrate de que haya buena iluminación y enfoca bien el código.' } };
+                }
+
+                this.logger.log(`[QR] URL detectada: ${url}. Analizando con VirusTotal...`);
+                
+                // Actualizar UI para mostrar progreso del análisis
+                client.emit('display_content', {
+                  type: 'qr_scan',
+                  title: 'Analizando URL...',
+                  items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+                });
+
+                // Paso 2: Analizar la URL con VirusTotal
+                const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+                const data = JSON.parse(vtRaw);
+
+                if (data.error) throw new Error(data.error);
+
+                // Paso 3: Emitir el reporte gráfico de seguridad al móvil
+                this._emitVtReport(client, data, url);
+
+                return { 
+                  name: fc.name, 
+                  id: fc.id, 
+                  response: { 
+                    content: `QR analizado correctamente. La URL es "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Da tu diagnóstico en 2-3 frases.` 
+                  } 
+                };
+              } catch (e: any) {
+                this.logger.error(`Error procesando QR: ${e.message}`);
+                return { name: fc.name, id: fc.id, response: { content: `He capturado el código pero hubo un error al procesarlo: ${e.message || 'Error desconocido'}.` } };
+              }
             }
 
             // ── Scan File: solicita archivo y lo sube a VT ──
