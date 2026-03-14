@@ -208,13 +208,31 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// Cambia a cámara trasera, espera a que produzca frames reales y luego
   /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
   Future<void> _switchCameraForQr() async {
+    // Detener el grabador de audio ANTES de cambiar la cámara para evitar que
+    // el dispose/initialize del CameraController interfiera con el hardware de audio
+    // y provoque la caída del WebSocket en Android.
+    _audioStreamSub?.cancel();
+    _amplitudeSub?.cancel();
+    await _audio.stopRecording();
+
     // Usamos ResolutionPreset.high para capturar el QR con suficiente resolución:
     // en resolución media (~480p) el QR puede ocupar muy pocos píxeles y jsQR falla.
     // Con high (~720p) el decodificador tiene suficiente información para leer el código.
     await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
-    
-    // Pausa un poco más larga para que el hardware se asiente antes de mostrar el visor
-    await Future.delayed(const Duration(milliseconds: 800));
+
+    // Reanudar grabación de audio tras el cambio de cámara
+    if (mounted && _liveSession.state == LiveSessionState.connected) {
+      unawaited(_audio.startStreamingRecording(intervalMs: 50));
+      _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
+      _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
+        if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
+          _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+        }
+      });
+    }
+
+    // Pausa para que el hardware se asiente antes de mostrar el visor
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     setState(() {
       _showCameraPreview = true;
