@@ -262,22 +262,26 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
-              // Si la cámara activa es la frontal, cambiar a trasera antes de mostrar el visor.
-              // Paramos el audio primero para evitar conflicto de hardware que mata el WebSocket.
-              if (_selectedLensDirection != CameraLensDirection.back) {
-                _audioStreamSub?.cancel();
-                _amplitudeSub?.cancel();
-                await _audio.stopRecording();
-                await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
-                if (mounted && _liveSession.state == LiveSessionState.connected) {
-                  unawaited(_audio.startStreamingRecording(intervalMs: 50));
-                  _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
-                  _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-                    if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
-                      _liveSession.sendAudioChunk(audioBase64: base64Chunk);
-                    }
-                  });
-                }
+              // Para QR necesitamos máxima nitidez de forma consistente.
+              // Forzamos SIEMPRE cámara trasera en alta resolución para evitar capturas
+              // en calidad "medium" (p.ej. 480x720), que reducen drásticamente la tasa
+              // de detección de jsQR.
+              _audioStreamSub?.cancel();
+              _amplitudeSub?.cancel();
+              await _audio.stopRecording();
+              await _switchCamera(
+                CameraLensDirection.back,
+                force: true,
+                resolution: ResolutionPreset.high,
+              );
+              if (mounted && _liveSession.state == LiveSessionState.connected) {
+                unawaited(_audio.startStreamingRecording(intervalMs: 50));
+                _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
+                _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
+                  if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
+                    _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+                  }
+                });
               }
               if (!mounted) return;
               setState(() {
