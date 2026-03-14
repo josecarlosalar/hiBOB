@@ -259,7 +259,7 @@ DIRECTRICES PRINCIPALES:
       },
       realtimeInputConfig: {
         activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
-        voiceActivityDetection: {
+        automaticActivityDetection: {
           disabled: false,
           startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
           endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
