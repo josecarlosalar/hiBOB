@@ -423,7 +423,7 @@ export class AiService implements OnModuleInit {
     const parts: Part[] = [{ text: prompt }];
     if (imageBase64List?.length) imageBase64List.forEach(data => parts.push({ inlineData: { mimeType: 'image/jpeg', data } }));
     const contents: Content[] = [...(history ?? []), { role: 'user' as const, parts }];
-    const response = await this.ai.models.generateContent({ model: this.modelName, contents, config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS } });
+    const response = await this.ai.models.generateContent({ model: this.modelName, contents, config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature } });
     return response.text ?? '';
   }
 
@@ -432,7 +432,7 @@ export class AiService implements OnModuleInit {
     if (imageBase64List?.length) imageBase64List.forEach(data => parts.push({ inlineData: { mimeType: 'image/jpeg', data } }));
     const contents: Content[] = [...(history ?? []), { role: 'user' as const, parts }];
     try {
-      const streamResult = await this.ai.models.generateContentStream({ model: this.modelName, contents, config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature, tools: AGENT_TOOLS } });
+      const streamResult = await this.ai.models.generateContentStream({ model: this.modelName, contents, config: { maxOutputTokens: this.maxOutputTokens, temperature: this.temperature } });
       for await (const chunk of streamResult) if (chunk.text) onChunk(chunk.text);
     } catch (e: any) { this.logger.error(`Error streaming: ${e.message}`); throw e; }
   }
