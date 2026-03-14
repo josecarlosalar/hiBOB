@@ -45,6 +45,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
   CameraLensDirection _selectedLensDirection = CameraLensDirection.back;
+  ResolutionPreset _currentResolutionPreset = ResolutionPreset.medium;
 
   final LiveSessionService _liveSession = LiveSessionService();
   final AudioService _audio = AudioService();
@@ -86,6 +87,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Completer<String?>? _manualCaptureCompleter;
   Timer? _manualCaptureTimer;
   Timer? _autoQrTimer;
+  Timer? _manualCaptureDisconnectTimer;
   int _manualCaptureCountdown = 30;
 
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
@@ -159,6 +161,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _echoHoldOffTimer?.cancel();
     _silenceEndTimer?.cancel();
     _hideCameraTimer?.cancel();
+    _manualCaptureDisconnectTimer?.cancel();
     for (final sub in _subs) sub.cancel();
     super.dispose();
   }
@@ -176,7 +179,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_availableCameras.isEmpty) return;
     final selectedCamera = _findCameraForLens(_selectedLensDirection) ?? _availableCameras.first;
     _selectedLensDirection = selectedCamera.lensDirection;
-    _cameraCtrl = CameraController(selectedCamera, ResolutionPreset.medium, enableAudio: false);
+    _currentResolutionPreset = ResolutionPreset.medium;
+    _cameraCtrl = CameraController(selectedCamera, _currentResolutionPreset, enableAudio: false);
     await _cameraCtrl!.initialize();
     if (mounted) setState(() {});
   }
@@ -187,7 +191,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _switchCamera(CameraLensDirection lensDirection, {bool force = false, ResolutionPreset resolution = ResolutionPreset.medium}) async {
-    if (!force && _selectedLensDirection == lensDirection && _cameraCtrl != null && _cameraCtrl!.value.isInitialized) return;
+    if (!force &&
+        _selectedLensDirection == lensDirection &&
+        _currentResolutionPreset == resolution &&
+        _cameraCtrl != null &&
+        _cameraCtrl!.value.isInitialized) return;
     final selectedCamera = _findCameraForLens(lensDirection);
     if (selectedCamera == null) return;
 
@@ -201,6 +209,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       await nextController.initialize();
       _cameraCtrl = nextController;
       _selectedLensDirection = lensDirection;
+      _currentResolutionPreset = resolution;
       if (mounted) setState(() {});
     } catch (_) { await nextController.dispose(); }
   }
@@ -217,16 +226,27 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onStateChange.listen((s) {
           if (!mounted) return;
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
-          else if (s == LiveSessionState.connected) _startStreaming();
+          else if (s == LiveSessionState.connected) {
+            _manualCaptureDisconnectTimer?.cancel();
+            _startStreaming();
+          }
           else if (s == LiveSessionState.error) { 
             _stopSession(); 
             _setStateIfMounted(AssistantState.inactive);
             _showMessage('Error de conexión con el núcleo'); 
           }
           else if (s == LiveSessionState.disconnected) {
-            // Si estaba en modo QR, cancelarlo: el socket viejo murió, el backend
-            // ya no tiene un pendingFrameResolve activo para este flujo.
-            if (_awaitingManualCapture) _cancelManualCapture();
+            // En escaneo QR toleramos una desconexión breve para no cerrar cámara
+            // por un corte transitorio de WebSocket.
+            if (_awaitingManualCapture) {
+              _manualCaptureDisconnectTimer?.cancel();
+              _manualCaptureDisconnectTimer = Timer(const Duration(seconds: 4), () {
+                if (!mounted) return;
+                if (_liveSession.state != LiveSessionState.connected && _awaitingManualCapture) {
+                  _cancelManualCapture();
+                }
+              });
+            }
             if (_state != AssistantState.inactive && !_openingGallery) {
               // En lugar de cerrar sesión, marcamos como reconectando para dar oportunidad a Socket.IO
               _setStateIfMounted(AssistantState.connecting);
@@ -262,26 +282,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
-              // Para QR necesitamos máxima nitidez de forma consistente.
-              // Forzamos SIEMPRE cámara trasera en alta resolución para evitar capturas
-              // en calidad "medium" (p.ej. 480x720), que reducen drásticamente la tasa
-              // de detección de jsQR.
-              _audioStreamSub?.cancel();
-              _amplitudeSub?.cancel();
-              await _audio.stopRecording();
-              await _switchCamera(
-                CameraLensDirection.back,
-                force: true,
-                resolution: ResolutionPreset.high,
-              );
-              if (mounted && _liveSession.state == LiveSessionState.connected) {
-                unawaited(_audio.startStreamingRecording(intervalMs: 50));
-                _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
-                _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-                  if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
-                    _liveSession.sendAudioChunk(audioBase64: base64Chunk);
-                  }
-                });
+              // Para QR necesitamos cámara trasera en alta resolución.
+              // Reconfiguramos solo si hace falta para evitar reinicios innecesarios
+              // de cámara/audio que pueden cortar el socket en algunos dispositivos.
+              final needsQrReconfigure =
+                  _selectedLensDirection != CameraLensDirection.back ||
+                  _currentResolutionPreset != ResolutionPreset.high ||
+                  _cameraCtrl == null ||
+                  !_cameraCtrl!.value.isInitialized;
+
+              if (needsQrReconfigure) {
+                _audioStreamSub?.cancel();
+                _amplitudeSub?.cancel();
+                await _audio.stopRecording();
+                await _switchCamera(
+                  CameraLensDirection.back,
+                  force: true,
+                  resolution: ResolutionPreset.high,
+                );
+                if (mounted && _liveSession.state == LiveSessionState.connected) {
+                  unawaited(_audio.startStreamingRecording(intervalMs: 50));
+                  _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
+                  _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
+                    if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
+                      _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+                    }
+                  });
+                }
               }
               if (!mounted) return;
               setState(() {
@@ -905,6 +932,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     _amplitudeSub?.cancel();
     _agentSpeechIdleTimer?.cancel();
     _echoHoldOffTimer?.cancel();
+    _manualCaptureDisconnectTimer?.cancel();
     _silenceEndTimer?.cancel();
     _silenceEndTimer = null;
     _agentSpeechEstimatedEndTime = null;
