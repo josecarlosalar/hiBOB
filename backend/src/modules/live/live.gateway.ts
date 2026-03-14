@@ -481,6 +481,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
+    // Cancelar cualquier espera de frame pendiente (QR, galería, cámara) para no dejar
+    // el _processQrInBackground ni _processFileInBackground colgados en sockets muertos.
+    if (client.data.pendingFrameResolve) {
+      this.logger.warn(`[Disconnect] Cancelando espera de frame pendiente para ${client.id}`);
+      const resolve = client.data.pendingFrameResolve;
+      client.data.pendingFrameResolve = null;
+      resolve(null);
+    }
     const session = client.data.geminiSession as GeminiLiveSession;
     session?.close();
     this.locationService.removeClientLocation(client.id);

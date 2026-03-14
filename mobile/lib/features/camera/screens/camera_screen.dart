@@ -240,11 +240,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             _setStateIfMounted(AssistantState.inactive);
             _showMessage('Error de conexión con el núcleo'); 
           }
-          else if (s == LiveSessionState.disconnected) { 
+          else if (s == LiveSessionState.disconnected) {
+            // Si estaba en modo QR, cancelarlo: el socket viejo murió, el backend
+            // ya no tiene un pendingFrameResolve activo para este flujo.
+            if (_awaitingManualCapture) _cancelManualCapture();
             if (_state != AssistantState.inactive && !_openingGallery) {
               // En lugar de cerrar sesión, marcamos como reconectando para dar oportunidad a Socket.IO
               _setStateIfMounted(AssistantState.connecting);
-            } else {
+            } else if (!_openingGallery) {
               _setStateIfMounted(AssistantState.inactive);
             }
           }
