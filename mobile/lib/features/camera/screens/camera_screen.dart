@@ -1239,10 +1239,19 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     }
     
     final rawType = (_structuredContent!['contentType'] as String? ?? _structuredContent!['type'] as String? ?? 'detail').toLowerCase();
+    final hasVtData = _structuredContent!['vtData'] != null;
     
     // Mapeo flexible de tipos para asegurar que se muestran los paneles correctos
     String type = 'detail';
-    if (rawType.contains('vt') || rawType.contains('virustotal') || rawType.contains('threat') || rawType.contains('security') || rawType.contains('scan')) {
+    
+    // Priorizamos qr_scan si no hay datos finales de VT
+    if (rawType.contains('scan') || rawType.contains('progress')) {
+      if (hasVtData) {
+        type = 'vt_report';
+      } else {
+        type = 'qr_scan';
+      }
+    } else if (rawType.contains('vt') || rawType.contains('virustotal') || rawType.contains('threat') || rawType.contains('security')) {
       type = 'vt_report';
     } else if (rawType.contains('ip_report')) {
       type = 'ip_report';
@@ -1254,8 +1263,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       type = 'password_generated';
     } else if (rawType.contains('slider') || rawType.contains('features')) {
       type = 'features_slider';
-    } else if (rawType.contains('progress')) {
-      type = 'qr_scan';
     }
     
     void onClose() => setState(() { _structuredContent = null; _selectedItem = null; });
@@ -1598,7 +1605,8 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
       'critical' => 'AMENAZA CRÍTICA',
       'dangerous' => 'AMENAZA DETECTADA',
       'suspicious' => 'SOSPECHOSO',
-      _ => 'ENLACE SEGURO',
+      'clean' => 'ENLACE SEGURO',
+      _ => 'ANALIZANDO...',
     };
     return AnimatedBuilder(
       animation: _scanAnim,
