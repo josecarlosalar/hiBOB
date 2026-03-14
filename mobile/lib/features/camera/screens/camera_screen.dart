@@ -291,15 +291,23 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   !_cameraCtrl!.value.isInitialized;
 
               if (needsQrReconfigure) {
+                // Paramos el audio ANTES del switch para no interferir con la cámara.
+                // Pero lo reiniciamos SIEMPRE tras el switch (sin depender del estado
+                // de la sesión) para evitar que quede muerto si la sesión se reconecta
+                // durante el reinicio de cámara.
                 _audioStreamSub?.cancel();
+                _audioStreamSub = null;
                 _amplitudeSub?.cancel();
+                _amplitudeSub = null;
                 await _audio.stopRecording();
                 await _switchCamera(
                   CameraLensDirection.back,
                   force: true,
                   resolution: ResolutionPreset.high,
                 );
-                if (mounted && _liveSession.state == LiveSessionState.connected) {
+                if (mounted) {
+                  // Reiniciamos audio siempre — si la sesión no está conectada, los
+                  // chunks simplemente se descartan en _shouldForwardAudioChunk.
                   unawaited(_audio.startStreamingRecording(intervalMs: 50));
                   _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
                   _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
@@ -325,17 +333,29 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   _cancelManualCapture();
                 }
               });
-              // Auto-scan: captura y envía frame cada 2s para detección automática del QR.
+              // Auto-scan: captura y envía frame cada 2.5s para detección automática del QR.
+              // Guard _autoQrCapturing evita llamadas concurrentes a takePicture() que
+              // provocan excepciones en CameraController y pueden desconectar el socket.
               _autoQrTimer?.cancel();
-              _autoQrTimer = Timer.periodic(const Duration(seconds: 2), (t) async {
+              bool autoQrCapturing = false;
+              _autoQrTimer = Timer.periodic(const Duration(milliseconds: 2500), (t) async {
                 if (!mounted || !_awaitingManualCapture) { t.cancel(); return; }
-                final autoFrame = await _captureFrame(source: 'camera');
-                if (autoFrame != null && mounted && _awaitingManualCapture) {
-                  _liveSession.sendFrame(frameBase64: autoFrame);
+                if (autoQrCapturing) return; // evitar concurrencia
+                autoQrCapturing = true;
+                try {
+                  final autoFrame = await _captureFrame(source: 'camera');
+                  if (autoFrame != null && mounted && _awaitingManualCapture) {
+                    _liveSession.sendFrame(frameBase64: autoFrame);
+                  }
+                } finally {
+                  autoQrCapturing = false;
                 }
               });
               final frame = await _manualCaptureCompleter!.future;
 
+              // frame != null solo cuando el usuario pulsa el botón de captura manual.
+              // En ese caso mostramos el overlay y enviamos el frame.
+              // Si fue auto-detectado (frame == null), el auto-scan ya envió el frame.
               if (frame != null) {
                 setState(() {
                   _structuredContent = {
