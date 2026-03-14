@@ -306,12 +306,19 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 // Paso 3: Emitir el reporte gráfico de seguridad al móvil
                 this._emitVtReport(client, data, url);
 
-                return { 
-                  name: fc.name, 
-                  id: fc.id, 
-                  response: { 
-                    content: `QR analizado correctamente. La URL es "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Da tu diagnóstico en 2-3 frases.` 
-                  } 
+                const isSafe = data.positives === 0;
+                if (isSafe) {
+                  client.emit('command', { action: 'open_url', url });
+                }
+
+                return {
+                  name: fc.name,
+                  id: fc.id,
+                  response: {
+                    content: isSafe
+                      ? `QR analizado y SEGURO. URL: "${url}". VirusTotal: 0/${data.total} motores. He abierto la URL en el navegador. Confirma brevemente que es segura y que la has abierto.`
+                      : `QR analizado con AMENAZAS. URL: "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Advierte al usuario claramente que NO abra este enlace y explica el riesgo en 2-3 frases.`
+                  }
                 };
               } catch (e: any) {
                 this.logger.error(`Error procesando QR: ${e.message}`);

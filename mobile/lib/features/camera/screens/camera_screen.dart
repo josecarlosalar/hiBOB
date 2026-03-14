@@ -16,6 +16,7 @@ import 'package:torch_light/torch_light.dart';
 import 'package:vibration/vibration.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/services/audio_service.dart';
 import '../../../core/services/background_service.dart';
@@ -466,6 +467,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         Future.delayed(const Duration(milliseconds: 250), () {
           if (mounted) setState(() => _isVibrating = false);
         });
+      }
+    } else if (action == 'open_url') {
+      final url = cmd['url'] as String?;
+      if (url != null) {
+        final uri = Uri.tryParse(url);
+        if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
     } else if (action == 'open_gallery') {
       final source = cmd['source'] as String?;
