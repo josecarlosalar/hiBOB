@@ -96,7 +96,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• analyze_ip → cuando el usuario mencione una dirección IP numérica. ' +
           '• analyze_file_hash → cuando el usuario proporcione un hash SHA256/MD5/SHA1 de un archivo. ' +
           '• scan_file → cuando el usuario quiera analizar un archivo (APK, PDF, ejecutable) que tiene en su dispositivo. ' +
-          '• scan_qr_code → cuando el usuario quiera verificar un código QR antes de escanearlo. ' +
+          '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear QR, verificar QR o cualquier variante. NO respondas por voz primero: llama scan_qr_code YA y simultáneamente dile al usuario que abres la cámara. ' +
           '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
           '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
           '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
@@ -112,9 +112,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• close_camera → Úsala para desactivar y cerrar la cámara en pantalla completa cuando el usuario pida cerrarla o desactivarla. ' +
           '• trigger_haptic_feedback → Úsala para hacer vibrar el teléfono del usuario en momentos clave de peligro o alertas. ' +
 
-          'FLUJO DE SEGURIDAD: Cuando el usuario mencione un enlace, IP, dominio o archivo sospechoso, ACTÚA inmediatamente con la herramienta correspondiente sin pedir permiso. ' +
-          'Cuando veas una URL en pantalla, analízala con analyze_security_url. ' +
-          'Ante un QR desconocido, usa scan_qr_code antes de que el usuario lo escanee. ' +
+          'FLUJO DE SEGURIDAD — REGLA DE ORO: Cuando el usuario mencione cualquier amenaza, DEBES llamar a la herramienta correspondiente EN EL MISMO TURNO, no en el siguiente. Nunca digas "voy a..." sin llamar a la herramienta inmediatamente. ' +
+          'QR: Si el usuario menciona "QR", "código QR", "escanear", "verificar código" → llama scan_qr_code AHORA. ' +
+          'URL: Si el usuario menciona un enlace → llama analyze_security_url AHORA. ' +
+          'Ante cualquier duda, actúa primero y explica después. ' +
 
           'INTERFAZ GRÁFICA Y DIAGNÓSTICO (MUY IMPORTANTE): ' +
           '1. Cuando analices URL, dominios, IPs, hashes, ficheros o imágenes, NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente el panel de métricas de VirusTotal. Tu único trabajo es dar un diagnóstico PROFESIONAL y calmado por voz. ' +
