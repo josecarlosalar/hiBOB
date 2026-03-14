@@ -97,6 +97,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           '• analyze_file_hash → cuando el usuario proporcione un hash SHA256/MD5/SHA1 de un archivo. ' +
           '• scan_file → cuando el usuario quiera analizar un archivo (APK, PDF, ejecutable) que tiene en su dispositivo. ' +
           '• scan_qr_code → cuando el usuario quiera verificar un código QR antes de escanearlo. ' +
+          '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
           '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
           '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
           '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
@@ -282,10 +283,17 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 this.logger.log(`[QR] Decodificando QR de la imagen para el cliente ${client.id}...`);
                 const imageBuffer = Buffer.from(qrFrame, 'base64');
                 const image = await Jimp.fromBuffer(imageBuffer);
-                const { data: bitmapData, width, height } = image.bitmap;
-                const qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
 
-                if (!qrData || !qrData.data) {
+                // Intentar leer en 4 orientaciones (0°, 90°, 180°, 270°) por si el QR está girado
+                let qrData: ReturnType<typeof jsQR> = null;
+                for (const rotation of [0, 90, 180, 270]) {
+                  const attempt = rotation === 0 ? image.clone() : image.clone().rotate(rotation);
+                  const { data: bitmapData, width, height } = attempt.bitmap;
+                  qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
+                  if (qrData?.data) break;
+                }
+
+                if (!qrData?.data) {
                   return { name: fc.name, id: fc.id, response: { content: 'No he podido leer el código QR. Asegúrate de que el código esté bien enfocado, bien iluminado y completamente visible en el recuadro.' } };
                 }
 
@@ -494,7 +502,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             }
 
             // ── Comandos al móvil ─────────────────────────────────────────
-            if (fc.name === 'toggle_flashlight') {
+            if (fc.name === 'trigger_qr_capture') {
+              client.emit('command', { action: 'trigger_capture' });
+            } else if (fc.name === 'toggle_flashlight') {
               client.emit('command', { action: 'flashlight', enabled: fc.args.enabled });
             } else if (fc.name === 'switch_camera') {
               client.emit('command', { action: 'switch_camera', direction: fc.args.direction });

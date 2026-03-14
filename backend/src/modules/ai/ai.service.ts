@@ -174,6 +174,12 @@ const SCAN_QR_CODE_FUNCTION: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
+const TRIGGER_QR_CAPTURE_FUNCTION: FunctionDeclaration = {
+  name: 'trigger_qr_capture',
+  description: 'Dispara la captura del QR cuando el usuario indica por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). SOLO úsala cuando el sistema esté esperando una captura manual de QR.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 const AGENT_TOOLS: Tool[] = [
   {
     functionDeclarations: [
@@ -194,6 +200,7 @@ const AGENT_TOOLS: Tool[] = [
       CHECK_PASSWORD_BREACH_FUNCTION,
       GENERATE_PASSWORD_FUNCTION,
       SCAN_QR_CODE_FUNCTION,
+      TRIGGER_QR_CAPTURE_FUNCTION,
       SAVE_VISUAL_MEMORY_FUNCTION,
       GET_VISUAL_MEMORY_FUNCTION,
       OPEN_GALLERY_FUNCTION,
