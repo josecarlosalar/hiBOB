@@ -263,78 +263,19 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               };
             }
 
-            // ── QR Code: activa cámara y luego analiza la URL extraída ──────
+            // ── QR Code: activa cámara, responde inmediatamente a Gemini y procesa en background ──
             if (fc.name === 'scan_qr_code') {
               client.emit('frame_request', { source: 'manual_camera' });
-              const payload = await this._waitForFrame(client, 40000);
-              const qrFrame = payload?.frameBase64 || payload?.frame;
-              if (!qrFrame) {
-                return { name: fc.name, id: fc.id, response: { content: 'No se recibió imagen de la cámara.' } };
-              }
-              // Feedback visual inmediato en el app
-              client.emit('display_content', {
-                type: 'qr_scan',
-                title: 'Escaneando QR...',
-                items: [{ id: 'qr_frame', title: 'Imagen capturada', imageUrl: `data:image/jpeg;base64,${qrFrame}` }],
-              });
 
-              try {
-                // Paso 1: Decodificar el QR con jsQR (lectura real de píxeles, sin IA)
-                this.logger.log(`[QR] Decodificando QR de la imagen para el cliente ${client.id}...`);
-                const imageBuffer = Buffer.from(qrFrame, 'base64');
-                const image = await Jimp.fromBuffer(imageBuffer);
+              // Procesamos el QR en background para no bloquear el tool response a Gemini
+              // (Gemini cierra la sesión si una tool call tarda más de ~15s sin respuesta)
+              this._processQrInBackground(client, session);
 
-                // Intentar leer en 4 orientaciones (0°, 90°, 180°, 270°) por si el QR está girado
-                let qrData: ReturnType<typeof jsQR> = null;
-                for (const rotation of [0, 90, 180, 270]) {
-                  const attempt = rotation === 0 ? image.clone() : image.clone().rotate(rotation);
-                  const { data: bitmapData, width, height } = attempt.bitmap;
-                  qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
-                  if (qrData?.data) break;
-                }
-
-                if (!qrData?.data) {
-                  return { name: fc.name, id: fc.id, response: { content: 'No he podido leer el código QR. Asegúrate de que el código esté bien enfocado, bien iluminado y completamente visible en el recuadro.' } };
-                }
-
-                const url = qrData.data.trim();
-
-                this.logger.log(`[QR] URL detectada: ${url}. Analizando con VirusTotal...`);
-                
-                // Actualizar UI para mostrar progreso del análisis
-                client.emit('display_content', {
-                  type: 'qr_scan',
-                  title: 'Analizando URL...',
-                  items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
-                });
-
-                // Paso 2: Analizar la URL con VirusTotal
-                const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
-                const data = JSON.parse(vtRaw);
-
-                if (data.error) throw new Error(data.error);
-
-                // Paso 3: Emitir el reporte gráfico de seguridad al móvil
-                this._emitVtReport(client, data, url);
-
-                const isSafe = data.positives === 0;
-                if (isSafe) {
-                  client.emit('command', { action: 'open_url', url });
-                }
-
-                return {
-                  name: fc.name,
-                  id: fc.id,
-                  response: {
-                    content: isSafe
-                      ? `QR analizado y SEGURO. URL: "${url}". VirusTotal: 0/${data.total} motores. He abierto la URL en el navegador. Confirma brevemente que es segura y que la has abierto.`
-                      : `QR analizado con AMENAZAS. URL: "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Advierte al usuario claramente que NO abra este enlace y explica el riesgo en 2-3 frases.`
-                  }
-                };
-              } catch (e: any) {
-                this.logger.error(`Error procesando QR: ${e.message}`);
-                return { name: fc.name, id: fc.id, response: { content: `He capturado el código pero hubo un error al procesarlo: ${e.message || 'Error desconocido'}.` } };
-              }
+              return {
+                name: fc.name,
+                id: fc.id,
+                response: { content: 'Cámara activada. Esperando que el usuario enfoque el código QR. Dile al usuario que enfoque el QR en el recuadro y que diga "listo" o pulse capturar cuando esté encuadrado. No digas nada más hasta recibir el resultado.' }
+              };
             }
 
             // ── Scan File: solicita archivo y lo sube a VT ──
@@ -596,6 +537,68 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         isDanger,
         scanDate,
       },
+    });
+  }
+
+  private _processQrInBackground(client: Socket, session: GeminiLiveSession): void {
+    this._waitForFrame(client, 60000).then(async (payload) => {
+      const qrFrame = payload?.frameBase64 || payload?.frame;
+      if (!qrFrame) {
+        session.sendClientContent([{ text: 'El usuario no capturó el QR a tiempo o canceló la operación. Informa al usuario brevemente.' }], true);
+        return;
+      }
+
+      client.emit('display_content', {
+        type: 'qr_scan',
+        title: 'Escaneando QR...',
+        items: [{ id: 'qr_frame', title: 'Imagen capturada', imageUrl: `data:image/jpeg;base64,${qrFrame}` }],
+      });
+
+      try {
+        this.logger.log(`[QR] Decodificando QR para cliente ${client.id}...`);
+        const imageBuffer = Buffer.from(qrFrame, 'base64');
+        const image = await Jimp.fromBuffer(imageBuffer);
+
+        let qrData: ReturnType<typeof jsQR> = null;
+        for (const rotation of [0, 90, 180, 270]) {
+          const attempt = rotation === 0 ? image.clone() : image.clone().rotate(rotation);
+          const { data: bitmapData, width, height } = attempt.bitmap;
+          qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
+          if (qrData?.data) break;
+        }
+
+        if (!qrData?.data) {
+          session.sendClientContent([{ text: 'No se pudo leer el código QR. Pide al usuario que lo intente de nuevo con mejor iluminación y enfoque.' }], true);
+          return;
+        }
+
+        const url = qrData.data.trim();
+        this.logger.log(`[QR] URL detectada: ${url}. Analizando con VirusTotal...`);
+
+        client.emit('display_content', {
+          type: 'qr_scan',
+          title: 'Analizando URL...',
+          items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+        });
+
+        const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+        const data = JSON.parse(vtRaw);
+        if (data.error) throw new Error(data.error);
+
+        this._emitVtReport(client, data, url);
+
+        const isSafe = data.positives === 0;
+        if (isSafe) client.emit('command', { action: 'open_url', url });
+
+        session.sendClientContent([{
+          text: isSafe
+            ? `QR analizado y SEGURO. URL: "${url}". VirusTotal: 0/${data.total} motores. He abierto la URL en el navegador. Confirma brevemente que es segura y que la has abierto.`
+            : `QR analizado con AMENAZAS. URL: "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Advierte al usuario claramente que NO abra este enlace y explica el riesgo en 2-3 frases.`
+        }], true);
+      } catch (e: any) {
+        this.logger.error(`[QR] Error procesando QR: ${e.message}`);
+        session.sendClientContent([{ text: `Hubo un error al analizar el código QR: ${e.message || 'Error desconocido'}. Informa al usuario.` }], true);
+      }
     });
   }
 
