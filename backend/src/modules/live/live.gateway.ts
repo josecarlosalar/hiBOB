@@ -278,39 +278,22 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               };
             }
 
-            // ── Scan File: solicita archivo y lo sube a VT ──
+            // ── Scan File: solicita archivo y procesa en background (como scan_qr_code) ──
+            // Motivo: el file picker manda la app a background → el WebSocket puede reconectarse
+            // con un nuevo socket ID → el _waitForFrame del socket original nunca se resuelve.
+            // Solución: respondemos inmediatamente a Gemini y procesamos el fichero en background.
             if (fc.name === 'scan_file') {
               this.logger.log(`[Herramienta] Solicitando fichero para VirusTotal para ${client.id}...`);
               client.emit('command', { action: 'open_gallery', source: 'files' });
-              
-              const payload = await this._waitForFrame(client, 60000);
-              const fileFrame = payload?.frameBase64 || payload?.frame;
-              
-              if (!fileFrame) {
-                return { name: fc.name, id: fc.id, response: { content: 'No se recibió el archivo o el usuario canceló.' } };
-              }
-              
-              const fileName = payload.fileName || fc.args.fileName || 'archivo';
-              client.emit('display_content', {
-                type: 'file_scan',
-                title: 'Analizando archivo...',
-                items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
-              });
-              
-              const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName }, client.id);
-              client.emit('display_content', {
-                type: 'file_scan',
-                title: 'Analizando archivo...',
-                items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }],
-              });
-              try {
-                const data = JSON.parse(vtResult);
-                this._emitVtReport(client, data, fileName);
-                await new Promise(resolve => setTimeout(resolve, 300));
-                return { name: fc.name, id: fc.id, response: { content: `Análisis de "${fileName}" completado. ${data.positives}/${data.total} motores detectaron amenaza. Resultado visible en pantalla. Da el diagnóstico en 2-3 frases.` } };
-              } catch {
-                return { name: fc.name, id: fc.id, response: { content: `Error analizando fichero: ${vtResult}` } };
-              }
+
+              // Procesamos en background para no bloquear el tool response a Gemini
+              this._processFileInBackground(client, session);
+
+              return {
+                name: fc.name,
+                id: fc.id,
+                response: { content: 'Selector de ficheros abierto. Esperando que el usuario elija el archivo. Dile que seleccione el fichero que desea analizar y confirme. No digas nada más hasta recibir el resultado.' }
+              };
             }
 
             // Feedback visual de "pensando" para herramientas de red
@@ -540,6 +523,50 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
   }
 
+  private _processFileInBackground(client: Socket, session: GeminiLiveSession): void {
+    this.logger.log(`[File] Iniciando espera de fichero para cliente ${client.id}...`);
+    this._waitForFrame(client, 90000).then(async (payload) => {
+      const fileFrame = payload?.frameBase64 || payload?.frame;
+      if (!fileFrame) {
+        this.logger.warn(`[File] No se recibió fichero para el cliente ${client.id} (timeout o cancelación)`);
+        session.sendClientContent([{ text: 'El usuario no seleccionó ningún fichero o canceló la operación. Informa al usuario brevemente.' }], true);
+        return;
+      }
+
+      const fileName = payload?.fileName || 'archivo';
+      this.logger.log(`[File] Fichero recibido: "${fileName}" (${fileFrame.length} chars). Subiendo a VirusTotal...`);
+
+      client.emit('display_content', {
+        type: 'file_scan',
+        title: 'Analizando archivo...',
+        items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
+      });
+
+      try {
+        const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: fileFrame, fileName }, client.id);
+        client.emit('display_content', {
+          type: 'file_scan',
+          title: 'Analizando archivo...',
+          items: [{ id: 'scan_progress', title: fileName, description: 'Generando diagnóstico...' }],
+        });
+        const data = JSON.parse(vtResult);
+        this._emitVtReport(client, data, fileName);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        this.logger.log(`[File] Análisis de "${fileName}" completado. ${data.positives}/${data.total} amenazas detectadas.`);
+        session.sendClientContent([{
+          text: `Análisis de archivo finalizado.
+Nombre: "${fileName}"
+Resultado VirusTotal: ${data.positives ?? 0}/${data.total ?? 0} motores detectaron amenaza.
+El panel de métricas ya se muestra en pantalla.
+Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses la herramienta "display_content" porque ya se muestra el panel automáticamente.`
+        }], true);
+      } catch (e: any) {
+        this.logger.error(`[File] Error procesando fichero para ${client.id}: ${e.message}`);
+        session.sendClientContent([{ text: `Error técnico al analizar el archivo "${fileName}": ${e.message || 'Error desconocido'}. Informa al usuario y discúlpate.` }], true);
+      }
+    });
+  }
+
   private _processQrInBackground(client: Socket, session: GeminiLiveSession): void {
     this.logger.log(`[QR] Iniciando espera de frame para cliente ${client.id}...`);
     this._waitForFrame(client, 60000).then(async (payload) => {
@@ -561,21 +588,64 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[QR] Decodificando QR para cliente ${client.id}...`);
         const imageBuffer = Buffer.from(qrFrame, 'base64');
         const image = await Jimp.fromBuffer(imageBuffer);
+        this.logger.log(`[QR] Imagen cargada: ${image.bitmap.width}x${image.bitmap.height}px`);
+
+        // Helper para extraer datos RGBA correctamente del Buffer de Node.js:
+        // Jimp puede devolver un Buffer que es una VISTA de un ArrayBuffer más grande,
+        // por lo que es CRÍTICO usar byteOffset y byteLength en lugar de .buffer directamente.
+        const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
+          new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
+
+        // Escalar la imagen al rango óptimo para jsQR (entre 400px y 1200px de ancho)
+        // Imágenes muy pequeñas o muy grandes dificultan la detección.
+        const prepareImage = (src: typeof image): typeof image => {
+          const clone = src.clone();
+          const { width, height } = clone.bitmap;
+          // Escalado: si es demasiado pequeña, la agrandamos; si demasiado grande, la reducimos
+          const minDim = Math.min(width, height);
+          const maxDim = Math.max(width, height);
+          if (maxDim < 400) {
+            const scale = Math.ceil(400 / maxDim);
+            clone.scale(scale);
+          } else if (minDim > 1200) {
+            clone.scaleToFit({ w: 1200, h: 1200 });
+          }
+          return clone;
+        };
+
+        // Estrategias de preprocesamiento: original, alto contraste y binarización
+        const buildAttempts = (base: typeof image) => {
+          const original = prepareImage(base);
+
+          const highContrast = prepareImage(base).contrast(1.0);
+
+          // Binarización manual: convertir a escala de grises y aplicar umbral
+          const binarized = prepareImage(base).greyscale().contrast(0.5).threshold({ max: 128 });
+
+          return [original, highContrast, binarized];
+        };
 
         let qrData: ReturnType<typeof jsQR> = null;
-        for (const rotation of [0, 90, 180, 270]) {
-          const attempt = rotation === 0 ? image.clone() : image.clone().rotate(rotation);
-          const { data: bitmapData, width, height } = attempt.bitmap;
-          qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
-          if (qrData?.data) {
-            this.logger.log(`[QR] QR decodificado con éxito con rotación ${rotation}°`);
-            break;
+        const rotations = [0, 90, 180, 270];
+        const strategies = buildAttempts(image);
+
+        outerLoop:
+        for (const strategy of strategies) {
+          for (const rotation of rotations) {
+            const attempt = rotation === 0 ? strategy.clone() : strategy.clone().rotate(rotation);
+            const bmp = attempt.bitmap;
+            const rgba = getBitmapRgba(bmp);
+            qrData = jsQR(rgba, bmp.width, bmp.height);
+            if (qrData?.data) {
+              this.logger.log(`[QR] QR decodificado con éxito (rotación ${rotation}°, estrategia aplicada)`);
+              break outerLoop;
+            }
           }
         }
 
         if (!qrData?.data) {
           this.logger.warn(`[QR] No se encontró ningún código QR válido en la imagen para el cliente ${client.id}`);
-          session.sendClientContent([{ text: 'No se pudo leer el código QR. Pide al usuario que lo intente de nuevo con mejor iluminación y enfoque.' }], true);
+          session.sendClientContent([{ text: 'No se pudo leer el código QR. Pide al usuario que lo intente de nuevo: acércate más al código, asegúrate de que esté bien iluminado y ocupe al menos la mitad del encuadre.' }], true);
           return;
         }
 
@@ -671,10 +741,10 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
       return;
     }
 
-    // PRIORIDAD 2: El usuario envió una imagen o un fichero manualmente (botón UI).
-    if (payload?.prompt === 'analyze_image' || payload?.fileName) {
+    // PRIORIDAD 2a: El usuario envió una IMAGEN manualmente (botón UI con prompt 'analyze_image').
+    if (payload?.prompt === 'analyze_image') {
       const fileName = payload?.fileName || 'Imagen_Galeria.jpg';
-      this.logger.log(`[Visión] Análisis manual recibido para ${fileName} en ${client.id}`);
+      this.logger.log(`[Visión] Imagen manual recibida para ${fileName} en ${client.id}`);
       
       this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id)
         .then((vtResult) => {
@@ -682,7 +752,7 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
             const data = JSON.parse(vtResult);
             this._emitVtReport(client, data, fileName);
             session.sendClientContent([
-              { text: `El usuario acaba de enviarte manualmente este elemento: "${fileName}". Resultados de VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Obsérvalo visualmente si es una imagen y da tu diagnóstico profesional por voz unificando VirusTotal y el contenido de la imagen. NUNCA uses la herramienta "display_content", porque el panel de métricas de seguridad ya se muestra en pantalla automáticamente.` },
+              { text: `El usuario acaba de enviarte manualmente esta imagen: "${fileName}". Resultados de VirusTotal: ${data.positives}/${data.total} motores detectaron amenaza. Obsérvala visualmente y da tu diagnóstico profesional por voz unificando VirusTotal y el contenido visual. NUNCA uses la herramienta "display_content", porque el panel de métricas de seguridad ya se muestra en pantalla automáticamente.` },
               { inlineData: { data: frame, mimeType: 'image/jpeg' } }
             ], true);
           } catch (e) {
@@ -690,7 +760,41 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
           }
         })
         .catch((err) => {
-          this.logger.error(`Error procesando manual upload ${fileName}: ${err}`);
+          this.logger.error(`Error procesando imagen manual ${fileName}: ${err}`);
+        });
+      return;
+    }
+
+    // PRIORIDAD 2b: El usuario envió un FICHERO manualmente (botón UI con fileName sin prompt).
+    // Este path también cubre el caso donde scan_file reconectó y el fichero llega en nueva sesión.
+    if (payload?.fileName) {
+      const fileName = payload.fileName;
+      this.logger.log(`[Fichero] Análisis de fichero manual recibido: "${fileName}" en ${client.id}`);
+
+      client.emit('display_content', {
+        type: 'file_scan',
+        title: 'Analizando archivo...',
+        items: [{ id: 'scan_progress', title: fileName, description: 'Subiendo a VirusTotal...' }],
+      });
+
+      this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id)
+        .then(async (vtResult) => {
+          try {
+            const data = JSON.parse(vtResult);
+            this._emitVtReport(client, data, fileName);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            session.sendClientContent([{
+              text: `El usuario acaba de enviarte manualmente este fichero: "${fileName}".
+Resultados de VirusTotal: ${data.positives ?? 0}/${data.total ?? 0} motores detectaron amenaza.
+El panel de métricas ya se muestra en pantalla.
+Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses la herramienta "display_content" porque ya se muestra el panel automáticamente.`
+            }], true);
+          } catch (e) {
+            this.logger.error(`Error parseando resultado de VirusTotal para fichero ${fileName}: ${e}`);
+          }
+        })
+        .catch((err) => {
+          this.logger.error(`Error procesando fichero manual ${fileName}: ${err}`);
         });
       return;
     }
