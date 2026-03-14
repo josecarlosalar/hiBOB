@@ -12,6 +12,8 @@ import { Server, Socket } from 'socket.io';
 import * as admin from 'firebase-admin';
 import { AiService, GeminiLiveSession } from '../ai/ai.service';
 import { LocationService } from '../tools/location.service';
+import { Jimp } from 'jimp';
+import jsQR from 'jsqr';
 
 interface AudioChunkPayload {
   audioBase64: string;
@@ -276,17 +278,18 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               });
 
               try {
-                // Paso 1: Extraer la URL proactivamente usando Gemini (modelo flash rápido)
-                this.logger.log(`[QR] Extrayendo URL de la imagen para el cliente ${client.id}...`);
-                const extractionPrompt = 'Analiza esta imagen y busca un código QR. Extrae la URL o el texto que contiene. Responde ÚNICAMENTE con la URL o el texto encontrado. Si no hay nada, responde "NONE".';
-                const extractedText = await this.aiService.generateContent(extractionPrompt, [qrFrame]);
-                
-                const urlMatch = extractedText.match(/https?:\/\/[^\s]+/);
-                const url = urlMatch ? urlMatch[0] : extractedText.trim();
+                // Paso 1: Decodificar el QR con jsQR (lectura real de píxeles, sin IA)
+                this.logger.log(`[QR] Decodificando QR de la imagen para el cliente ${client.id}...`);
+                const imageBuffer = Buffer.from(qrFrame, 'base64');
+                const image = await Jimp.fromBuffer(imageBuffer);
+                const { data: bitmapData, width, height } = image.bitmap;
+                const qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
 
-                if (!url || url.toUpperCase() === 'NONE') {
-                  return { name: fc.name, id: fc.id, response: { content: 'No he podido extraer una URL válida del código QR. Asegúrate de que haya buena iluminación y enfoca bien el código.' } };
+                if (!qrData || !qrData.data) {
+                  return { name: fc.name, id: fc.id, response: { content: 'No he podido leer el código QR. Asegúrate de que el código esté bien enfocado, bien iluminado y completamente visible en el recuadro.' } };
                 }
+
+                const url = qrData.data.trim();
 
                 this.logger.log(`[QR] URL detectada: ${url}. Analizando con VirusTotal...`);
                 
