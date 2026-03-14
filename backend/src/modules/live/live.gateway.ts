@@ -541,13 +541,16 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private _processQrInBackground(client: Socket, session: GeminiLiveSession): void {
+    this.logger.log(`[QR] Iniciando espera de frame para cliente ${client.id}...`);
     this._waitForFrame(client, 60000).then(async (payload) => {
       const qrFrame = payload?.frameBase64 || payload?.frame;
       if (!qrFrame) {
+        this.logger.warn(`[QR] No se recibió frame para el cliente ${client.id} (timeout o cancelación)`);
         session.sendClientContent([{ text: 'El usuario no capturó el QR a tiempo o canceló la operación. Informa al usuario brevemente.' }], true);
         return;
       }
 
+      this.logger.log(`[QR] Frame recibido (${qrFrame.length} chars). Mostrando overlay de escaneo...`);
       client.emit('display_content', {
         type: 'qr_scan',
         title: 'Escaneando QR...',
@@ -564,40 +567,54 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           const attempt = rotation === 0 ? image.clone() : image.clone().rotate(rotation);
           const { data: bitmapData, width, height } = attempt.bitmap;
           qrData = jsQR(new Uint8ClampedArray(bitmapData.buffer), width, height);
-          if (qrData?.data) break;
+          if (qrData?.data) {
+            this.logger.log(`[QR] QR decodificado con éxito con rotación ${rotation}°`);
+            break;
+          }
         }
 
         if (!qrData?.data) {
+          this.logger.warn(`[QR] No se encontró ningún código QR válido en la imagen para el cliente ${client.id}`);
           session.sendClientContent([{ text: 'No se pudo leer el código QR. Pide al usuario que lo intente de nuevo con mejor iluminación y enfoque.' }], true);
           return;
         }
 
         const url = qrData.data.trim();
-        this.logger.log(`[QR] URL detectada: ${url}. Analizando con VirusTotal...`);
+        this.logger.log(`[QR] URL detectada: "${url}". Iniciando análisis de seguridad...`);
 
         client.emit('display_content', {
           type: 'qr_scan',
           title: 'Analizando URL...',
-          items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+          items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal y reputación web...' }],
         });
 
         const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
         const data = JSON.parse(vtRaw);
         if (data.error) throw new Error(data.error);
 
+        this.logger.log(`[QR] Análisis completado para ${url}: ${data.positives} positivos`);
         this._emitVtReport(client, data, url);
 
         const isSafe = data.positives === 0;
-        if (isSafe) client.emit('command', { action: 'open_url', url });
+        if (isSafe) {
+          this.logger.log(`[QR] URL segura por VirusTotal. Solicitando apertura en navegador...`);
+          client.emit('command', { action: 'open_url', url });
+        }
 
+        this.logger.log(`[QR] Enviando datos a Gemini para veredicto final...`);
+        // Pasamos todos los datos (incluyendo internet_context) para que Gemini decida el tono del diagnóstico
         session.sendClientContent([{
-          text: isSafe
-            ? `QR analizado y SEGURO. URL: "${url}". VirusTotal: 0/${data.total} motores. He abierto la URL en el navegador. Confirma brevemente que es segura y que la has abierto.`
-            : `QR analizado con AMENAZAS. URL: "${url}". VirusTotal detectó ${data.positives}/${data.total} motores sospechosos. Resultado visible en pantalla. Advierte al usuario claramente que NO abra este enlace y explica el riesgo en 2-3 frases.`
+          text: `Análisis de código QR finalizado.
+URL detectada: "${url}"
+Resultado VirusTotal: ${data.positives}/${data.total} motores detectaron amenazas.
+Contexto de Internet: ${data.internet_context || 'No se encontró información adicional.'}
+Acción realizada: ${isSafe ? 'Se ha abierto la URL automáticamente por reputación limpia en VT.' : 'Bloqueado por seguridad.'}
+
+Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. Si VirusTotal es 0 pero el contexto de internet menciona estafas o phishing, advierte al usuario seriamente y no digas que es seguro.`
         }], true);
       } catch (e: any) {
-        this.logger.error(`[QR] Error procesando QR: ${e.message}`);
-        session.sendClientContent([{ text: `Hubo un error al analizar el código QR: ${e.message || 'Error desconocido'}. Informa al usuario.` }], true);
+        this.logger.error(`[QR] Error procesando QR para ${client.id}: ${e.message}`);
+        session.sendClientContent([{ text: `Hubo un error técnico al analizar el código QR: ${e.message || 'Error desconocido'}. Informa al usuario y disculpate.` }], true);
       }
     });
   }

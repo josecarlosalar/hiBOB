@@ -197,11 +197,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// Cambia a cámara trasera, espera a que produzca frames reales y luego
   /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
   Future<void> _switchCameraForQr() async {
-    // Forzamos reinicialización con resolución alta para que jsQR pueda leer el QR
-    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
+    // Bajamos a ResolutionPreset.medium: es suficiente para jsQR y mucho más estable/ligero
+    // que .high, evitando posibles cierres inesperados de la app por memoria o recursos.
+    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.medium);
     
-    // Pausa para que el hardware se asiente
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Pausa un poco más larga para que el hardware se asiente antes de mostrar el visor
+    await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
     setState(() {
       _showCameraPreview = true;
@@ -261,39 +262,51 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onFrameRequest.listen((data) async {
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
-          if (source == 'manual_camera') {
-            await _switchCameraForQr();
-            _manualCaptureCompleter = Completer<String?>();
-            _manualCaptureTimer?.cancel();
-            _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-              if (!mounted) { t.cancel(); return; }
-              setState(() => _manualCaptureCountdown--);
-              if (_manualCaptureCountdown <= 0) {
-                t.cancel();
-                _cancelManualCapture();
-              }
-            });
-            final frame = await _manualCaptureCompleter!.future;
-            unawaited(_switchCamera(CameraLensDirection.front));
-            if (frame != null) {
-              // Mostrar overlay de progreso localmente para evitar el "hueco" visual
-              setState(() {
-                _structuredContent = {
-                  'type': 'file_scan',
-                  'title': 'Escaneando QR',
-                  'items': [{
-                    'id': 'qr_progress',
-                    'title': 'Código QR',
-                    'description': 'Analizando código QR...',
-                    'imageUrl': 'data:image/jpeg;base64,$frame', // Usamos el frame directamente
-                  }]
-                };
+          try {
+            if (source == 'manual_camera') {
+              await _switchCameraForQr();
+              _manualCaptureCompleter = Completer<String?>();
+              _manualCaptureTimer?.cancel();
+              _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+                if (!mounted) { t.cancel(); return; }
+                setState(() => _manualCaptureCountdown--);
+                if (_manualCaptureCountdown <= 0) {
+                  t.cancel();
+                  _cancelManualCapture();
+                }
               });
-              _liveSession.sendFrame(frameBase64: frame);
+              final frame = await _manualCaptureCompleter!.future;
+              
+              // Muy importante: esperar a que el frame se envíe ANTES de cambiar de cámara
+              // o cerrar el preview para evitar condiciones de carrera en el hardware.
+              if (frame != null) {
+                // Mostrar overlay de progreso localmente
+                setState(() {
+                  _structuredContent = {
+                    'type': 'file_scan',
+                    'title': 'Escaneando QR',
+                    'items': [{
+                      'id': 'qr_progress',
+                      'title': 'Código QR',
+                      'description': 'Analizando código QR...',
+                      'imageUrl': 'data:image/jpeg;base64,$frame',
+                    }]
+                  };
+                });
+                _liveSession.sendFrame(frameBase64: frame);
+                // Pequeño margen para asegurar el envío del socket
+                await Future.delayed(const Duration(milliseconds: 200));
+              }
+              
+              // Ahora sí volvemos a la cámara frontal de forma segura
+              unawaited(_switchCamera(CameraLensDirection.front));
+            } else {
+              final frame = await _captureFrame(source: source);
+              if (frame != null) _liveSession.sendFrame(frameBase64: frame);
             }
-          } else {
-            final frame = await _captureFrame(source: source);
-            if (frame != null) _liveSession.sendFrame(frameBase64: frame);
+          } catch (e) {
+            debugPrint('Error en onFrameRequest: $e');
+            _cancelManualCapture();
           }
         }),
         _liveSession.onCommand.listen((cmd) { if (mounted) _handleHardwareCommand(cmd); }),
@@ -829,9 +842,16 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<void> _triggerManualCapture() async {
     if (!_awaitingManualCapture || _manualCaptureCompleter == null) return;
     _manualCaptureTimer?.cancel();
-    final frame = await _captureFrame(source: 'camera');
-    setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
-    if (!_manualCaptureCompleter!.isCompleted) _manualCaptureCompleter!.complete(frame);
+    try {
+      final frame = await _captureFrame(source: 'camera');
+      if (mounted) setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
+      if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+        _manualCaptureCompleter!.complete(frame);
+      }
+    } catch (e) {
+      debugPrint('Error al disparar captura: $e');
+      _cancelManualCapture();
+    }
   }
 
   void _cancelManualCapture() {
