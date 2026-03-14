@@ -85,10 +85,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _awaitingManualCapture = false;
   bool _openingGallery = false;
   Completer<String?>? _manualCaptureCompleter;
-  Timer? _manualCaptureTimer;
-  Timer? _autoQrTimer;
   Timer? _manualCaptureDisconnectTimer;
-  int _manualCaptureCountdown = 30;
 
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
@@ -115,8 +112,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       // Cuando el backend detecta el QR (emite qr_scan con URL), cancelar el modo captura
       final incomingType = data['type'] as String? ?? data['contentType'] as String? ?? '';
       if (incomingType == 'qr_scan' && _awaitingManualCapture) {
-        _autoQrTimer?.cancel();
-        _manualCaptureTimer?.cancel();
         if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
           _manualCaptureCompleter!.complete(null);
         }
@@ -291,66 +286,18 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   !_cameraCtrl!.value.isInitialized;
 
               if (needsQrReconfigure) {
-                // Paramos el audio ANTES del switch para no interferir con la cámara.
-                // Pero lo reiniciamos SIEMPRE tras el switch (sin depender del estado
-                // de la sesión) para evitar que quede muerto si la sesión se reconecta
-                // durante el reinicio de cámara.
-                _audioStreamSub?.cancel();
-                _audioStreamSub = null;
-                _amplitudeSub?.cancel();
-                _amplitudeSub = null;
-                await _audio.stopRecording();
                 await _switchCamera(
                   CameraLensDirection.back,
                   force: true,
                   resolution: ResolutionPreset.high,
                 );
-                if (mounted) {
-                  // Reiniciamos audio siempre — si la sesión no está conectada, los
-                  // chunks simplemente se descartan en _shouldForwardAudioChunk.
-                  unawaited(_audio.startStreamingRecording(intervalMs: 50));
-                  _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
-                  _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-                    if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
-                      _liveSession.sendAudioChunk(audioBase64: base64Chunk);
-                    }
-                  });
-                }
               }
               if (!mounted) return;
               setState(() {
                 _showCameraPreview = true;
                 _awaitingManualCapture = true;
-                _manualCaptureCountdown = 30;
               });
               _manualCaptureCompleter = Completer<String?>();
-              _manualCaptureTimer?.cancel();
-              _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-                if (!mounted) { t.cancel(); return; }
-                setState(() => _manualCaptureCountdown--);
-                if (_manualCaptureCountdown <= 0) {
-                  t.cancel();
-                  _cancelManualCapture();
-                }
-              });
-              // Auto-scan: captura y envía frame cada 2.5s para detección automática del QR.
-              // Guard _autoQrCapturing evita llamadas concurrentes a takePicture() que
-              // provocan excepciones en CameraController y pueden desconectar el socket.
-              _autoQrTimer?.cancel();
-              bool autoQrCapturing = false;
-              _autoQrTimer = Timer.periodic(const Duration(milliseconds: 2500), (t) async {
-                if (!mounted || !_awaitingManualCapture) { t.cancel(); return; }
-                if (autoQrCapturing) return; // evitar concurrencia
-                autoQrCapturing = true;
-                try {
-                  final autoFrame = await _captureFrame(source: 'camera');
-                  if (autoFrame != null && mounted && _awaitingManualCapture) {
-                    _liveSession.sendFrame(frameBase64: autoFrame);
-                  }
-                } finally {
-                  autoQrCapturing = false;
-                }
-              });
               final frame = await _manualCaptureCompleter!.future;
 
               // frame != null solo cuando el usuario pulsa el botón de captura manual.
@@ -913,8 +860,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   Future<void> _triggerManualCapture() async {
     if (!_awaitingManualCapture || _manualCaptureCompleter == null) return;
-    _manualCaptureTimer?.cancel();
-    _autoQrTimer?.cancel();
     try {
       final frame = await _captureFrame(source: 'camera');
       if (mounted) setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
@@ -928,8 +873,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _cancelManualCapture() {
-    _manualCaptureTimer?.cancel();
-    _autoQrTimer?.cancel();
     setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
     if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
       _manualCaptureCompleter!.complete(null);
@@ -1143,7 +1086,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                           border: Border.all(color: Colors.white24),
                         ),
                         child: Text(
-                          'Enfoca el QR y pulsa capturar · $_manualCaptureCountdown s',
+                          'Enfoca el QR y pulsa capturar',
                           style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
