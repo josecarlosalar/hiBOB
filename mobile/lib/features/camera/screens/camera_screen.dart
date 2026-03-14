@@ -44,7 +44,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   CameraController? _cameraCtrl;
   List<CameraDescription> _availableCameras = const [];
-  CameraLensDirection _selectedLensDirection = CameraLensDirection.front;
+  CameraLensDirection _selectedLensDirection = CameraLensDirection.back;
 
   final LiveSessionService _liveSession = LiveSessionService();
   final AudioService _audio = AudioService();
@@ -262,9 +262,24 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
-              // Mostrar visor QR SIN cambiar de cámara — el cambio de CameraController
-              // bloquea el event loop de Dart ~3s y mata el WebSocket en Cloud Run.
-              // Usamos la cámara ya inicializada (sea frontal o trasera).
+              // Si la cámara activa es la frontal, cambiar a trasera antes de mostrar el visor.
+              // Paramos el audio primero para evitar conflicto de hardware que mata el WebSocket.
+              if (_selectedLensDirection != CameraLensDirection.back) {
+                _audioStreamSub?.cancel();
+                _amplitudeSub?.cancel();
+                await _audio.stopRecording();
+                await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
+                if (mounted && _liveSession.state == LiveSessionState.connected) {
+                  unawaited(_audio.startStreamingRecording(intervalMs: 50));
+                  _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
+                  _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
+                    if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
+                      _liveSession.sendAudioChunk(audioBase64: base64Chunk);
+                    }
+                  });
+                }
+              }
+              if (!mounted) return;
               setState(() {
                 _showCameraPreview = true;
                 _awaitingManualCapture = true;
