@@ -205,41 +205,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     } catch (_) { await nextController.dispose(); }
   }
 
-  /// Cambia a cámara trasera, espera a que produzca frames reales y luego
-  /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
-  Future<void> _switchCameraForQr() async {
-    // Detener el grabador de audio ANTES de cambiar la cámara para evitar que
-    // el dispose/initialize del CameraController interfiera con el hardware de audio
-    // y provoque la caída del WebSocket en Android.
-    _audioStreamSub?.cancel();
-    _amplitudeSub?.cancel();
-    await _audio.stopRecording();
-
-    // Usamos ResolutionPreset.high para capturar el QR con suficiente resolución:
-    // en resolución media (~480p) el QR puede ocupar muy pocos píxeles y jsQR falla.
-    // Con high (~720p) el decodificador tiene suficiente información para leer el código.
-    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
-
-    // Reanudar grabación de audio tras el cambio de cámara
-    if (mounted && _liveSession.state == LiveSessionState.connected) {
-      unawaited(_audio.startStreamingRecording(intervalMs: 50));
-      _amplitudeSub = _audio.amplitudeStream().listen(_handleAmplitudeSample);
-      _audioStreamSub = _audio.audioChunkStream.listen((base64Chunk) {
-        if (_liveSession.state == LiveSessionState.connected && _shouldForwardAudioChunk()) {
-          _liveSession.sendAudioChunk(audioBase64: base64Chunk);
-        }
-      });
-    }
-
-    // Pausa para que el hardware se asiente antes de mostrar el visor
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    setState(() {
-      _showCameraPreview = true;
-      _awaitingManualCapture = true;
-      _manualCaptureCountdown = 30;
-    });
-  }
 
   Future<void> _startSession() async {
     try {
@@ -297,7 +262,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
-              await _switchCameraForQr();
+              // Mostrar visor QR SIN cambiar de cámara — el cambio de CameraController
+              // bloquea el event loop de Dart ~3s y mata el WebSocket en Cloud Run.
+              // Usamos la cámara ya inicializada (sea frontal o trasera).
+              setState(() {
+                _showCameraPreview = true;
+                _awaitingManualCapture = true;
+                _manualCaptureCountdown = 30;
+              });
               _manualCaptureCompleter = Completer<String?>();
               _manualCaptureTimer?.cancel();
               _manualCaptureTimer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -308,8 +280,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   _cancelManualCapture();
                 }
               });
-              // Auto-scan: captura y envía frame cada 2s para que el backend detecte el QR con jsQR
-              // sin requerir que el usuario pulse el botón ni que el agente llame trigger_qr_capture.
+              // Auto-scan: captura y envía frame cada 2s para detección automática del QR.
               _autoQrTimer?.cancel();
               _autoQrTimer = Timer.periodic(const Duration(seconds: 2), (t) async {
                 if (!mounted || !_awaitingManualCapture) { t.cancel(); return; }
@@ -319,11 +290,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 }
               });
               final frame = await _manualCaptureCompleter!.future;
-              
-              // Muy importante: esperar a que el frame se envíe ANTES de cambiar de cámara
-              // o cerrar el preview para evitar condiciones de carrera en el hardware.
+
               if (frame != null) {
-                // Mostrar overlay de progreso localmente
                 setState(() {
                   _structuredContent = {
                     'type': 'file_scan',
@@ -337,12 +305,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                   };
                 });
                 _liveSession.sendFrame(frameBase64: frame);
-                // Pequeño margen para asegurar el envío del socket
                 await Future.delayed(const Duration(milliseconds: 200));
               }
-              
-              // Ahora sí volvemos a la cámara frontal de forma segura
-              unawaited(_switchCamera(CameraLensDirection.front));
             } else {
               final frame = await _captureFrame(source: source);
               if (frame != null) _liveSession.sendFrame(frameBase64: frame);
