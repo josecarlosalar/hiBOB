@@ -197,9 +197,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   /// Cambia a cámara trasera, espera a que produzca frames reales y luego
   /// muestra el preview. Así el usuario nunca ve la pantalla en negro.
   Future<void> _switchCameraForQr() async {
-    // Bajamos a ResolutionPreset.medium: es suficiente para jsQR y mucho más estable/ligero
-    // que .high, evitando posibles cierres inesperados de la app por memoria o recursos.
-    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.medium);
+    // Usamos ResolutionPreset.high para capturar el QR con suficiente resolución:
+    // en resolución media (~480p) el QR puede ocupar muy pocos píxeles y jsQR falla.
+    // Con high (~720p) el decodificador tiene suficiente información para leer el código.
+    await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
     
     // Pausa un poco más larga para que el hardware se asiente antes de mostrar el visor
     await Future.delayed(const Duration(milliseconds: 800));
