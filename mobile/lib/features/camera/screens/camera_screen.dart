@@ -278,8 +278,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           try {
             if (source == 'manual_camera') {
               // Para QR necesitamos cámara trasera en alta resolución.
-              // Reconfiguramos solo si hace falta para evitar reinicios innecesarios
-              // de cámara/audio que pueden cortar el socket en algunos dispositivos.
               final needsQrReconfigure =
                   _selectedLensDirection != CameraLensDirection.back ||
                   _cameraCtrl == null ||
@@ -293,16 +291,33 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 );
               }
               if (!mounted) return;
+
               setState(() {
                 _showCameraPreview = true;
                 _awaitingManualCapture = true;
               });
-              _manualCaptureCompleter = Completer<String?>();
-              final frame = await _manualCaptureCompleter!.future;
 
-              // frame != null solo cuando el usuario pulsa el botón de captura manual.
-              // En ese caso mostramos el overlay y enviamos el frame.
-              // Si fue auto-detectado (frame == null), el auto-scan ya envió el frame.
+              // Iniciamos el Completer para esperar la captura (manual o automática)
+              _manualCaptureCompleter = Completer<String?>();
+
+              // TIMER DE CAPTURA AUTOMÁTICA: 
+              // Si el usuario no pulsa "Capturar" en 2.5s, hiBOB lo hace solo.
+              final autoCaptureTimer = Timer(const Duration(milliseconds: 2500), () async {
+                if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                  debugPrint('[QR] Tiempo agotado. Capturando frame automáticamente...');
+                  final frame = await _captureFrame(source: 'camera');
+                  if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                    _manualCaptureCompleter!.complete(frame);
+                  }
+                }
+              });
+
+              final frame = await _manualCaptureCompleter!.future;
+              autoCaptureTimer.cancel(); // Cancelamos el timer si el usuario fue más rápido
+
+              if (!mounted) return;
+              setState(() { _awaitingManualCapture = false; });
+
               if (frame != null) {
                 setState(() {
                   _structuredContent = {
