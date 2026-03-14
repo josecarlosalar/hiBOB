@@ -316,7 +316,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                     }]
                   };
                 });
-                _liveSession.sendFrame(frameBase64: frame);
+                _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
                 await Future.delayed(const Duration(milliseconds: 200));
               }
             } else {
