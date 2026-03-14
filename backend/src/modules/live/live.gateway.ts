@@ -569,7 +569,17 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
 
   private _processQrInBackground(client: Socket, session: GeminiLiveSession): void {
     this.logger.log(`[QR] Iniciando espera de frame para cliente ${client.id}...`);
-    this._waitForFrame(client, 60000).then(async (payload) => {
+    const deadline = Date.now() + 60000;
+
+    const tryNextFrame = async (): Promise<void> => {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        this.logger.warn(`[QR] Timeout global para el cliente ${client.id}`);
+        session.sendClientContent([{ text: 'El usuario no capturó el QR a tiempo o canceló la operación. Informa al usuario brevemente.' }], true);
+        return;
+      }
+
+      const payload = await this._waitForFrame(client, remaining);
       const qrFrame = payload?.frameBase64 || payload?.frame;
       if (!qrFrame) {
         this.logger.warn(`[QR] No se recibió frame para el cliente ${client.id} (timeout o cancelación)`);
@@ -577,53 +587,31 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
         return;
       }
 
-      this.logger.log(`[QR] Frame recibido (${qrFrame.length} chars). Mostrando overlay de escaneo...`);
-      client.emit('display_content', {
-        type: 'qr_scan',
-        title: 'Escaneando QR...',
-        items: [{ id: 'qr_frame', title: 'Imagen capturada', imageUrl: `data:image/jpeg;base64,${qrFrame}` }],
-      });
+      this.logger.log(`[QR] Frame recibido (${qrFrame.length} chars). Decodificando QR...`);
 
       try {
-        this.logger.log(`[QR] Decodificando QR para cliente ${client.id}...`);
         const imageBuffer = Buffer.from(qrFrame, 'base64');
         const image = await Jimp.fromBuffer(imageBuffer);
         this.logger.log(`[QR] Imagen cargada: ${image.bitmap.width}x${image.bitmap.height}px`);
 
-        // Helper para extraer datos RGBA correctamente del Buffer de Node.js:
-        // Jimp puede devolver un Buffer que es una VISTA de un ArrayBuffer más grande,
-        // por lo que es CRÍTICO usar byteOffset y byteLength en lugar de .buffer directamente.
         const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
           new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
 
-        // Escalar la imagen al rango óptimo para jsQR (entre 400px y 1200px de ancho)
-        // Imágenes muy pequeñas o muy grandes dificultan la detección.
         const prepareImage = (src: typeof image): typeof image => {
           const clone = src.clone();
           const { width, height } = clone.bitmap;
-          // Escalado: si es demasiado pequeña, la agrandamos; si demasiado grande, la reducimos
           const minDim = Math.min(width, height);
           const maxDim = Math.max(width, height);
-          if (maxDim < 400) {
-            const scale = Math.ceil(400 / maxDim);
-            clone.scale(scale);
-          } else if (minDim > 1200) {
-            clone.scaleToFit({ w: 1200, h: 1200 });
-          }
+          if (maxDim < 400) { clone.scale(Math.ceil(400 / maxDim)); }
+          else if (minDim > 1200) { clone.scaleToFit({ w: 1200, h: 1200 }); }
           return clone;
         };
 
-        // Estrategias de preprocesamiento: original, alto contraste y binarización
-        const buildAttempts = (base: typeof image) => {
-          const original = prepareImage(base);
-
-          const highContrast = prepareImage(base).contrast(1.0);
-
-          // Binarización manual: convertir a escala de grises y aplicar umbral
-          const binarized = prepareImage(base).greyscale().contrast(0.5).threshold({ max: 128 });
-
-          return [original, highContrast, binarized];
-        };
+        const buildAttempts = (base: typeof image) => [
+          prepareImage(base),
+          prepareImage(base).contrast(1.0),
+          prepareImage(base).greyscale().contrast(0.5).threshold({ max: 128 }),
+        ];
 
         let qrData: ReturnType<typeof jsQR> = null;
         const rotations = [0, 90, 180, 270];
@@ -637,16 +625,16 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
             const rgba = getBitmapRgba(bmp);
             qrData = jsQR(rgba, bmp.width, bmp.height);
             if (qrData?.data) {
-              this.logger.log(`[QR] QR decodificado con éxito (rotación ${rotation}°, estrategia aplicada)`);
+              this.logger.log(`[QR] QR decodificado con éxito (rotación ${rotation}°)`);
               break outerLoop;
             }
           }
         }
 
         if (!qrData?.data) {
-          this.logger.warn(`[QR] No se encontró ningún código QR válido en la imagen para el cliente ${client.id}`);
-          session.sendClientContent([{ text: 'No se pudo leer el código QR. Pide al usuario que lo intente de nuevo: acércate más al código, asegúrate de que esté bien iluminado y ocupe al menos la mitad del encuadre.' }], true);
-          return;
+          // No hay QR en este frame — volver a esperar el siguiente (auto-scan periódico)
+          this.logger.log(`[QR] Frame sin QR detectado para ${client.id}, esperando siguiente frame...`);
+          return tryNextFrame();
         }
 
         const url = qrData.data.trim();
@@ -671,8 +659,6 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
           client.emit('command', { action: 'open_url', url });
         }
 
-        this.logger.log(`[QR] Enviando datos a Gemini para veredicto final...`);
-        // Pasamos todos los datos (incluyendo internet_context) para que Gemini decida el tono del diagnóstico
         session.sendClientContent([{
           text: `Análisis de código QR finalizado.
 URL detectada: "${url}"
@@ -686,7 +672,9 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
         this.logger.error(`[QR] Error procesando QR para ${client.id}: ${e.message}`);
         session.sendClientContent([{ text: `Hubo un error técnico al analizar el código QR: ${e.message || 'Error desconocido'}. Informa al usuario y disculpate.` }], true);
       }
-    });
+    };
+
+    tryNextFrame();
   }
 
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<FramePayload | null> {
