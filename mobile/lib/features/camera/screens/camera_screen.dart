@@ -353,7 +353,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   bool _shouldForwardAudioChunk() {
-    // 1. Bloqueo por vibración (ruido de hardware)
+    // 1. Bloqueo mientras el visor QR está esperando captura manual
+    //    (evita que el micrófono interrumpa a Gemini y provoque reconexión)
+    if (_awaitingManualCapture) return false;
+
+    // 2. Bloqueo por vibración (ruido de hardware)
     if (_isVibrating) return false;
     
     final now = DateTime.now();
@@ -380,6 +384,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
 
   void _handleAmplitudeSample(Amplitude amp) {
     if (mounted) setState(() => _micAmplitudeDb = amp.current);
+    // Silenciamos la detección de actividad mientras el visor QR está abierto
+    if (_awaitingManualCapture) return;
     if (_isVibrating) return;
 
     final now = DateTime.now();
