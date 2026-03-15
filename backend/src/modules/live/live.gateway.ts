@@ -303,14 +303,15 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 items: [{ id: 'scan_progress', title: fileName, description: 'Buscando URLs y amenazas visuales...' }]
               });
 
-              // Enviamos la imagen como contenido del cliente para que Gemini la procese
-              // IMPORTANTE: Gemini NO debe inventar ni asumir URLs — solo debe leerlas LITERALMENTE de la imagen.
-              session.sendClientContent([
+              // Usamos pendingClientContent para enviar la imagen DESPUÉS del sendToolResponse,
+              // igual que en describe_camera_view. Si se envía antes, Gemini abre un nuevo turno
+              // y vuelve a llamar open_gallery.
+              pendingClientContent = [
                 { text: `El usuario ha seleccionado esta imagen ("${fileName}"). Analízala visualmente. REGLAS ESTRICTAS:\n1. Si ves una URL o dominio ESCRITO CLARAMENTE en la imagen (texto visible), léela tal cual y analízala con la herramienta correspondiente.\n2. Si ves un código QR, el sistema ya lo habría detectado automáticamente. Si no se detectó, informa que no se pudo leer.\n3. NUNCA inventes, supongas ni completes URLs parciales. Solo analiza lo que está escrito de forma explícita y completa.\n4. Si no hay URLs ni dominios claramente visibles, describe los elementos sospechosos que veas (logos de marcas, mensajes de urgencia, solicitudes de datos) y da un consejo de seguridad.` },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
-              ], true);
+              ];
 
-              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida. Estoy analizándola visualmente ahora mismo.' } };
+              return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida. Analizándola en el próximo turno.' } };
             }
 
             // Manejo de herramientas visuales reactivas (BLOQUEANTES)
