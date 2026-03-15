@@ -1,6 +1,6 @@
 # hiBOB — Tu Guardián Digital en Tiempo Real
 
-**hiBOB** es un Agente de IA de última generación desarrollado para el **Gemini Live Agent Challenge 2026**. Es un asistente de ciberseguridad multimodal que escucha, ve y actúa en tiempo real para protegerte: analiza imágenes con VirusTotal, escanea códigos QR, verifica contraseñas filtradas, genera contraseñas seguras y actúa como copiloto de seguridad en tu dispositivo.
+**hiBOB** es un Agente de IA de última generación desarrollado para el **Gemini Live Agent Challenge 2026**. Es un asistente de ciberseguridad multimodal que escucha, ve y actúa en tiempo real para protegerte: analiza imágenes con VirusTotal, escanea códigos QR, verifica contraseñas filtradas, genera contraseñas seguras, te guía paso a paso en cualquier tarea de tu móvil en segundo plano y actúa como copiloto de seguridad en tu dispositivo.
 
 > **Categoría:** Agentes en Vivo (Live Agents) — Interacción en tiempo real (audio/visión)
 
