@@ -285,6 +285,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
+              // Pausar audio ANTES del switch de cámara para evitar que Gemini
+              // interrumpa durante la reinicialización y el socket caiga.
+              setState(() { _awaitingManualCapture = true; });
+
               // Para QR necesitamos cámara trasera en alta resolución.
               final needsQrReconfigure =
                   _selectedLensDirection != CameraLensDirection.back ||
@@ -300,10 +304,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               }
               if (!mounted) return;
 
-              setState(() {
-                _showCameraPreview = true;
-                _awaitingManualCapture = true;
-              });
+              setState(() { _showCameraPreview = true; });
 
               // Iniciamos el Completer: solo se resuelve cuando el usuario pulse el botón Capturar.
               _manualCaptureCompleter = Completer<String?>();
