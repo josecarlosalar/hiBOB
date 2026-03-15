@@ -135,7 +135,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear código QR, escanear QR, verificar QR o cualquier variante explícita de QR. NO respondas por voz primero: llama scan_qr_code YA y simultáneamente dile al usuario que abres la cámara. ' +
             '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
             '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
-            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. FLUJO OBLIGATORIO: (1) Primero pregunta al usuario qué tipo de contraseña necesita, presentando las opciones de forma clara: "¿Qué tipo de contraseña necesitas? Tengo estas opciones: [A] Ultra-segura con símbolos (máxima entropía), [B] Solo letras y números (alfanumérica, más fácil de recordar), [C] Solo números (como un PIN), [D] Solo letras (para sistemas que no admiten símbolos). También dime qué longitud quieres: normal (16), larga (24) o extra larga (32)". (2) Espera a que el usuario responda por voz. (3) Solo después de recibir su respuesta, llama generate_password con los parámetros correctos. NUNCA llames generate_password sin antes escuchar la preferencia del usuario. ' +
+            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. Las contraseñas generadas son siempre alfanuméricas con símbolos. FLUJO OBLIGATORIO: (1) Primero pregunta solo la longitud, de forma breve, ofreciendo exactamente tres opciones: 16, 24 o 32 caracteres. Usa una frase corta como: "¿La quieres de 16, 24 o 32 caracteres?". (2) Espera a que el usuario responda por voz. (3) Solo después de recibir su respuesta, llama generate_password con los parámetros correctos. NUNCA llames generate_password sin antes escuchar la preferencia del usuario. ' +
             '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
             '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto", "imagen" o "fichero" que quiere enseñarte. ' +
             '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
@@ -541,7 +541,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 if (data.usedLowercase) tipos.push('minúsculas');
                 if (data.usedNumbers) tipos.push('números');
                 if (data.usedSymbols) tipos.push('símbolos');
-                result = `Contraseña de ${data.length} caracteres con ${tipos.join(', ')} generada y mostrada en pantalla. Entropía: ${entropy} bits. No la compartas por chat o SMS.`;
+                result = `Contraseña de ${data.length} caracteres generada y mostrada en pantalla. Usa ${tipos.join(', ')}. Entropía: ${entropy} bits.`;
               } catch { /* usa result tal cual */ }
             }
 

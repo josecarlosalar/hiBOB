@@ -159,7 +159,7 @@ const CHECK_PASSWORD_BREACH_FUNCTION: FunctionDeclaration = {
 
 const GENERATE_PASSWORD_FUNCTION: FunctionDeclaration = {
   name: 'generate_password',
-  description: 'Genera una contraseña segura y aleatoria. IMPORTANTE: NUNCA llames esta herramienta sin antes preguntar al usuario qué tipo de contraseña quiere y esperar su respuesta. Solo llama esta tool una vez el usuario haya indicado sus preferencias (longitud, si quiere símbolos, solo alfanumérica, solo números+letras, etc.).',
+  description: 'Genera una contraseña segura y aleatoria, siempre alfanumérica con símbolos. IMPORTANTE: NUNCA llames esta herramienta sin antes preguntar al usuario, de forma breve, qué longitud quiere y esperar su respuesta. Ofrece solo tres opciones de longitud: 16, 24 o 32 caracteres.',
   parameters: {
     type: Type.OBJECT,
     properties: {
@@ -504,12 +504,14 @@ export class AiService implements OnModuleInit {
     }
 
     if (name === 'generate_password') {
-      const length = Math.max(12, Math.min(args.length ?? 20, 64));
+      const requestedLength = Number(args.length);
+      const allowedLengths = [16, 24, 32];
+      const length = allowedLengths.includes(requestedLength) ? requestedLength : 16;
       const result = this.hibpService.generateSecurePassword(length, {
-        includeUppercase: args.includeUppercase !== false,
-        includeLowercase: args.includeLowercase !== false,
-        includeNumbers: args.includeNumbers !== false,
-        includeSymbols: args.includeSymbols !== false,
+        includeUppercase: true,
+        includeLowercase: true,
+        includeNumbers: true,
+        includeSymbols: true,
       });
       return JSON.stringify({ ...result, length });
     }
