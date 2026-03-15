@@ -135,7 +135,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear código QR, escanear QR, verificar QR o cualquier variante explícita de QR. NO respondas por voz primero: llama scan_qr_code YA y simultáneamente dile al usuario que abres la cámara. ' +
             '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
             '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
-            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. ' +
+            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. FLUJO OBLIGATORIO: (1) Primero pregunta al usuario qué tipo de contraseña necesita, presentando las opciones de forma clara: "¿Qué tipo de contraseña necesitas? Tengo estas opciones: [A] Ultra-segura con símbolos (máxima entropía), [B] Solo letras y números (alfanumérica, más fácil de recordar), [C] Solo números (como un PIN), [D] Solo letras (para sistemas que no admiten símbolos). También dime qué longitud quieres: normal (16), larga (24) o extra larga (32)". (2) Espera a que el usuario responda por voz. (3) Solo después de recibir su respuesta, llama generate_password con los parámetros correctos. NUNCA llames generate_password sin antes escuchar la preferencia del usuario. ' +
             '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
             '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto", "imagen" o "fichero" que quiere enseñarte. ' +
             '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
@@ -282,9 +282,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   const data = JSON.parse(vtRaw);
                   if (!data.error) {
                     this._emitVtReport(client, data, url);
-                    if (data.positives === 0) client.emit('command', { action: 'open_url', url });
                     const verdict = data.positives === 0 ? 'sin amenazas detectadas' : `${data.positives} positivos de ${data.total} motores`;
-                    return { name: fc.name, id: fc.id, response: { content: `QR analizado. URL: "${url}". Resultado VirusTotal: ${verdict}. El panel de resultados ya se muestra en pantalla. Da un diagnóstico de voz breve y profesional.` } };
+                    return { name: fc.name, id: fc.id, response: { content: `QR analizado. URL: "${url}". Resultado VirusTotal: ${verdict}. El panel de resultados ya se muestra en pantalla con un botón para abrir el enlace si es seguro. Da un diagnóstico de voz breve y profesional.` } };
                   }
                 }
               } catch (e) {
@@ -517,16 +516,32 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             if (fc.name === 'generate_password') {
               try {
                 const data = JSON.parse(result);
+                // Calcular el tamaño real del charset usado para la entropía
+                const charsetSize =
+                  (data.usedUppercase ? 26 : 0) +
+                  (data.usedLowercase ? 26 : 0) +
+                  (data.usedNumbers ? 10 : 0) +
+                  (data.usedSymbols ? 32 : 0);
+                const entropy = Math.floor(data.length * Math.log2(Math.max(charsetSize, 2)));
                 client.emit('display_content', {
                   type: 'password_generated',
                   title: 'Contraseña Segura Generada',
                   passwordData: {
                     password: data.password,
                     length: data.length,
-                    entropy: Math.floor(data.length * Math.log2(94)),
+                    entropy,
+                    usedUppercase: data.usedUppercase,
+                    usedLowercase: data.usedLowercase,
+                    usedNumbers: data.usedNumbers,
+                    usedSymbols: data.usedSymbols,
                   },
                 });
-                result = `Contraseña de ${data.length} caracteres generada y mostrada en pantalla. No la compartas por chat o SMS.`;
+                const tipos: string[] = [];
+                if (data.usedUppercase) tipos.push('mayúsculas');
+                if (data.usedLowercase) tipos.push('minúsculas');
+                if (data.usedNumbers) tipos.push('números');
+                if (data.usedSymbols) tipos.push('símbolos');
+                result = `Contraseña de ${data.length} caracteres con ${tipos.join(', ')} generada y mostrada en pantalla. Entropía: ${entropy} bits. No la compartas por chat o SMS.`;
               } catch { /* usa result tal cual */ }
             }
 
@@ -873,9 +888,7 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
           this._emitVtReport(client, data, url);
 
           const isSafe = data.positives === 0;
-          if (isSafe) {
-            client.emit('command', { action: 'open_url', url });
-          }
+          // NO navegamos automáticamente — el usuario decide desde el botón en el panel de métricas
 
           // SIEMPRE forzamos la respuesta de hiBOB, incluso si la sesión es nueva
           // Esperamos un momento para que Gemini esté listo tras la reconexión
@@ -887,10 +900,9 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
               text: `Análisis de código QR finalizado.
 URL detectada: "${url}"
 Resultado VirusTotal: ${data.positives}/${data.total} motores detectaron amenazas.
-Contexto de Internet: ${data.internet_context || 'No se encontró información adicional.'}
-Acción realizada: ${isSafe ? 'Se ha abierto la URL automáticamente.' : 'Bloqueado por seguridad.'}
+Veredicto: ${isSafe ? 'SEGURO — sin amenazas detectadas. El usuario puede pulsar el botón "Abrir enlace" en el panel si desea navegar.' : 'PELIGROSO — NO abrir. El enlace ha sido bloqueado.'}
 
-Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. Si VirusTotal es 0 pero el contexto de internet menciona estafas o phishing, advierte al usuario seriamente y no digas que es seguro.`
+Instrucción: Da tu diagnóstico profesional por voz en 1-2 frases. Si es seguro, dile que puede pulsar el botón del panel para abrir el enlace. Si es peligroso, advierte claramente y NO menciones ninguna URL ni sugieras abrirla.`
             }], true);
           }
         } catch (err: any) {

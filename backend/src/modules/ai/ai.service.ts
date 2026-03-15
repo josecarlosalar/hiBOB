@@ -159,11 +159,15 @@ const CHECK_PASSWORD_BREACH_FUNCTION: FunctionDeclaration = {
 
 const GENERATE_PASSWORD_FUNCTION: FunctionDeclaration = {
   name: 'generate_password',
-  description: 'Genera una contraseña segura y aleatoria con alta entropía.',
+  description: 'Genera una contraseña segura y aleatoria. IMPORTANTE: NUNCA llames esta herramienta sin antes preguntar al usuario qué tipo de contraseña quiere y esperar su respuesta. Solo llama esta tool una vez el usuario haya indicado sus preferencias (longitud, si quiere símbolos, solo alfanumérica, solo números+letras, etc.).',
   parameters: {
     type: Type.OBJECT,
     properties: {
       length: { type: Type.NUMBER, description: 'Longitud de la contraseña (mínimo 12, recomendado 20)' },
+      includeUppercase: { type: Type.BOOLEAN, description: 'Incluir letras mayúsculas (A-Z). Por defecto true.' },
+      includeLowercase: { type: Type.BOOLEAN, description: 'Incluir letras minúsculas (a-z). Por defecto true.' },
+      includeNumbers: { type: Type.BOOLEAN, description: 'Incluir números (0-9). Por defecto true.' },
+      includeSymbols: { type: Type.BOOLEAN, description: 'Incluir símbolos especiales (!@#$...). Por defecto true para máxima seguridad.' },
     },
   },
 };
@@ -501,8 +505,13 @@ export class AiService implements OnModuleInit {
 
     if (name === 'generate_password') {
       const length = Math.max(12, Math.min(args.length ?? 20, 64));
-      const password = this.hibpService.generateSecurePassword(length);
-      return JSON.stringify({ password, length });
+      const result = this.hibpService.generateSecurePassword(length, {
+        includeUppercase: args.includeUppercase !== false,
+        includeLowercase: args.includeLowercase !== false,
+        includeNumbers: args.includeNumbers !== false,
+        includeSymbols: args.includeSymbols !== false,
+      });
+      return JSON.stringify({ ...result, length });
     }
 
     if (name === 'get_current_location') return await this.locationService.getCurrentLocation(socketId);
