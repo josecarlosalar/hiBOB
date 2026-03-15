@@ -275,6 +275,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
+              // Si ya estamos esperando captura (reconexión), solo restaurar UI sin tocar hardware
+              if (_awaitingManualCapture && _manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                setState(() { _showCameraPreview = true; });
+                return;
+              }
+
               // OPTIMIZACIÓN: Solo reconfiguramos si la lente NO es la trasera
               // o si la cámara no está inicializada. NO reiniciamos por resolución.
               final needsLensChange = _selectedLensDirection != CameraLensDirection.back;
@@ -294,11 +300,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 _awaitingManualCapture = true;
               });
 
+              // Heartbeat para mantener Cloud Run activo mientras esperamos la captura QR
+              // (el audio está bloqueado durante _awaitingManualCapture, así que sin heartbeat el socket muere)
+              _qrHeartbeatTimer?.cancel();
+              _qrHeartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+                if (_liveSession.state == LiveSessionState.connected) {
+                  _liveSession.sendHeartbeat();
+                }
+              });
+
               // Iniciamos el Completer para esperar la captura MANUAL del usuario
               _manualCaptureCompleter = Completer<String?>();
 
               final frame = await _manualCaptureCompleter!.future;
 
+              _qrHeartbeatTimer?.cancel();
+              _qrHeartbeatTimer = null;
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
 
