@@ -275,25 +275,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           final source = data['source'] as String? ?? 'camera';
           try {
             if (source == 'manual_camera') {
-              // Pausar audio ANTES del switch de cámara para evitar que Gemini
-              // interrumpa durante la reinicialización y el socket caiga.
-              setState(() { _awaitingManualCapture = true; });
+              // OPTIMIZACIÓN: Solo reconfiguramos si la lente NO es la trasera
+              // o si la cámara no está inicializada. NO reiniciamos por resolución.
+              final needsLensChange = _selectedLensDirection != CameraLensDirection.back;
+              final isNotInit = _cameraCtrl == null || !_cameraCtrl!.value.isInitialized;
 
-              // Heartbeat cada 5s para mantener Cloud Run vivo mientras esperamos captura.
-              _qrHeartbeatTimer?.cancel();
-              _qrHeartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-                if (_liveSession.state == LiveSessionState.connected) {
-                  _liveSession.sendHeartbeat();
-                }
-              });
-
-              // Para QR necesitamos cámara trasera en alta resolución.
-              final needsQrReconfigure =
-                  _selectedLensDirection != CameraLensDirection.back ||
-                  _cameraCtrl == null ||
-                  !_cameraCtrl!.value.isInitialized;
-
-              if (needsQrReconfigure) {
+              if (needsLensChange || isNotInit) {
                 await _switchCamera(
                   CameraLensDirection.back,
                   force: true,
@@ -302,14 +289,28 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               }
               if (!mounted) return;
 
-              setState(() { _showCameraPreview = true; });
+              setState(() {
+                _showCameraPreview = true;
+                _awaitingManualCapture = true;
+              });
 
-              // Iniciamos el Completer: solo se resuelve cuando el usuario pulse el botón Capturar.
+              // Iniciamos el Completer para esperar la captura
               _manualCaptureCompleter = Completer<String?>();
 
+              // CAPTURA AUTOMÁTICA (Fallback): si el usuario no pulsa el botón en 2.5s, 
+              // hiBOB captura solo para que el análisis no se detenga.
+              final autoCaptureTimer = Timer(const Duration(milliseconds: 2500), () async {
+                if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                  debugPrint('[QR] Tiempo agotado. Capturando frame automáticamente...');
+                  final frame = await _captureFrame(source: 'camera');
+                  if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                    _manualCaptureCompleter!.complete(frame);
+                  }
+                }
+              });
+
               final frame = await _manualCaptureCompleter!.future;
-              _qrHeartbeatTimer?.cancel();
-              _qrHeartbeatTimer = null;
+              autoCaptureTimer.cancel(); // Cancelamos el timer si el usuario fue más rápido
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
