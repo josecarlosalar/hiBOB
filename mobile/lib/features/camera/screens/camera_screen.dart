@@ -881,12 +881,30 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   Future<void> _triggerManualCapture() async {
-    if (!_awaitingManualCapture || _manualCaptureCompleter == null) return;
+    if (!_awaitingManualCapture) return;
     try {
       final frame = await _captureFrame(source: 'camera');
-      if (mounted) setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
+      _qrHeartbeatTimer?.cancel();
+      _qrHeartbeatTimer = null;
+      if (mounted) { setState(() { _awaitingManualCapture = false; _showCameraPreview = false; }); }
+
+      if (frame != null) {
+        // Mostrar overlay de progreso inmediatamente
+        if (mounted) setState(() {
+          _structuredContent = {
+            'type': 'file_scan',
+            'title': 'Escaneando QR',
+            'items': [{ 'id': 'qr_progress', 'title': 'Código QR', 'description': 'Analizando código QR...' }]
+          };
+        });
+        // Siempre enviamos directamente al backend (independiente del completer)
+        // El backend procesa 'qr_scan' en handleFrame PRIORIDAD 2a
+        _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
+      }
+
+      // Completar el completer si aún está pendiente (flujo normal sin reconexión)
       if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-        _manualCaptureCompleter!.complete(frame);
+        _manualCaptureCompleter!.complete(null); // null = ya enviado directamente
       }
     } catch (e) {
       debugPrint('Error al disparar captura: $e');
