@@ -43,7 +43,8 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private activeSessions = new Map<string, {
     session: GeminiLiveSession,
     disconnectTimer?: NodeJS.Timeout,
-    lastClientId: string
+    lastClientId: string,
+    pendingQrScan?: boolean,  // true si hay un scan_qr_code esperando captura
   }>();
 
   constructor(
@@ -94,6 +95,13 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         existingSessionData.lastClientId = client.id;
         isReconnection = true;
         this.logger.log(`[Reconexión] UID ${uid} reconectado. Reutilizando sesión Gemini existente (socket anterior: ${previousClientId} → nuevo: ${client.id})`);
+
+        // Si había un QR pendiente de captura, reenviamos el frame_request al nuevo socket
+        if (existingSessionData.pendingQrScan) {
+          this.logger.log(`[Reconexión] Reenviando frame_request de QR pendiente al nuevo socket ${client.id}`);
+          // Pequeña espera para que el cliente termine de establecer su estado interno
+          setTimeout(() => client.emit('frame_request', { source: 'manual_camera' }), 500);
+        }
       } else {
         // Crear nueva sesión
         session = this.aiService.createLiveSession({
@@ -312,6 +320,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             // ── QR Code: flujo NO BLOQUEANTE para evitar timeouts y desconexiones ──
             if (fc.name === 'scan_qr_code') {
               this.logger.log(`[Herramienta] Solicitando QR para ${client.id}...`);
+              // Marcamos sesión como "pendiente de QR" para reenviar frame_request si el cliente reconecta
+              const sessionEntry = this.activeSessions.get(uid);
+              if (sessionEntry) sessionEntry.pendingQrScan = true;
               // Abrimos visor en el móvil
               client.emit('frame_request', { source: 'manual_camera' });
 
@@ -735,6 +746,9 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
     // Este path cubre reconexiones donde el socket original perdió la espera pendiente.
     if (payload?.prompt === 'qr_scan') {
       this.logger.log(`[QR] Captura manual recibida en ${client.id}. Analizando QR...`);
+      // Limpiar el flag de QR pendiente en la sesión activa
+      const sessionEntry = this.activeSessions.get(client.data.uid);
+      if (sessionEntry) sessionEntry.pendingQrScan = false;
 
       (async () => {
         try {
