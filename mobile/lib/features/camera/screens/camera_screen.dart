@@ -1978,20 +1978,56 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
   }
 
   Widget _buildCloseButton() {
+    final vtData = widget.vtData;
+    final isDanger = vtData?['isDanger'] as bool? ?? false;
+    final url = vtData?['url'] as String?;
+    final canOpen = !isDanger && url != null && url.isNotEmpty;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-      child: GestureDetector(
-        onTap: widget.onClose,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white12),
+      child: Column(
+        children: [
+          if (canOpen) ...[
+            GestureDetector(
+              onTap: () async {
+                final uri = Uri.tryParse(url);
+                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF00C853), Color(0xFF00E676)],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.open_in_browser_rounded, color: Colors.black87, size: 18),
+                    SizedBox(width: 8),
+                    Text('Abrir enlace', textAlign: TextAlign.center, style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w700, fontSize: 15)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+          GestureDetector(
+            onTap: widget.onClose,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: const Text('Cerrar', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
+            ),
           ),
-          child: const Text('Cerrar', textAlign: TextAlign.center, style: TextStyle(color: Colors.white60, fontWeight: FontWeight.w600)),
-        ),
+        ],
       ),
     );
   }
@@ -2482,12 +2518,30 @@ class _PasswordGeneratedOverlayState extends State<_PasswordGeneratedOverlay>
     Future.delayed(const Duration(seconds: 2), () { if (mounted) setState(() => _copied = false); });
   }
 
+  Widget _pwdChip(String label, IconData icon, Color accent) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: accent.withValues(alpha: 0.35)),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, color: accent, size: 13),
+      const SizedBox(width: 4),
+      Text(label, style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w600)),
+    ]),
+  );
+
   @override
   Widget build(BuildContext context) {
     final d = widget.passwordData;
     final password = d?['password'] as String? ?? '';
     final length = (d?['length'] as num?)?.toInt() ?? 20;
     final entropy = (d?['entropy'] as num?)?.toInt() ?? 0;
+    final usedUppercase = d?['usedUppercase'] as bool? ?? true;
+    final usedLowercase = d?['usedLowercase'] as bool? ?? true;
+    final usedNumbers = d?['usedNumbers'] as bool? ?? true;
+    final usedSymbols = d?['usedSymbols'] as bool? ?? true;
     const accent = Color(0xFF00E676);
 
     return overlayShell(accent: accent, children: [
@@ -2542,6 +2596,14 @@ class _PasswordGeneratedOverlayState extends State<_PasswordGeneratedOverlay>
               ]),
             ),
           ),
+          const SizedBox(height: 10),
+          // Chips de tipo de contraseña
+          Wrap(spacing: 6, runSpacing: 6, children: [
+            if (usedUppercase) _pwdChip('ABC', Icons.text_fields_rounded, accent),
+            if (usedLowercase) _pwdChip('abc', Icons.text_format_rounded, accent),
+            if (usedNumbers)   _pwdChip('123', Icons.numbers_rounded, accent),
+            if (usedSymbols)   _pwdChip('!@#', Icons.tag_rounded, accent),
+          ]),
           const SizedBox(height: 10),
           // Barra de entropía
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

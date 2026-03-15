@@ -45,28 +45,54 @@ export class HibpService {
   }
 
   // Generador de contraseñas seguras (local, sin API)
-  generateSecurePassword(length = 20): string {
+  generateSecurePassword(
+    length = 20,
+    options: {
+      includeUppercase?: boolean;
+      includeLowercase?: boolean;
+      includeNumbers?: boolean;
+      includeSymbols?: boolean;
+    } = {},
+  ): { password: string; usedUppercase: boolean; usedLowercase: boolean; usedNumbers: boolean; usedSymbols: boolean } {
+    const {
+      includeUppercase = true,
+      includeLowercase = true,
+      includeNumbers = true,
+      includeSymbols = true,
+    } = options;
+
     const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const lower = 'abcdefghijklmnopqrstuvwxyz';
     const digits = '0123456789';
     const symbols = '!@#$%^&*()-_=+[]{}|;:,.<>?';
-    const all = upper + lower + digits + symbols;
 
-    // Garantizamos al menos uno de cada tipo
-    const required = [
-      upper[Math.floor(Math.random() * upper.length)],
-      lower[Math.floor(Math.random() * lower.length)],
-      digits[Math.floor(Math.random() * digits.length)],
-      symbols[Math.floor(Math.random() * symbols.length)],
-    ];
+    // Al menos un charset activo
+    const charsets: string[] = [];
+    if (includeUppercase) charsets.push(upper);
+    if (includeLowercase) charsets.push(lower);
+    if (includeNumbers) charsets.push(digits);
+    if (includeSymbols) charsets.push(symbols);
+    if (charsets.length === 0) charsets.push(lower, digits); // fallback
 
-    const rest = Array.from({ length: length - required.length }, () =>
+    const all = charsets.join('');
+
+    // Garantizamos al menos uno de cada charset activo
+    const required = charsets.map(cs => cs[Math.floor(Math.random() * cs.length)]);
+
+    const rest = Array.from({ length: Math.max(0, length - required.length) }, () =>
       all[Math.floor(Math.random() * all.length)],
     );
 
-    // Mezclar para evitar patrones predecibles
-    return [...required, ...rest]
+    const password = [...required, ...rest]
       .sort(() => Math.random() - 0.5)
       .join('');
+
+    return {
+      password,
+      usedUppercase: includeUppercase,
+      usedLowercase: includeLowercase,
+      usedNumbers: includeNumbers,
+      usedSymbols: includeSymbols,
+    };
   }
 }
