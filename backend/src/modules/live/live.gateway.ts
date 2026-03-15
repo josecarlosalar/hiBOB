@@ -82,7 +82,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const session = sessionData.session;
         client.data.geminiSession = session;
         
-        // Re-vincular listeners al nuevo socket para que el audio y eventos lleguen al cliente actual
+        // Re-vincular listeners al nuevo socket
         this._setupSessionListeners(client, session);
         this.logger.log(`[Reconexión] Sesión re-vinculada con éxito para ${client.id}`);
         return;
@@ -97,20 +97,18 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const session = this.aiService.createLiveSession({
         voiceName,
         systemInstruction:
-          `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario que tienes delante se llama ${firstName}. ` +
-          `Ya le conoces — eres su guardián digital de confianza. Salúdale de forma proactiva, breve y natural por su nombre en cuanto se conecte. ` +
-          'Tu tono es calmado, profesional y analítico. ' +
-          'MODO COPILOTO: Guía al usuario de forma natural. Detecta su idioma y responde siempre en el mismo. ' +
-          'PRESENTACIÓN: Si pregunta qué sabes hacer, usa display_content con features_slider detallando tus capacidades (VirusTotal, Pwned, etc). ' +
+          `Eres hiBOB, un agente de seguridad experto en ciberseguridad. El usuario se llama ${firstName}. ` +
+          `Salúdale de forma proactiva y natural. Eres su guardián digital. ` +
+          'Tu tono es calmado, profesional y analítico. Detecta el idioma y responde en el mismo. ' +
+          'Si preguntan qué haces, usa "display_content" con "features_slider" detallando tus capacidades. ' +
           'HERRAMIENTAS: ' +
           '• analyze_security_url → para URLs. ' +
           '• analyze_domain → para dominios. ' +
           '• analyze_ip → para IPs. ' +
-          '• scan_file → para archivos del dispositivo. ' +
-          '• scan_qr_code → Úsala YA en cuanto mencionen QR. Abre el escáner inmediatamente. ' +
-          '• trigger_qr_capture → Cuando el usuario diga "listo" o "ya" con el QR enfocado. ' +
-          '• open_gallery → para ver capturas o imágenes que el usuario tenga guardadas. ' +
-          'INTERFAZ: No uses display_content tras un análisis de VirusTotal; hiBOB móvil mostrará el panel automáticamente. Tu labor es dar el veredicto por voz.'
+          '• scan_file → para analizar archivos que el usuario elija. ' +
+          '• scan_qr_code → Úsala inmediatamente cuando mencionen QR. Abre el escáner. ' +
+          '• open_gallery → para ver fotos o capturas del usuario. ' +
+          'REGLA: Tras analizar con VirusTotal, hiBOB móvil mostrará el panel automáticamente. Da tu diagnóstico profesional por voz.'
       });
 
       client.data.geminiSession = session;
@@ -139,6 +137,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     session.on('transcription', (text) => {
+      this.logger.log(`[Gemini] Transcripción: ${text}`);
       const activeClient = this._getActiveSocket(client);
       if (activeClient) activeClient.emit('transcription', { text });
     });
@@ -154,43 +153,46 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     });
 
     session.on('error', (err) => {
+      this.logger.error(`[Gemini] Error en sesión: ${err.message || err}`);
       const activeClient = this._getActiveSocket(client);
       if (activeClient) activeClient.emit('error', { message: err.message || 'Error de IA' });
     });
 
     session.on('tool_call', async (toolCall) => {
+      this.logger.log(`[Gemini] Tool Call: ${JSON.stringify(toolCall)}`);
       const activeClient = this._getActiveSocket(client);
       if (!activeClient) return;
 
       const results = await Promise.all(
         toolCall.functionCalls.map(async (fc: any) => {
-          // --- OPEN GALLERY ---
-          if (fc.name === 'open_gallery') {
-            const source = fc.args.source || 'gallery';
+          // --- OPEN GALLERY / FILES ---
+          if (fc.name === 'open_gallery' || fc.name === 'scan_file') {
+            const source = fc.name === 'scan_file' ? 'files' : (fc.args.source || 'gallery');
             activeClient.emit('command', { action: 'open_gallery', source });
             const payload = await this._waitForFrame(activeClient, 60000);
             const frame = payload?.frameBase64 || payload?.frame;
-            if (!frame) return { name: fc.name, id: fc.id, response: { content: 'Cancelado.' } };
+            if (!frame) return { name: fc.name, id: fc.id, response: { content: 'Operación cancelada por el usuario.' } };
             
-            const fileName = payload?.fileName || 'archivo.jpg';
+            const fileName = payload?.fileName || 'archivo.dat';
             if (source === 'files' || fileName.toLowerCase().endsWith('.apk') || fileName.toLowerCase().endsWith('.pdf')) {
               const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, activeClient.id);
-              this._emitVtReport(activeClient, JSON.parse(vtResult), fileName);
+              const data = JSON.parse(vtResult);
+              this._emitVtReport(activeClient, data, fileName);
               return { name: fc.name, id: fc.id, response: { content: `Archivo analizado. Resultado en pantalla.` } };
             }
             session.sendClientContent([{ inlineData: { data: frame, mimeType: 'image/jpeg' } }], true);
-            return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida.' } };
+            return { name: fc.name, id: fc.id, response: { content: 'Imagen recibida y en análisis visual.' } };
           }
 
           // --- SCAN QR CODE (NO BLOQUEANTE) ---
           if (fc.name === 'scan_qr_code') {
             activeClient.emit('frame_request', { source: 'manual_camera' });
-            return { name: fc.name, id: fc.id, response: { content: 'Escáner QR abierto. Esperando captura manual del usuario.' } };
+            return { name: fc.name, id: fc.id, response: { content: 'Escáner QR abierto. Esperando que el usuario capture el código.' } };
           }
 
-          // --- HERRAMIENTAS DE RED (ENRIQUECIDAS) ---
+          // --- HERRAMIENTAS DE SEGURIDAD ---
           if (['analyze_security_url', 'analyze_domain', 'analyze_ip'].includes(fc.name)) {
-            activeClient.emit('thinking_state', { tool: fc.name, message: 'Analizando seguridad...' });
+            activeClient.emit('thinking_state', { tool: fc.name, message: 'Consultando bases de datos de amenazas...' });
           }
 
           let result = await this.aiService.executeTool(fc.name, fc.args, activeClient.id);
@@ -198,11 +200,11 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           try {
             const data = JSON.parse(result);
             if (fc.name === 'analyze_security_url' && !data.error) this._emitVtReport(activeClient, data, data.url ?? fc.args.url);
-            if (fc.name === 'analyze_ip' && !data.error) activeClient.emit('display_content', { type: 'ip_report', title: 'Reporte de IP', ipData: data });
-            if (fc.name === 'analyze_domain' && !data.error) activeClient.emit('display_content', { type: 'domain_report', title: 'Reporte de Dominio', domainData: data });
+            if (fc.name === 'analyze_ip' && !data.error) activeClient.emit('display_content', { type: 'ip_report', title: 'Análisis de IP', ipData: data });
+            if (fc.name === 'analyze_domain' && !data.error) activeClient.emit('display_content', { type: 'domain_report', title: 'Análisis de Dominio', domainData: data });
           } catch (e) {}
 
-          // --- COMANDOS DIRECTOS ---
+          // --- COMANDOS DISPOSITIVO ---
           if (fc.name === 'trigger_qr_capture') activeClient.emit('command', { action: 'trigger_capture' });
           else if (fc.name === 'switch_camera') activeClient.emit('command', { action: 'switch_camera', direction: fc.args.direction });
           else if (fc.name === 'close_camera') activeClient.emit('command', { action: 'close_camera' });
@@ -222,7 +224,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sessionData = this.activeSessions.get(uid);
     if (!sessionData) return null;
     const socket = this.server.of('/live').sockets.get(sessionData.lastClientId);
-    return socket?.connected ? socket : null;
+    return (socket && socket.connected) ? socket : null;
   }
 
   handleDisconnect(client: Socket) {
@@ -231,9 +233,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const sessionData = this.activeSessions.get(uid);
     if (!sessionData) return;
 
-    this.logger.warn(`[Disconnect] Esperando 15s para reconexión de UID ${uid}...`);
+    this.logger.warn(`[Disconnect] Cliente ${client.id} desconectado. Esperando 15s reconexión...`);
     sessionData.disconnectTimer = setTimeout(() => {
-      this.logger.warn(`[Cleanup] Tiempo agotado. Cerrando sesión.`);
+      this.logger.warn(`[Cleanup] Sesión de usuario ${uid} cerrada por inactividad.`);
       sessionData.session.close();
       this.activeSessions.delete(uid);
     }, 15000);
@@ -241,13 +243,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private _emitVtReport(client: Socket, data: any, label: string) {
     const malicious = data.malicious ?? data.positives ?? 0;
-    const total = data.total ?? (malicious + (data.suspicious ?? 0) + (data.harmless ?? 0) + (data.undetected ?? 0));
-    const threatLevel = malicious === 0 ? (data.suspicious > 0 ? 'suspicious' : 'clean') : (malicious <= 3 ? 'dangerous' : 'critical');
+    const suspicious = data.suspicious ?? 0;
+    const total = data.total ?? (malicious + suspicious + (data.harmless ?? 0) + (data.undetected ?? 0));
+    const threatLevel = malicious === 0 ? (suspicious > 0 ? 'suspicious' : 'clean') : (malicious <= 3 ? 'dangerous' : 'critical');
     
     const payload = {
       type: 'vt_report',
-      title: malicious > 0 ? 'Amenaza Detectada' : 'Análisis Limpio',
-      vtData: { url: label, positives: malicious + (data.suspicious ?? 0), total, malicious, threatLevel, isDanger: malicious > 0, scanDate: new Date().toLocaleString('es-ES') }
+      title: malicious > 0 ? 'Amenaza Detectada' : (suspicious > 0 ? 'Actividad Sospechosa' : 'Análisis Limpio'),
+      vtData: { url: label, positives: malicious + suspicious, total, malicious, suspicious, threatLevel, isDanger: malicious > 0, scanDate: new Date().toLocaleString('es-ES') }
     };
     const activeClient = this._getActiveSocket(client);
     if (activeClient) activeClient.emit('display_content', payload);
@@ -274,11 +277,13 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const frame = payload?.frameBase64 || payload?.frame;
     if (!session || session.isClosed() || !frame) return;
 
+    // Si hay una herramienta esperando este frame (Captura de pantalla, Galería, etc)
     if (client.data.pendingFrameResolve) {
       client.data.pendingFrameResolve(payload);
       return;
     }
 
+    // Procesamiento de QR manual (siempre activo para frames con tag qr_scan)
     if (payload?.prompt === 'qr_scan') {
       this.logger.log(`[QR] Procesando captura manual en ${client.id}...`);
       (async () => {
@@ -294,19 +299,33 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
           if (!qrData?.data) {
             client.emit('frame_request', { source: 'manual_camera' });
-            session.sendClientContent([{ text: 'No pude leer el QR. Por favor, céntralo bien y captura de nuevo.' }], true);
+            session.sendClientContent([{ text: 'No he podido leer el código QR. Por favor, céntralo bien y pulsa el botón de captura de nuevo.' }], true);
             return;
           }
 
           const url = qrData.data.trim();
+          this.logger.log(`[QR] URL detectada: ${url}. Analizando...`);
+          
+          client.emit('display_content', { type: 'qr_scan', title: 'Analizando QR...', items: [{ id: 'qr_progress', title: url, description: 'Verificando seguridad...' }] });
+
           const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
           const data = JSON.parse(vtRaw);
+          
           this._emitVtReport(client, data, url);
-          session.sendClientContent([{ text: `QR detectado: ${url}. VirusTotal: ${data.positives}/${data.total} amenazas. Da el veredicto por voz.` }], true);
+          
+          // Re-vincular a la sesión actual (por si hubo reconexión)
+          const currentSession = client.data.geminiSession as GeminiLiveSession;
+          if (currentSession && !currentSession.isClosed()) {
+            const isSafe = data.positives === 0;
+            if (isSafe) client.emit('command', { action: 'open_url', url });
+            currentSession.sendClientContent([{ text: `Análisis de QR finalizado para ${url}. VirusTotal detectó ${data.positives} amenazas. Da tu diagnóstico por voz.` }], true);
+          }
         } catch (e) { this.logger.error(`Error QR: ${e.message}`); }
       })();
       return;
     }
+
+    // Captura proactiva para visión continua
     session.sendClientContent([{ inlineData: { data: frame, mimeType: 'image/jpeg' } }], false);
   }
 
