@@ -39,6 +39,13 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger('LiveGateway-V2.8');
 
+  // Mapa para persistir sesiones por UID (permite reconexiones sin perder el hilo)
+  private activeSessions = new Map<string, {
+    session: GeminiLiveSession,
+    disconnectTimer?: NodeJS.Timeout,
+    lastClientId: string
+  }>();
+
   constructor(
     private readonly aiService: AiService,
     private readonly locationService: LocationService,
@@ -479,18 +486,24 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   handleDisconnect(client: Socket) {
-    // Cancelar cualquier espera de frame pendiente (QR, galería, cámara) para no dejar
-    // el _processQrInBackground ni _processFileInBackground colgados en sockets muertos.
-    if (client.data.pendingFrameResolve) {
-      this.logger.warn(`[Disconnect] Cancelando espera de frame pendiente para ${client.id}`);
-      const resolve = client.data.pendingFrameResolve;
-      client.data.pendingFrameResolve = null;
-      resolve(null);
+    const uid = client.data.uid;
+    if (!uid) {
+      this.logger.log(`Cliente anónimo desconectado: ${client.id}`);
+      return;
     }
-    const session = client.data.geminiSession as GeminiLiveSession;
-    session?.close();
-    this.locationService.removeClientLocation(client.id);
-    this.logger.log(`Cliente desconectado: ${client.id}`);
+
+    const sessionData = this.activeSessions.get(uid);
+    if (!sessionData) return;
+
+    this.logger.warn(`[Disconnect] Cliente ${client.id} de usuario ${uid} desconectado. Iniciando espera de 15s para reconexión...`);
+
+    // Iniciamos un timer de 15 segundos antes de borrar la sesión de hiBOB definitivamente
+    sessionData.disconnectTimer = setTimeout(() => {
+      this.logger.warn(`[Cleanup] Tiempo agotado para usuario ${uid}. Cerrando sesión de Gemini definitivamente.`);
+      sessionData?.session.close();
+      this.activeSessions.delete(uid);
+      this.locationService.removeClientLocation(client.id);
+    }, 15000);
   }
 
   private _emitVtReport(client: Socket, data: any, label: string) {
