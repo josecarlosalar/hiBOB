@@ -39,8 +39,10 @@ class AudioService {
 
   /// Inicia grabación continua enviando chunks PCM vía Stream.
   Future<void> startStreamingRecording({int intervalMs = 200}) async {
+    // Si ya está grabando, no reiniciar — evita stop()+start() que desconecta el socket
+    if (await _recorder.isRecording()) return;
     _chunkTimer?.cancel();
-    
+
     final stream = await _recorder.startStream(
       const RecordConfig(
         encoder: AudioEncoder.pcm16bits,

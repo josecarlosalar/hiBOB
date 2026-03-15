@@ -878,6 +878,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return null;
       }
 
+      // Esperar hasta 3s a que la cámara termine de inicializarse
+      if (_cameraCtrl != null && !_cameraCtrl!.value.isInitialized) {
+        debugPrint('[QR] _captureFrame: esperando inicialización de cámara...');
+        for (int i = 0; i < 30; i++) {
+          await Future.delayed(const Duration(milliseconds: 100));
+          if (_cameraCtrl!.value.isInitialized) break;
+        }
+      }
       if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) {
         debugPrint('[QR] _captureFrame: cameraCtrl no inicializado (ctrl=${_cameraCtrl != null}, init=${_cameraCtrl?.value.isInitialized})');
         return null;
