@@ -235,10 +235,12 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
               const payload = await this._waitForFrame(client, 60000);
               client.data.galleryPending = false;
-              client.data.blockAudio = false;
+              // blockAudio se desbloquea después de enviar pendingClientContent (línea ~604)
+              // para evitar que el audio del usuario interrumpa a Gemini mientras procesa la imagen
               const frame = payload?.frameBase64 || payload?.frame;
 
               if (!frame) {
+                client.data.blockAudio = false;
                 return { name: fc.name, id: fc.id, response: { content: 'El usuario canceló la selección.' } };
               }
 
@@ -250,10 +252,14 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 const vtResult = await this.aiService.executeTool('scan_file_data', { fileBase64: frame, fileName }, client.id);
                 try {
                   const data = JSON.parse(vtResult);
+                  client.data.blockAudio = false;
                   if (data.error || data.pending) return { name: fc.name, id: fc.id, response: { content: 'Análisis de archivo pendiente o fallido.' } };
                   this._emitVtReport(client, data, fileName);
                   return { name: fc.name, id: fc.id, response: { content: `Archivo analizado: ${data.malicious} positivos. Resultado en pantalla.` } };
-                } catch { return { name: fc.name, id: fc.id, response: { content: 'Error en análisis de archivo.' } }; }
+                } catch {
+                  client.data.blockAudio = false;
+                  return { name: fc.name, id: fc.id, response: { content: 'Error en análisis de archivo.' } };
+                }
               }
 
               // --- FLUJO B1: Detección de QR en la imagen de galería ---
@@ -297,6 +303,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                   if (!data.error) {
                     this._emitVtReport(client, data, url);
                     const verdict = data.positives === 0 ? 'sin amenazas detectadas' : `${data.positives} positivos de ${data.total} motores`;
+                    client.data.blockAudio = false;
                     return { name: fc.name, id: fc.id, response: { content: `QR analizado. URL: "${url}". Resultado VirusTotal: ${verdict}. El panel de resultados ya se muestra en pantalla con un botón para abrir el enlace si es seguro. Da un diagnóstico de voz breve y profesional.` } };
                   }
                 }
@@ -602,6 +609,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         if (pendingClientContent) {
           await new Promise(resolve => setTimeout(resolve, 150));
           session.sendClientContent(pendingClientContent);
+          // Desbloquear el audio DESPUÉS de enviar la imagen a Gemini
+          // (se bloqueó en open_gallery para evitar que el audio del usuario
+          // interrumpa a Gemini mientras procesa la imagen seleccionada)
+          client.data.blockAudio = false;
         }
       });
 
