@@ -319,23 +319,40 @@ flutter pub get
 flutter run                # En dispositivo físico (recomendado)
 ```
 
-### Despliegue en Google Cloud Run
+### Despliegue automatizado en Google Cloud Run (CI/CD)
 
-```bash
-cd backend
-gcloud run deploy hibob-backend \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars="GCP_PROJECT_ID=tu-proyecto,..."
+El despliegue está **completamente automatizado** mediante GitHub Actions. Cada push a `master` que modifique el backend dispara automáticamente el pipeline definido en [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+
+**Pipeline de CI/CD:**
+
+1. Autenticación en GCP con **Workload Identity Federation** (sin claves de servicio en el repo)
+2. Build de la imagen Docker y push a **Google Artifact Registry**
+3. Deploy a **Google Cloud Run** con configuración de secrets desde **GCP Secret Manager**
+
+```yaml
+# .github/workflows/deploy.yml (fragmento)
+- name: Build y push imagen Docker
+  run: |
+    docker build -t $IMAGE:${{ github.sha }} ./backend
+    docker push $IMAGE:${{ github.sha }}
+
+- name: Deploy a Cloud Run
+  run: |
+    gcloud run deploy hibob-backend \
+      --image $IMAGE:${{ github.sha }} \
+      --region europe-west1 \
+      --set-secrets="GEMINI_API_KEY=hibob-gemini-api-key:latest,..."
 ```
+
+Ver el workflow completo: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
 
 ---
 
 ## Prueba de Implementación en Google Cloud
 
-El backend está desplegado en **Google Cloud Run**. La integración con Google Cloud puede verificarse en:
+El backend está desplegado en **Google Cloud Run** (`europe-west1`) mediante el pipeline CI/CD automatizado. La integración con Google Cloud puede verificarse en:
 
+- [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — pipeline completo de CI/CD con GitHub Actions → Artifact Registry → Cloud Run
 - `backend/src/modules/ai/ai.service.ts` — inicialización del cliente Vertex AI con `new GoogleGenAI({ vertexai: true, project, location })`
 - `backend/src/modules/live/live.gateway.ts` — creación de sesiones Gemini Live con `ai.live.connect()`
 - Los logs de Cloud Run muestran las sesiones activas de Gemini Live en tiempo real
