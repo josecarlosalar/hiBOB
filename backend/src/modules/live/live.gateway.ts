@@ -1031,7 +1031,6 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
       : 'una imagen de la galeria';
 
     this.logger.log(`[Adjunto] ${client.id} ha seleccionado ${attachmentLabel}. Avisando a Gemini al instante.`);
-    session.sendActivityStart();
     session.sendClientContent([{
       text: `El usuario acaba de seleccionar ${attachmentLabel} y la esta preparando para enviartela ahora mismo. Espera ese adjunto y centra tu siguiente respuesta en analizarlo.`,
     }], false);
