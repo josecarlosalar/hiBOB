@@ -222,7 +222,9 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
           else if (s == LiveSessionState.connected) {
             _manualCaptureDisconnectTimer?.cancel();
-            _startStreaming();
+            // En modo QR no reiniciamos el audio — ya está bloqueado intencionalmente
+            // y reiniciarlo causaría stop()+start() que desconecta el socket
+            if (!_awaitingManualCapture) _startStreaming();
           }
           else if (s == LiveSessionState.error) { 
             _stopSession(); 
@@ -898,6 +900,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _qrHeartbeatTimer?.cancel();
       _qrHeartbeatTimer = null;
       if (mounted) { setState(() { _awaitingManualCapture = false; _showCameraPreview = false; }); }
+      // Reanudar el streaming de audio que fue bloqueado durante la espera QR
+      _startStreaming();
 
       if (frame != null) {
         // Mostrar overlay de progreso inmediatamente
@@ -945,6 +949,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
       _manualCaptureCompleter!.complete(null);
     }
+    // Reanudar el streaming de audio bloqueado durante la espera QR
+    _startStreaming();
   }
 
   void _stopSpeaking() {
