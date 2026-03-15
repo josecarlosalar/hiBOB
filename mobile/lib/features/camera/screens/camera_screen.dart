@@ -1993,8 +1993,9 @@ class _VtReportOverlayState extends State<_VtReportOverlay> with TickerProviderS
   Widget _buildCloseButton() {
     final vtData = widget.vtData;
     final isDanger = vtData?['isDanger'] as bool? ?? false;
+    final threatLevel = vtData?['threatLevel'] as String? ?? 'clean';
     final url = vtData?['url'] as String?;
-    final canOpen = !isDanger && url != null && url.isNotEmpty;
+    final canOpen = !isDanger && threatLevel == 'clean' && url != null && url.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),

@@ -635,10 +635,10 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const undetected = data.undetected ?? 0;
     const total = data.total ?? (malicious + suspicious + harmless + undetected);
     
-    const isDanger = malicious > 0;
     const threatLevel = malicious === 0 ? (suspicious > 0 ? 'suspicious' : 'clean')
       : malicious <= 3 ? 'dangerous'
       : 'critical';
+    const isDanger = threatLevel !== 'clean';
 
     const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     
