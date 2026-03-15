@@ -273,10 +273,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _liveSession.onFrameRequest.listen((data) async {
           if (!mounted) return;
           final source = data['source'] as String? ?? 'camera';
+          debugPrint('[QR] onFrameRequest: source=$source, _awaitingManualCapture=$_awaitingManualCapture, completer=${_manualCaptureCompleter != null ? (_manualCaptureCompleter!.isCompleted ? "completed" : "pending") : "null"}');
           try {
             if (source == 'manual_camera') {
               // Si ya estamos esperando captura (reconexión), solo restaurar UI sin tocar hardware
               if (_awaitingManualCapture && _manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
+                debugPrint('[QR] onFrameRequest: guard activo, solo restaurando UI');
                 setState(() { _showCameraPreview = true; });
                 return;
               }
@@ -873,17 +875,25 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         return null;
       }
 
-      if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) return null;
+      if (_cameraCtrl == null || !_cameraCtrl!.value.isInitialized) {
+        debugPrint('[QR] _captureFrame: cameraCtrl no inicializado (ctrl=${_cameraCtrl != null}, init=${_cameraCtrl?.value.isInitialized})');
+        return null;
+      }
       final file = await _cameraCtrl!.takePicture();
       final bytes = await File(file.path).readAsBytes();
       return base64Encode(bytes);
-    } catch (e) { return null; }
+    } catch (e) {
+      debugPrint('[QR] _captureFrame excepción: $e');
+      return null;
+    }
   }
 
   Future<void> _triggerManualCapture() async {
     if (!_awaitingManualCapture) return;
+    debugPrint('[QR] _triggerManualCapture: inicio, liveSession.state=${_liveSession.state}');
     try {
       final frame = await _captureFrame(source: 'camera');
+      debugPrint('[QR] _captureFrame resultado: ${frame != null ? "${frame.length} chars" : "null"}');
       _qrHeartbeatTimer?.cancel();
       _qrHeartbeatTimer = null;
       if (mounted) { setState(() { _awaitingManualCapture = false; _showCameraPreview = false; }); }
@@ -898,8 +908,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           };
         });
         // Siempre enviamos directamente al backend (independiente del completer)
-        // El backend procesa 'qr_scan' en handleFrame PRIORIDAD 2a
+        debugPrint('[QR] Enviando frame al backend, liveSession.state=${_liveSession.state}');
         _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
+        debugPrint('[QR] Frame enviado al backend');
+      } else {
+        debugPrint('[QR] Frame es null, no se envía nada');
       }
 
       // Completar el completer si aún está pendiente (flujo normal sin reconexión)
@@ -907,7 +920,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
         _manualCaptureCompleter!.complete(null); // null = ya enviado directamente
       }
     } catch (e) {
-      debugPrint('Error al disparar captura: $e');
+      debugPrint('[QR] Error al disparar captura: $e');
       _cancelManualCapture();
     }
   }
