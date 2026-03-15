@@ -162,6 +162,19 @@ class LiveSessionService {
     });
   }
 
+  /// Notifica al backend que el usuario ya ha seleccionado un adjunto y lo está preparando.
+  void sendAttachmentSelected({
+    required String type,
+    String? fileName,
+  }) {
+    if (_state != LiveSessionState.connected) return;
+    debugPrint('[LiveSessionService] Sending attachment_selected type: $type fileName: $fileName');
+    _socket?.emit('attachment_selected', {
+      'type': type,
+      if (fileName != null) 'fileName': fileName,
+    });
+  }
+
   /// Envía las coordenadas GPS del dispositivo al backend.
   void sendLocation({required double latitude, required double longitude, double? accuracy}) {
     if (_state != LiveSessionState.connected) return;

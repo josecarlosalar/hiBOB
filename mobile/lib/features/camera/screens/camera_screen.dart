@@ -601,6 +601,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
       if (image != null) {
         setState(() => _selectedGalleryImage = image);
+        _notifyAssistantAttachmentSelected(type: 'image');
         _showImageReviewDialog();
       } else {
         _openingGallery = false;
@@ -620,6 +621,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       );
       if (result != null && result.files.isNotEmpty) {
         setState(() => _selectedFile = result.files.first);
+        _notifyAssistantAttachmentSelected(
+          type: 'file',
+          fileName: result.files.first.name,
+        );
         _showFileReviewDialog();
       } else {
         _openingGallery = false;
@@ -843,6 +848,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
       _openingGallery = false;
       _showMessage('Error enviando imagen: $e');
     }
+  }
+
+  void _notifyAssistantAttachmentSelected({
+    required String type,
+    String? fileName,
+  }) {
+    if (_liveSession.state != LiveSessionState.connected) return;
+    _liveSession.sendActivityStart();
+    _liveSession.sendAttachmentSelected(type: type, fileName: fileName);
   }
 
   Future<String?> _captureFrame({String source = 'camera'}) async {

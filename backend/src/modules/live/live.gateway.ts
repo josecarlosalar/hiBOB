@@ -27,6 +27,11 @@ interface FramePayload {
   fileName?: string;
 }
 
+interface AttachmentSelectedPayload {
+  type?: 'image' | 'file';
+  fileName?: string;
+}
+
 @WebSocketGateway({
   cors: { origin: '*' },
   namespace: 'live',
@@ -1009,6 +1014,27 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
       this.logger.log(`[VAD Manual] Recibida señal de fin de actividad del cliente ${client.id}`);
       session.sendActivityEnd();
     }
+  }
+
+  @SubscribeMessage('attachment_selected')
+  handleAttachmentSelected(
+    @MessageBody() payload: AttachmentSelectedPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const session = client.data.geminiSession as GeminiLiveSession;
+    if (!session || session.isClosed()) return;
+
+    const type = payload?.type === 'file' ? 'file' : 'image';
+    const fileName = payload?.fileName?.trim();
+    const attachmentLabel = type === 'file'
+      ? `un fichero${fileName ? ` llamado "${fileName}"` : ''}`
+      : 'una imagen de la galeria';
+
+    this.logger.log(`[Adjunto] ${client.id} ha seleccionado ${attachmentLabel}. Avisando a Gemini al instante.`);
+    session.sendActivityStart();
+    session.sendClientContent([{
+      text: `El usuario acaba de seleccionar ${attachmentLabel} y la esta preparando para enviartela ahora mismo. Espera ese adjunto y centra tu siguiente respuesta en analizarlo.`,
+    }], false);
   }
 
   @SubscribeMessage('update_settings')
