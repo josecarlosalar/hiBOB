@@ -85,6 +85,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _openingGallery = false;
   Completer<String?>? _manualCaptureCompleter;
   Timer? _manualCaptureDisconnectTimer;
+  Timer? _qrHeartbeatTimer;
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
   // Para la nueva funcionalidad de galería / ficheros
@@ -278,6 +279,14 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               // interrumpa durante la reinicialización y el socket caiga.
               setState(() { _awaitingManualCapture = true; });
 
+              // Heartbeat cada 5s para mantener Cloud Run vivo mientras esperamos captura.
+              _qrHeartbeatTimer?.cancel();
+              _qrHeartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+                if (_liveSession.state == LiveSessionState.connected) {
+                  _liveSession.sendHeartbeat();
+                }
+              });
+
               // Para QR necesitamos cámara trasera en alta resolución.
               final needsQrReconfigure =
                   _selectedLensDirection != CameraLensDirection.back ||
@@ -299,6 +308,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               _manualCaptureCompleter = Completer<String?>();
 
               final frame = await _manualCaptureCompleter!.future;
+              _qrHeartbeatTimer?.cancel();
+              _qrHeartbeatTimer = null;
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
@@ -879,6 +890,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   }
 
   void _cancelManualCapture() {
+    _qrHeartbeatTimer?.cancel();
+    _qrHeartbeatTimer = null;
     setState(() { _awaitingManualCapture = false; _showCameraPreview = false; });
     if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
       _manualCaptureCompleter!.complete(null);
