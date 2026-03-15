@@ -88,6 +88,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Timer? _manualCaptureDisconnectTimer;
   // Frame QR pendiente de enviar (se guarda por si el socket reconecta antes del envío)
   String? _pendingQrFrame;
+  // Keepalive timer: mantiene el WebSocket vivo mientras esperamos captura QR
+  Timer? _qrKeepaliveTimer;
 
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
@@ -309,7 +311,17 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               // Iniciamos el Completer: solo se resuelve cuando el usuario pulse el botón Capturar.
               _manualCaptureCompleter = Completer<String?>();
 
+              // Keepalive: Cloud Run cierra WebSockets inactivos ~10s. Enviamos un
+              // ping cada 5s para mantener viva la conexión mientras esperamos el QR.
+              _qrKeepaliveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+                if (_liveSession.state == LiveSessionState.connected) {
+                  _liveSession.sendKeepalive();
+                }
+              });
+
               final frame = await _manualCaptureCompleter!.future;
+              _qrKeepaliveTimer?.cancel();
+              _qrKeepaliveTimer = null;
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });

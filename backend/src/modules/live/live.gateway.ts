@@ -715,6 +715,12 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
     return messages[toolName] || 'Procesando...';
   }
 
+  @SubscribeMessage('keepalive')
+  handleKeepalive(@ConnectedSocket() client: Socket) {
+    // Respuesta mínima para mantener vivo el WebSocket en Cloud Run durante esperas largas
+    client.emit('keepalive_ack', {});
+  }
+
   @SubscribeMessage('audio_chunk')
   handleAudioChunk(@MessageBody() payload: AudioChunkPayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
