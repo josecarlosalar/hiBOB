@@ -677,6 +677,12 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
     }
   }
 
+  @SubscribeMessage('heartbeat')
+  handleHeartbeat(@ConnectedSocket() client: Socket) {
+    // Mantiene la conexión Cloud Run activa durante esperas largas (ej. visor QR).
+    this.logger.debug(`[Heartbeat] ${client.id}`);
+  }
+
   @SubscribeMessage('frame')
   handleFrame(@MessageBody() payload: FramePayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;

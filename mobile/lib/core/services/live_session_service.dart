@@ -172,6 +172,11 @@ class LiveSessionService {
     });
   }
 
+  /// Envía un ping al servidor para mantener la conexión Cloud Run activa.
+  void sendHeartbeat() {
+    _socket?.emit('heartbeat', {});
+  }
+
   /// Actualiza los ajustes persistentes del usuario (ej. voz).
   void updateSettings(Map<String, dynamic> settings) {
     if (_state != LiveSessionState.connected) return;
