@@ -5,6 +5,7 @@ import 'dart:math';
 import 'dart:ui';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -283,15 +284,15 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 return;
               }
 
-              // OPTIMIZACIÓN: Solo reconfiguramos si la lente NO es la trasera
-              // o si la cámara no está inicializada. NO reiniciamos por resolución.
+              // Solo reiniciar cámara si es necesario (lente incorrecta o no inicializada)
+              // NUNCA usar force:true — reiniciar la cámara interrumpe el audio y desconecta el socket
               final needsLensChange = _selectedLensDirection != CameraLensDirection.back;
               final isNotInit = _cameraCtrl == null || !_cameraCtrl!.value.isInitialized;
+              debugPrint('[QR] onFrameRequest: needsLensChange=$needsLensChange isNotInit=$isNotInit');
 
               if (needsLensChange || isNotInit) {
                 await _switchCamera(
                   CameraLensDirection.back,
-                  force: true,
                   resolution: ResolutionPreset.high,
                 );
               }
@@ -907,10 +908,22 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
             'items': [{ 'id': 'qr_progress', 'title': 'Código QR', 'description': 'Analizando código QR...' }]
           };
         });
-        // Siempre enviamos directamente al backend (independiente del completer)
+        // Intentar enviar; si no estamos conectados aún, esperar un poco y reintentar
         debugPrint('[QR] Enviando frame al backend, liveSession.state=${_liveSession.state}');
-        _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
-        debugPrint('[QR] Frame enviado al backend');
+        if (_liveSession.state == LiveSessionState.connected) {
+          _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
+          debugPrint('[QR] Frame enviado al backend directamente');
+        } else {
+          debugPrint('[QR] No conectado, esperando 2s para reintento...');
+          await Future.delayed(const Duration(seconds: 2));
+          debugPrint('[QR] Reintentando envío, liveSession.state=${_liveSession.state}');
+          if (mounted && _liveSession.state == LiveSessionState.connected) {
+            _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
+            debugPrint('[QR] Frame enviado al backend en reintento');
+          } else {
+            debugPrint('[QR] Reintento fallido, estado=${_liveSession.state}');
+          }
+        }
       } else {
         debugPrint('[QR] Frame es null, no se envía nada');
       }
@@ -1007,6 +1020,41 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           // 5. Interfaz de controles (siempre arriba)
           _buildTopOverlay(),
           _buildBottomControlBar(colors),
+          // DEBUG: Botón para simular scan_qr_code sin voz
+          if (kDebugMode && !_showCameraPreview && _state != AssistantState.inactive)
+            Positioned(
+              bottom: 100,
+              right: 16,
+              child: FloatingActionButton.small(
+                heroTag: 'debug_qr',
+                backgroundColor: Colors.red.withValues(alpha: 0.85),
+                onPressed: () {
+                  debugPrint('[DEBUG] Simulando frame_request QR manualmente');
+                  // Simular exactamente lo que haría el onFrameRequest listener
+                  _liveSession.onFrameRequest.listen(null); // no-op, solo para verificar
+                  // Disparar el flujo directamente
+                  if (!_awaitingManualCapture) {
+                    // Simular recepción de frame_request
+                    final needsLensChange = _selectedLensDirection != CameraLensDirection.back;
+                    final isNotInit = _cameraCtrl == null || !_cameraCtrl!.value.isInitialized;
+                    Future.microtask(() async {
+                      if (needsLensChange || isNotInit) {
+                        await _switchCamera(CameraLensDirection.back, force: true, resolution: ResolutionPreset.high);
+                      }
+                      if (!mounted) return;
+                      setState(() { _showCameraPreview = true; _awaitingManualCapture = true; });
+                      _qrHeartbeatTimer?.cancel();
+                      _qrHeartbeatTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+                        if (_liveSession.state == LiveSessionState.connected) _liveSession.sendHeartbeat();
+                      });
+                      _manualCaptureCompleter = Completer<String?>();
+                      debugPrint('[DEBUG] frame_request simulado: _awaitingManualCapture=true');
+                    });
+                  }
+                },
+                child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 18),
+              ),
+            ),
         ],
       ),
     );
