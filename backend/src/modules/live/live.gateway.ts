@@ -264,18 +264,83 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               };
             }
 
-            // ── QR Code: activa cámara, responde inmediatamente a Gemini y procesa en background ──
+            // ── QR Code: flujo bloqueante idéntico a describe_camera_view ──
             if (fc.name === 'scan_qr_code') {
               client.emit('frame_request', { source: 'manual_camera' });
 
-              // Procesamos el QR en background para no bloquear el tool response a Gemini
-              // (Gemini cierra la sesión si una tool call tarda más de ~15s sin respuesta)
-              this._processQrInBackground(client, session);
+              // Esperamos hasta 90s a que el usuario capture el QR manualmente
+              const qrPayload = await this._waitForFrame(client, 90000);
+              const qrFrame = qrPayload?.frameBase64 || qrPayload?.frame;
+
+              if (!qrFrame) {
+                return { name: fc.name, id: fc.id, response: { content: 'El usuario no capturó el QR o canceló. Informa brevemente.' } };
+              }
+
+              // Decodificar QR con jsQR (3 estrategias × 4 rotaciones)
+              let qrData: ReturnType<typeof jsQR> = null;
+              try {
+                const image = await Jimp.fromBuffer(Buffer.from(qrFrame, 'base64'));
+                const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
+                  new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
+                const prep = (src: typeof image) => {
+                  const c = src.clone();
+                  const max = Math.max(c.bitmap.width, c.bitmap.height);
+                  const min = Math.min(c.bitmap.width, c.bitmap.height);
+                  if (max < 400) c.scale(Math.ceil(400 / max));
+                  else if (min > 1200) c.scaleToFit({ w: 1200, h: 1200 });
+                  return c;
+                };
+                const strategies = [prep(image), prep(image).contrast(1.0), prep(image).greyscale().contrast(0.5).threshold({ max: 128 })];
+                outerQr:
+                for (const s of strategies) {
+                  for (const rot of [0, 90, 180, 270]) {
+                    const attempt = rot === 0 ? s.clone() : s.clone().rotate(rot);
+                    qrData = jsQR(getBitmapRgba(attempt.bitmap), attempt.bitmap.width, attempt.bitmap.height);
+                    if (qrData?.data) { this.logger.log(`[QR] Decodificado (rot ${rot}°)`); break outerQr; }
+                  }
+                }
+              } catch (e: any) {
+                this.logger.error(`[QR] Error decodificando imagen: ${e.message}`);
+              }
+
+              if (!qrData?.data) {
+                // No se leyó el QR — pedimos reintento emitiendo otro frame_request
+                // y devolvemos a Gemini para que informe al usuario
+                client.emit('frame_request', { source: 'manual_camera' });
+                return { name: fc.name, id: fc.id, response: { content: 'No pude leer el QR. Pide al usuario que centre mejor el código y capture de nuevo.' } };
+              }
+
+              const url = qrData.data.trim();
+              this.logger.log(`[QR] URL detectada: "${url}". Analizando con VirusTotal...`);
+
+              // Mostrar overlay de progreso en el móvil
+              client.emit('display_content', {
+                type: 'qr_scan',
+                title: 'Analizando URL...',
+                items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+              });
+
+              // Analizar URL con VirusTotal
+              let vtSummary = `URL detectada: "${url}". No se pudo analizar con VirusTotal.`;
+              try {
+                const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+                const vtData = JSON.parse(vtRaw);
+                if (!vtData.error && !vtData.pending) {
+                  this._emitVtReport(client, vtData, url);
+                  const isSafe = vtData.positives === 0;
+                  if (isSafe) client.emit('command', { action: 'open_url', url });
+                  vtSummary = `URL: "${url}" | VirusTotal: ${vtData.positives}/${vtData.total} amenazas. ${vtData.internet_context ? 'Contexto web: ' + vtData.internet_context : ''} | Estado: ${isSafe ? 'LIMPIO — abierto automáticamente' : 'PELIGROSO — bloqueado'}`;
+                } else {
+                  vtSummary = `URL: "${url}" | VirusTotal: ${vtData.error || vtData.message || 'sin datos'}`;
+                }
+              } catch (e: any) {
+                this.logger.error(`[QR] Error en VT: ${e.message}`);
+              }
 
               return {
                 name: fc.name,
                 id: fc.id,
-                response: { content: 'Cámara activada. Esperando que el usuario enfoque el código QR. Dile al usuario que enfoque el QR en el recuadro y que diga "listo" o pulse capturar cuando esté encuadrado. No digas nada más hasta recibir el resultado.' }
+                response: { content: `Análisis QR completado. ${vtSummary}. El panel de métricas se muestra en pantalla. Da tu diagnóstico en voz: veredicto claro en 1-2 frases. Si VirusTotal es 0 pero el contexto web menciona estafas, advierte igualmente.` }
               };
             }
 
@@ -576,119 +641,6 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
     });
   }
 
-  private _processQrInBackground(client: Socket, session: GeminiLiveSession): void {
-    this.logger.log(`[QR] Iniciando espera de frame para cliente ${client.id}...`);
-    const deadline = Date.now() + 60000;
-
-    const tryNextFrame = async (): Promise<void> => {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) {
-        this.logger.warn(`[QR] Timeout global para el cliente ${client.id}`);
-        session.sendClientContent([{ text: 'El usuario no capturó el QR a tiempo o canceló la operación. Informa al usuario brevemente.' }], true);
-        return;
-      }
-
-      const payload = await this._waitForFrame(client, remaining);
-      const qrFrame = payload?.frameBase64 || payload?.frame;
-      if (!qrFrame) {
-        this.logger.warn(`[QR] No se recibió frame para el cliente ${client.id} (timeout o cancelación)`);
-        session.sendClientContent([{ text: 'El usuario no capturó el QR a tiempo o canceló la operación. Informa al usuario brevemente.' }], true);
-        return;
-      }
-
-      this.logger.log(`[QR] Frame recibido (${qrFrame.length} chars). Decodificando QR...`);
-
-      try {
-        const imageBuffer = Buffer.from(qrFrame, 'base64');
-        const image = await Jimp.fromBuffer(imageBuffer);
-        this.logger.log(`[QR] Imagen cargada: ${image.bitmap.width}x${image.bitmap.height}px`);
-
-        const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
-          new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
-
-        const prepareImage = (src: typeof image): typeof image => {
-          const clone = src.clone();
-          const { width, height } = clone.bitmap;
-          const minDim = Math.min(width, height);
-          const maxDim = Math.max(width, height);
-          if (maxDim < 400) { clone.scale(Math.ceil(400 / maxDim)); }
-          else if (minDim > 1200) { clone.scaleToFit({ w: 1200, h: 1200 }); }
-          return clone;
-        };
-
-        const buildAttempts = (base: typeof image) => [
-          prepareImage(base),
-          prepareImage(base).contrast(1.0),
-          prepareImage(base).greyscale().contrast(0.5).threshold({ max: 128 }),
-        ];
-
-        let qrData: ReturnType<typeof jsQR> = null;
-        const rotations = [0, 90, 180, 270];
-        const strategies = buildAttempts(image);
-
-        outerLoop:
-        for (const strategy of strategies) {
-          for (const rotation of rotations) {
-            const attempt = rotation === 0 ? strategy.clone() : strategy.clone().rotate(rotation);
-            const bmp = attempt.bitmap;
-            const rgba = getBitmapRgba(bmp);
-            qrData = jsQR(rgba, bmp.width, bmp.height);
-            if (qrData?.data) {
-              this.logger.log(`[QR] QR decodificado con éxito (rotación ${rotation}°)`);
-              break outerLoop;
-            }
-          }
-        }
-
-        if (!qrData?.data) {
-          this.logger.log(`[QR] Frame sin QR detectado para ${client.id}. Solicitando nueva captura manual...`);
-          client.emit('frame_request', { source: 'manual_camera' });
-          session.sendClientContent([{
-            text: 'No he podido leer el código QR en la última captura. Pide al usuario que lo centre mejor en el recuadro y que diga "listo" o pulse capturar para intentarlo de nuevo.'
-          }], true);
-          return tryNextFrame();
-        }
-
-        const url = qrData.data.trim();
-        this.logger.log(`[QR] URL detectada: "${url}". Iniciando análisis de seguridad...`);
-
-        client.emit('display_content', {
-          type: 'qr_scan',
-          title: 'Analizando URL...',
-          items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal y reputación web...' }],
-        });
-
-        const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
-        const data = JSON.parse(vtRaw);
-        if (data.error) throw new Error(data.error);
-
-        this.logger.log(`[QR] Análisis completado para ${url}: ${data.positives} positivos`);
-        this._emitVtReport(client, data, url);
-
-        const isSafe = data.positives === 0;
-        if (isSafe) {
-          this.logger.log(`[QR] URL segura por VirusTotal. Solicitando apertura en navegador...`);
-          client.emit('command', { action: 'open_url', url });
-        }
-
-        session.sendClientContent([{
-          text: `Análisis de código QR finalizado.
-URL detectada: "${url}"
-Resultado VirusTotal: ${data.positives}/${data.total} motores detectaron amenazas.
-Contexto de Internet: ${data.internet_context || 'No se encontró información adicional.'}
-Acción realizada: ${isSafe ? 'Se ha abierto la URL automáticamente por reputación limpia en VT.' : 'Bloqueado por seguridad.'}
-
-Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. Si VirusTotal es 0 pero el contexto de internet menciona estafas o phishing, advierte al usuario seriamente y no digas que es seguro.`
-        }], true);
-      } catch (e: any) {
-        this.logger.error(`[QR] Error procesando QR para ${client.id}: ${e.message}`);
-        session.sendClientContent([{ text: `Hubo un error técnico al analizar el código QR: ${e.message || 'Error desconocido'}. Informa al usuario y disculpate.` }], true);
-      }
-    };
-
-    tryNextFrame();
-  }
-
   private _waitForFrame(client: Socket, timeoutMs: number): Promise<FramePayload | null> {
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -713,12 +665,6 @@ Instrucción: Da tu diagnóstico profesional por voz basándote en estos datos. 
       check_password_breach: 'Verificando filtraciones de seguridad...',
     };
     return messages[toolName] || 'Procesando...';
-  }
-
-  @SubscribeMessage('keepalive')
-  handleKeepalive(@ConnectedSocket() client: Socket) {
-    // Respuesta mínima para mantener vivo el WebSocket en Cloud Run durante esperas largas
-    client.emit('keepalive_ack', {});
   }
 
   @SubscribeMessage('audio_chunk')

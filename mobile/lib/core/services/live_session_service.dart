@@ -172,12 +172,6 @@ class LiveSessionService {
     });
   }
 
-  /// Ping para mantener vivo el WebSocket durante esperas largas (ej. visor QR).
-  void sendKeepalive() {
-    if (_state != LiveSessionState.connected) return;
-    _socket?.emit('keepalive', {});
-  }
-
   /// Actualiza los ajustes persistentes del usuario (ej. voz).
   void updateSettings(Map<String, dynamic> settings) {
     if (_state != LiveSessionState.connected) return;
