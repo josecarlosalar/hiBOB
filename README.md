@@ -40,7 +40,53 @@ El reporte visual muestra: motores que detectaron amenaza, total analizado, nive
 
 ---
 
-### 2. Escaneo de Códigos QR con VirusTotal
+### 2. Análisis en Tiempo Real con Cámara Trasera
+
+hiBOB puede activar la cámara trasera del dispositivo y analizar en tiempo real lo que ve: detecta URLs, dominios y códigos QR visibles en el entorno físico —carteles, pantallas, documentos— y los analiza con VirusTotal automáticamente.
+
+**Activación:**
+
+> Usuario: *"Activa la cámara trasera"* → hiBOB activa la cámara y empieza a observar en tiempo real.
+
+**Flujo técnico:**
+
+```text
+Usuario activa cámara trasera (voz o botón)
+       ↓
+Flutter: CameraController → cámara trasera a pantalla completa
+       ↓
+Stream de frames capturados → enviados al backend vía Socket.IO
+       ↓
+Gemini analiza visualmente cada frame (multimodal)
+       ↓
+Si detecta URL, dominio o QR visible en la imagen:
+  → Llama analyze_security_url / analyze_domain
+  → VirusTotal API v3: análisis en tiempo real
+       ↓
+Overlay de resultado + veredicto de voz por hiBOB
+```
+
+**Casos de uso:**
+
+| Escenario | Qué hace hiBOB |
+| --- | --- |
+| Carteles con URLs | Lee la URL visible y la analiza con VirusTotal |
+| Pantallas con dominios sospechosos | Detecta el dominio y lanza análisis automático |
+| Documentos con enlaces | Extrae URLs del texto visible y verifica su seguridad |
+| Códigos QR físicos | Detecta el QR, extrae la URL y la analiza antes de escanear |
+| Entornos desconocidos | Descripción visual en tiempo real del contexto de seguridad |
+
+La sesión Gemini Live mantiene el contexto visual activo durante toda la interacción: el usuario puede hacer preguntas sobre lo que hiBOB está viendo mientras se realiza el análisis.
+
+**Archivos clave:**
+
+- `backend/src/modules/live/live.gateway.ts` — handler `describe_camera_view`, `switch_camera`
+- `mobile/lib/features/camera/screens/camera_screen.dart` — `_handleHardwareCommand()`, stream de frames
+- `backend/src/modules/tools/virustotal.service.ts` — `analyzeUrl()`, `analyzeDomain()`
+
+---
+
+### 4. Escaneo de Códigos QR con VirusTotal
 
 hiBOB extrae automáticamente la URL de cualquier código QR —tanto de imágenes de galería como de capturas en vivo con la cámara— y la analiza con VirusTotal antes de que el usuario haga clic en nada.
 
@@ -79,7 +125,7 @@ Durante el escaneo, el micrófono se bloquea para evitar interrupciones falsas d
 
 ---
 
-### 3. Comprobación de Filtración de Contraseñas (HIBP)
+### 5. Comprobación de Filtración de Contraseñas (HIBP)
 
 hiBOB verifica si una contraseña ha aparecido en brechas de datos conocidas utilizando el protocolo **k-Anonymity** de Have I Been Pwned. La contraseña nunca abandona el servidor en texto plano.
 
@@ -117,7 +163,7 @@ El reporte visual muestra: estado (`Comprometida` / `Segura`), número de veces 
 
 ---
 
-### 4. Generación de Contraseña Segura
+### 6. Generación de Contraseña Segura
 
 hiBOB genera contraseñas criptográficamente seguras con conjuntos de caracteres configurables y entropía calculada, siguiendo un flujo conversacional natural.
 
@@ -163,7 +209,7 @@ El resultado incluye: contraseña generada, longitud, entropía en bits y los ti
 
 ---
 
-### 5. Modo Copiloto
+### 7. Modo Copiloto
 
 hiBOB actúa como copiloto de seguridad en segundo plano: observa la pantalla del usuario, guía pasos de forma natural y analiza el contexto visual para dar instrucciones precisas y contextualizadas.
 
@@ -172,7 +218,7 @@ hiBOB actúa como copiloto de seguridad en segundo plano: observa la pantalla de
 | Acción | Cómo se activa | Qué hace |
 | --- | --- | --- |
 | Ver pantalla | "¿Puedes ver mi pantalla?" | Captura screenshot → Gemini analiza visualmente → da instrucciones paso a paso |
-| Ver cámara | "¿Qué ves ahora?" | Activa cámara frontal/trasera → stream de frames → análisis en tiempo real |
+| Ver cámara | "Activa la cámara trasera" / "¿Qué ves ahora?" | Activa cámara frontal/trasera → stream de frames → análisis visual en tiempo real con detección automática de URLs y QRs |
 | Analizar imagen | "Analiza esta imagen" | Abre galería → usuario selecciona → análisis multimodal con Gemini |
 | Analizar archivo | "Escanea este PDF" | Abre explorador → upload a VirusTotal → reporte de malware |
 | Control de hardware | Comandos de voz | Linterna, vibración, cámara frontal/trasera |
