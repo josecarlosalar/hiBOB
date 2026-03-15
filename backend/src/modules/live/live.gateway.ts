@@ -574,9 +574,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const scanDate = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     
-    this.logger.log(`[VT-Report] Enviando reporte a ${client.id}: ${malicious}/${total} positivos (${threatLevel})`);
+    this.logger.log(`[VT-Report] Preparando reporte para ${client.id} (uid: ${client.data.uid}): ${malicious}/${total} positivos (${threatLevel})`);
 
-    client.emit('display_content', {
+    const payload = {
       type: 'vt_report',
       title: isDanger ? 'Amenaza Detectada' : (threatLevel === 'suspicious' ? 'Actividad Sospechosa' : 'Análisis Limpio'),
       vtData: {
@@ -594,7 +594,53 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         isDanger,
         scanDate,
       },
-    });
+    };
+
+    // Enviamos al usuario (resiliente a reconexiones)
+    this._emitToUser(client, 'display_content', payload);
+  }
+
+  /**
+   * Envía un evento al socket proporcionado o, si se ha desconectado, 
+   * busca el socket activo actual del mismo usuario (por UID).
+   */
+  private async _emitToUser(originalClient: Socket, event: string, payload: any) {
+    // Si el socket original sigue conectado, emitimos directamente
+    if (originalClient.connected) {
+      originalClient.emit(event, payload);
+      return;
+    }
+
+    const uid = originalClient.data.uid;
+    if (!uid) {
+      this.logger.warn(`[EmitToUser] Socket ${originalClient.id} desconectado y sin UID. No se puede reencaminar ${event}.`);
+      return;
+    }
+
+    this.logger.log(`[EmitToUser] Socket ${originalClient.id} desconectado. Esperando breve reconexión de UID ${uid}...`);
+    
+    // Pequeña espera por si el cliente está reconectando justo ahora
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Buscamos en todos los sockets del namespace 'live' aquel que tenga el mismo UID
+    const activeSockets = Array.from(this.server.of('/live').sockets.values());
+    const newClient = activeSockets.find(s => s.data.uid === uid && s.id !== originalClient.id);
+
+    if (newClient) {
+      this.logger.log(`[EmitToUser] Reencaminando evento ${event} de ${originalClient.id} -> ${newClient.id} (reconexión exitosa)`);
+      newClient.emit(event, payload);
+    } else {
+      // Intento final en el namespace raíz por si acaso
+      const rootSockets = Array.from(this.server.sockets.sockets.values());
+      const rootClient = rootSockets.find(s => s.data.uid === uid);
+      
+      if (rootClient) {
+        this.logger.log(`[EmitToUser] Reencaminando evento ${event} a socket en namespace raíz: ${rootClient.id}`);
+        rootClient.emit(event, payload);
+      } else {
+        this.logger.warn(`[EmitToUser] No se encontró socket activo para UID ${uid} tras espera. Evento ${event} perdido.`);
+      }
+    }
   }
 
   private _processFileInBackground(client: Socket, session: GeminiLiveSession): void {
