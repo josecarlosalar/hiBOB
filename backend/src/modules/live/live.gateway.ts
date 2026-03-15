@@ -222,11 +222,20 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
           toolCall.functionCalls.map(async (fc: any) => {
             // open_gallery: flujo para obtener imagen de la galería
             if (fc.name === 'open_gallery') {
+              // Si ya hay una galería abierta esperando, ignorar esta segunda llamada
+              if (client.data.galleryPending) {
+                this.logger.warn(`[Herramienta] open_gallery duplicada ignorada para ${client.id} (ya hay una en curso)`);
+                return { name: fc.name, id: fc.id, response: { content: 'Ya se está esperando una imagen de la galería.' } };
+              }
               const source = fc.args.source || 'gallery';
               this.logger.log(`[Herramienta] Solicitando ${source} para ${client.id}...`);
+              client.data.galleryPending = true;
+              client.data.blockAudio = true;
               client.emit('command', { action: 'open_gallery', source });
-              
+
               const payload = await this._waitForFrame(client, 60000);
+              client.data.galleryPending = false;
+              client.data.blockAudio = false;
               const frame = payload?.frameBase64 || payload?.frame;
 
               if (!frame) {
@@ -785,6 +794,8 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
   @SubscribeMessage('audio_chunk')
   handleAudioChunk(@MessageBody() payload: AudioChunkPayload, @ConnectedSocket() client: Socket) {
     const session = client.data.geminiSession as GeminiLiveSession;
+    // Pausar audio mientras se espera selección de galería para evitar que Gemini relame open_gallery
+    if (client.data.blockAudio) return;
     if (session && !session.isClosed() && payload?.audioBase64) {
       // Log de depuración: solo imprimimos uno de cada 50 para no inundar el log
       if (Math.random() < 0.02) this.logger.debug(`Recibido audio_chunk de cliente ${client.id} (size: ${payload.audioBase64.length})`);
