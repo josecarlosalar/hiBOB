@@ -242,7 +242,56 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 } catch { return { name: fc.name, id: fc.id, response: { content: 'Error en análisis de archivo.' } }; }
               }
 
-              // --- FLUJO B: IMÁGENES (Búsqueda de Phishing/URLs) ---
+              // --- FLUJO B1: Detección de QR en la imagen de galería ---
+              try {
+                const imageBuffer = Buffer.from(frame, 'base64');
+                const image = await Jimp.fromBuffer(imageBuffer);
+                const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
+                  new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
+                const prepareImage = (src: typeof image): typeof image => {
+                  const clone = src.clone();
+                  const { width, height } = clone.bitmap;
+                  if (Math.max(width, height) < 400) clone.scale(Math.ceil(400 / Math.max(width, height)));
+                  else if (Math.min(width, height) > 1200) clone.scaleToFit({ w: 1200, h: 1200 });
+                  return clone;
+                };
+                const strategies = [
+                  prepareImage(image),
+                  prepareImage(image).contrast(1.0),
+                  prepareImage(image).greyscale().contrast(0.5).threshold({ max: 128 }),
+                ];
+                let qrData: ReturnType<typeof jsQR> = null;
+                outerLoop:
+                for (const strategy of strategies) {
+                  for (const rotation of [0, 90, 180, 270]) {
+                    const attempt = rotation === 0 ? strategy.clone() : strategy.clone().rotate(rotation);
+                    const bmp = attempt.bitmap;
+                    qrData = jsQR(getBitmapRgba(bmp), bmp.width, bmp.height);
+                    if (qrData?.data) { this.logger.log(`[QR-Galería] QR detectado en imagen (rot ${rotation}°)`); break outerLoop; }
+                  }
+                }
+                if (qrData?.data) {
+                  const url = qrData.data.trim();
+                  this.logger.log(`[QR-Galería] URL extraída: "${url}". Analizando con VirusTotal...`);
+                  client.emit('display_content', {
+                    type: 'qr_scan',
+                    title: 'QR Detectado',
+                    items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+                  });
+                  const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+                  const data = JSON.parse(vtRaw);
+                  if (!data.error) {
+                    this._emitVtReport(client, data, url);
+                    if (data.positives === 0) client.emit('command', { action: 'open_url', url });
+                    const verdict = data.positives === 0 ? 'sin amenazas detectadas' : `${data.positives} positivos de ${data.total} motores`;
+                    return { name: fc.name, id: fc.id, response: { content: `QR analizado. URL: "${url}". Resultado VirusTotal: ${verdict}. El panel de resultados ya se muestra en pantalla. Da un diagnóstico de voz breve y profesional.` } };
+                  }
+                }
+              } catch (e) {
+                this.logger.warn(`[QR-Galería] Error al intentar detectar QR: ${e}`);
+              }
+
+              // --- FLUJO B2: IMÁGENES sin QR (Búsqueda de Phishing/URLs con Gemini) ---
               this.logger.log(`[Visión] Enviando imagen a Gemini para extraer amenazas visuales...`);
               client.emit('display_content', {
                 type: 'file_scan',
@@ -251,8 +300,9 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               });
 
               // Enviamos la imagen como contenido del cliente para que Gemini la procese
+              // IMPORTANTE: Gemini NO debe inventar ni asumir URLs — solo debe leerlas LITERALMENTE de la imagen.
               session.sendClientContent([
-                { text: `El usuario ha seleccionado esta imagen ("${fileName}"). Búscala visualmente en busca de URLs, dominios, códigos QR o mensajes sospechosos. Si encuentras una URL, analízala con la herramienta pertinente. Si no hay nada sospechoso, informa al usuario y dale un consejo de seguridad.` },
+                { text: `El usuario ha seleccionado esta imagen ("${fileName}"). Analízala visualmente. REGLAS ESTRICTAS:\n1. Si ves una URL o dominio ESCRITO CLARAMENTE en la imagen (texto visible), léela tal cual y analízala con la herramienta correspondiente.\n2. Si ves un código QR, el sistema ya lo habría detectado automáticamente. Si no se detectó, informa que no se pudo leer.\n3. NUNCA inventes, supongas ni completes URLs parciales. Solo analiza lo que está escrito de forma explícita y completa.\n4. Si no hay URLs ni dominios claramente visibles, describe los elementos sospechosos que veas (logos de marcas, mensajes de urgencia, solicitudes de datos) y da un consejo de seguridad.` },
                 { inlineData: { data: frame, mimeType: 'image/jpeg' } }
               ], true);
 
