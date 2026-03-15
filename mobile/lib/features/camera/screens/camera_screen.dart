@@ -109,12 +109,11 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     
     _liveSession.onDisplayContent.listen((data) {
       if (!mounted) return;
-      // Cuando el backend detecta el QR (emite qr_scan con URL), cancelar el modo captura
       final incomingType = data['type'] as String? ?? data['contentType'] as String? ?? '';
+      // El backend emite display_content con type 'qr_scan' durante el análisis.
+      // No cancelamos el Completer aquí: ya fue resuelto por _triggerManualCapture.
+      // Solo cerramos la preview si aún estuviera abierta (caso edge).
       if (incomingType == 'qr_scan' && _awaitingManualCapture) {
-        if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-          _manualCaptureCompleter!.complete(null);
-        }
         _awaitingManualCapture = false;
         _showCameraPreview = false;
       }
@@ -297,23 +296,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 _awaitingManualCapture = true;
               });
 
-              // Iniciamos el Completer para esperar la captura (manual o automática)
+              // Iniciamos el Completer: solo se resuelve cuando el usuario pulse el botón Capturar.
               _manualCaptureCompleter = Completer<String?>();
 
-              // TIMER DE CAPTURA AUTOMÁTICA: 
-              // Si el usuario no pulsa "Capturar" en 2.5s, hiBOB lo hace solo.
-              final autoCaptureTimer = Timer(const Duration(milliseconds: 2500), () async {
-                if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-                  debugPrint('[QR] Tiempo agotado. Capturando frame automáticamente...');
-                  final frame = await _captureFrame(source: 'camera');
-                  if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-                    _manualCaptureCompleter!.complete(frame);
-                  }
-                }
-              });
-
               final frame = await _manualCaptureCompleter!.future;
-              autoCaptureTimer.cancel(); // Cancelamos el timer si el usuario fue más rápido
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
