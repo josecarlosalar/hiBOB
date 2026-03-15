@@ -646,7 +646,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const payload = {
       type: 'vt_report',
-      title: isDanger ? 'Amenaza Detectada' : (threatLevel === 'suspicious' ? 'Actividad Sospechosa' : 'Análisis Limpio'),
+      title: threatLevel === 'clean' ? 'Análisis Limpio' : (threatLevel === 'suspicious' ? 'Actividad Sospechosa' : 'Amenaza Detectada'),
       vtData: {
         url: label,
         positives: malicious + suspicious,

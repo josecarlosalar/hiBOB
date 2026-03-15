@@ -861,6 +861,12 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   Future<String?> _captureFrame({String source = 'camera'}) async {
     try {
       if (source == 'gallery') {
+        // Si ya hay una imagen seleccionada por el usuario (flujo review dialog), usarla directamente
+        // para evitar que se abra la galería por segunda vez cuando llega un frame_request del backend.
+        if (_selectedGalleryImage != null) {
+          final bytes = await File(_selectedGalleryImage!.path).readAsBytes();
+          return base64Encode(bytes);
+        }
         const double maxDim = 1600;
         final XFile? image = await _picker.pickImage(
           source: ImageSource.gallery,
