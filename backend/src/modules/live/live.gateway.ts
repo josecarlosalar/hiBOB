@@ -101,12 +101,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
         isReconnection = true;
         this.logger.log(`[Reconexión] UID ${uid} reconectado. Reutilizando sesión Gemini existente (socket anterior: ${previousClientId} → nuevo: ${client.id})`);
 
-        // Si había un QR pendiente de captura, reenviamos el frame_request al nuevo socket
-        if (existingSessionData.pendingQrScan) {
-          this.logger.log(`[Reconexión] Reenviando frame_request de QR pendiente al nuevo socket ${client.id}`);
-          // Pequeña espera para que el cliente termine de establecer su estado interno
-          setTimeout(() => client.emit('frame_request', { source: 'manual_camera' }), 500);
-        }
+        // (El flujo QR ya no usa frame_request; usa galería vía _waitForFrame — no requiere reenvío en reconexión)
       } else {
         // Crear nueva sesión
         session = this.aiService.createLiveSession({
@@ -137,8 +132,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             '• analyze_ip → cuando el usuario mencione una dirección IP numérica. ' +
             '• analyze_file_hash → cuando el usuario proporcione un hash SHA256/MD5/SHA1 de un archivo. ' +
             '• scan_file → cuando el usuario quiera analizar un archivo (APK, PDF, ejecutable) que tiene en su dispositivo. ' +
-            '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear código QR, escanear QR, verificar QR o cualquier variante explícita de QR. NO respondas por voz primero: llama scan_qr_code YA y simultáneamente dile al usuario que abres la cámara. ' +
-            '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
+            '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear código QR, escanear QR, verificar QR o cualquier variante explícita de QR. NO respondas por voz primero: llama scan_qr_code YA y dile al usuario que abres la galería para que seleccione la imagen con el QR. El sistema abrirá la galería automáticamente. ' +
             '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
             '• generate_password → cuando el usuario necesite una contraseña nueva y segura. Las contraseñas generadas son siempre alfanuméricas con símbolos. FLUJO: Si el usuario no especifica longitud, pregunta brevemente "¿La quieres de 16, 24 o 32 caracteres?" y espera su respuesta antes de llamar la herramienta. Si el usuario ya especificó la longitud en su mensaje (ej: "de 24 caracteres", "larga", etc.), llama generate_password DIRECTAMENTE sin preguntar. Tras llamar generate_password, el sistema mostrará automáticamente el panel con la contraseña. NO llames display_content después. ' +
             '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
@@ -154,7 +148,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             '• trigger_haptic_feedback → Úsala para hacer vibrar el teléfono del usuario en momentos clave de peligro o alertas. ' +
 
             'FLUJO DE SEGURIDAD — REGLA DE ORO: Cuando el usuario mencione cualquier amenaza, DEBES llamar a la herramienta correspondiente EN EL MISMO TURNO, no en el siguiente. Nunca digas "voy a..." sin llamar a la herramienta inmediatamente. ' +
-            'QR: Si el usuario menciona "QR", "código QR", "escanear QR", "escanear código QR" o "verificar QR" → llama scan_qr_code AHORA. ' +
+            'QR: Si el usuario menciona "QR", "código QR", "escanear QR", "escanear código QR" o "verificar QR" → llama scan_qr_code AHORA (abrirá la galería para seleccionar la imagen). ' +
             'URL: Si el usuario menciona un enlace → llama analyze_security_url AHORA. ' +
             'Ante cualquier duda, actúa primero y explica después. ' +
 
@@ -388,20 +382,94 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               };
             }
 
-            // ── QR Code: flujo NO BLOQUEANTE para evitar timeouts y desconexiones ──
+            // ── QR Code: abre galería para que el usuario seleccione la imagen con el QR ──
             if (fc.name === 'scan_qr_code') {
-              this.logger.log(`[Herramienta] Solicitando QR para ${client.id}...`);
-              // Marcamos sesión como "pendiente de QR" para reenviar frame_request si el cliente reconecta
-              const sessionEntry = this.activeSessions.get(uid);
-              if (sessionEntry) sessionEntry.pendingQrScan = true;
-              // Abrimos visor en el móvil
-              client.emit('frame_request', { source: 'manual_camera' });
+              this.logger.log(`[Herramienta] scan_qr_code → redirigiendo a open_gallery para ${client.id}...`);
+              // Reutilizamos el flujo de open_gallery que ya tiene detección QR integrada
+              // Simplemente llamamos a open_gallery con source: 'gallery'
+              fc.name = 'open_gallery';
+              fc.args = { source: 'gallery' };
+              // El código de open_gallery se ejecutará en la siguiente iteración del map,
+              // pero como ya mutamos fc, caemos directamente al bloque open_gallery.
+              // Para evitar duplicar lógica, hacemos un return explícito tras redirigir.
+              // En su lugar delegamos completamente: emitimos la galería aquí mismo.
+              if (client.data.galleryPending) {
+                return { name: 'scan_qr_code', id: fc.id, response: { content: 'Ya se está esperando una imagen de la galería.' } };
+              }
+              client.data.galleryPending = true;
+              client.data.blockAudio = true;
+              client.emit('command', { action: 'open_gallery', source: 'gallery' });
 
-              return {
-                name: fc.name,
-                id: fc.id,
-                response: { content: 'Escáner QR abierto en el dispositivo del usuario. Dile al usuario que enfoque el código y pulse el botón de captura para analizarlo. No digas nada más hasta recibir el resultado.' }
-              };
+              const qrPayload = await this._waitForFrame(client, 60000);
+              client.data.galleryPending = false;
+              const qrFrame = qrPayload?.frameBase64 || qrPayload?.frame;
+
+              if (!qrFrame) {
+                client.data.blockAudio = false;
+                return { name: 'scan_qr_code', id: fc.id, response: { content: 'El usuario canceló la selección.' } };
+              }
+
+              // Intentar detectar QR en la imagen seleccionada
+              try {
+                const imageBuffer = Buffer.from(qrFrame, 'base64');
+                const image = await Jimp.fromBuffer(imageBuffer);
+                const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
+                  new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
+                const prepareImage = (src: typeof image): typeof image => {
+                  const clone = src.clone();
+                  const { width, height } = clone.bitmap;
+                  if (Math.max(width, height) < 400) clone.scale(Math.ceil(400 / Math.max(width, height)));
+                  else if (Math.min(width, height) > 1200) clone.scaleToFit({ w: 1200, h: 1200 });
+                  return clone;
+                };
+                const strategies = [
+                  prepareImage(image),
+                  prepareImage(image).contrast(1.0),
+                  prepareImage(image).greyscale().contrast(0.5).threshold({ max: 128 }),
+                ];
+                let qrData: ReturnType<typeof jsQR> = null;
+                outerQrLoop:
+                for (const strategy of strategies) {
+                  for (const rotation of [0, 90, 180, 270]) {
+                    const attempt = rotation === 0 ? strategy.clone() : strategy.clone().rotate(rotation);
+                    const bmp = attempt.bitmap;
+                    qrData = jsQR(getBitmapRgba(bmp), bmp.width, bmp.height);
+                    if (qrData?.data) { this.logger.log(`[QR] QR detectado en imagen (rot ${rotation}°)`); break outerQrLoop; }
+                  }
+                }
+                if (qrData?.data) {
+                  const url = qrData.data.trim();
+                  this.logger.log(`[QR] URL extraída: "${url}". Analizando con VirusTotal...`);
+                  client.emit('display_content', {
+                    type: 'qr_scan',
+                    title: 'QR Detectado',
+                    items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
+                  });
+                  const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
+                  const data = JSON.parse(vtRaw);
+                  if (!data.error) {
+                    this._emitVtReport(client, data, url);
+                    const verdict = data.positives === 0 ? 'sin amenazas detectadas' : `${data.positives} positivos de ${data.total} motores`;
+                    client.data.blockAudio = false;
+                    return { name: 'scan_qr_code', id: fc.id, response: { content: `QR analizado. URL: "${url}". Resultado VirusTotal: ${verdict}. El panel de resultados ya se muestra en pantalla con un botón para abrir el enlace si es seguro. Da un diagnóstico de voz breve y profesional.` } };
+                  }
+                }
+              } catch (e) {
+                this.logger.warn(`[QR] Error al detectar QR en imagen: ${e}`);
+              }
+
+              // Sin QR detectado → enviar imagen a Gemini para análisis visual
+              this.logger.log(`[QR] No se detectó QR. Enviando imagen a Gemini para análisis visual...`);
+              client.emit('display_content', {
+                type: 'file_scan',
+                title: 'Analizando Imagen',
+                items: [{ id: 'scan_progress', title: 'imagen.jpg', description: 'No se detectó QR. Buscando amenazas visuales...' }]
+              });
+              pendingClientContent = [
+                { text: `El usuario compartió una imagen buscando un código QR, pero el sistema no detectó ninguno. Analiza la imagen visualmente. Si ves un QR, indícalo. Si ves URLs escritas, analízalas. Si no hay nada relevante, informa al usuario de forma breve.` },
+                { inlineData: { data: qrFrame, mimeType: 'image/jpeg' } }
+              ];
+              return { name: 'scan_qr_code', id: fc.id, response: { content: 'Imagen recibida. No se detectó QR automáticamente. Analizando en el próximo turno.' } };
             }
 
             // ── Scan File: solicita archivo y procesa en background (como scan_qr_code) ──
