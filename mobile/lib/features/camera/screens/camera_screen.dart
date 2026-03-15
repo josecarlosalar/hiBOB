@@ -294,23 +294,10 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                 _awaitingManualCapture = true;
               });
 
-              // Iniciamos el Completer para esperar la captura
+              // Iniciamos el Completer para esperar la captura MANUAL del usuario
               _manualCaptureCompleter = Completer<String?>();
 
-              // CAPTURA AUTOMÁTICA (Fallback): si el usuario no pulsa el botón en 2.5s, 
-              // hiBOB captura solo para que el análisis no se detenga.
-              final autoCaptureTimer = Timer(const Duration(milliseconds: 2500), () async {
-                if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-                  debugPrint('[QR] Tiempo agotado. Capturando frame automáticamente...');
-                  final frame = await _captureFrame(source: 'camera');
-                  if (_manualCaptureCompleter != null && !_manualCaptureCompleter!.isCompleted) {
-                    _manualCaptureCompleter!.complete(frame);
-                  }
-                }
-              });
-
               final frame = await _manualCaptureCompleter!.future;
-              autoCaptureTimer.cancel(); // Cancelamos el timer si el usuario fue más rápido
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
