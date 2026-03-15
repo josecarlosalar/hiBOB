@@ -6,7 +6,6 @@ import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -86,11 +85,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
   bool _openingGallery = false;
   Completer<String?>? _manualCaptureCompleter;
   Timer? _manualCaptureDisconnectTimer;
-  // Frame QR pendiente de enviar (se guarda por si el socket reconecta antes del envío)
-  String? _pendingQrFrame;
-  // Keepalive timer: mantiene el WebSocket vivo mientras esperamos captura QR
-  Timer? _qrKeepaliveTimer;
-
   bool get _bargeInEnabled => _conversationProfile != 'Evitar cortes';
   
   // Para la nueva funcionalidad de galería / ficheros
@@ -226,13 +220,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
           if (s == LiveSessionState.connecting) _setStateIfMounted(AssistantState.connecting);
           else if (s == LiveSessionState.connected) {
             _manualCaptureDisconnectTimer?.cancel();
-            // Si había un frame QR pendiente (socket cayó justo al hacer takePicture),
-            // lo enviamos ANTES de reactivar el audio para evitar interrupciones.
-            if (_pendingQrFrame != null) {
-              final frame = _pendingQrFrame!;
-              _pendingQrFrame = null;
-              _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
-            }
             _startStreaming();
           }
           else if (s == LiveSessionState.error) { 
@@ -311,17 +298,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
               // Iniciamos el Completer: solo se resuelve cuando el usuario pulse el botón Capturar.
               _manualCaptureCompleter = Completer<String?>();
 
-              // Keepalive: Cloud Run cierra WebSockets inactivos ~10s. Enviamos un
-              // ping cada 5s para mantener viva la conexión mientras esperamos el QR.
-              _qrKeepaliveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-                if (_liveSession.state == LiveSessionState.connected) {
-                  _liveSession.sendKeepalive();
-                }
-              });
-
               final frame = await _manualCaptureCompleter!.future;
-              _qrKeepaliveTimer?.cancel();
-              _qrKeepaliveTimer = null;
 
               if (!mounted) return;
               setState(() { _awaitingManualCapture = false; });
@@ -338,14 +315,8 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
                       'imageUrl': 'data:image/jpeg;base64,$frame',
                     }]
                   };
-                  // Guardar frame por si el socket reconecta antes de que llegue al backend
-                  _pendingQrFrame = frame;
                 });
                 _liveSession.sendFrame(frameBase64: frame, prompt: 'qr_scan');
-                // Si el envío tuvo éxito (socket conectado), limpiar el pendiente
-                if (_liveSession.state == LiveSessionState.connected) {
-                  _pendingQrFrame = null;
-                }
                 await Future.delayed(const Duration(milliseconds: 200));
               }
             } else {
