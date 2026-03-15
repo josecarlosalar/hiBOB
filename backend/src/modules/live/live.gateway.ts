@@ -140,7 +140,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             '• scan_qr_code → OBLIGATORIO llamar INMEDIATAMENTE cuando el usuario mencione un QR, código QR, escanear código QR, escanear QR, verificar QR o cualquier variante explícita de QR. NO respondas por voz primero: llama scan_qr_code YA y simultáneamente dile al usuario que abres la cámara. ' +
             '• trigger_qr_capture → SOLO cuando el sistema esté esperando la captura del QR (el usuario ve el visor QR en pantalla) y el usuario diga por voz que ya lo tiene encuadrado (ej: "listo", "ya", "captura", "hazlo", "ahora"). Responde con "¡Capturando!" y llama esta herramienta de inmediato. ' +
             '• check_password_breach → cuando el usuario quiera saber si su contraseña ha sido filtrada. ' +
-            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. Las contraseñas generadas son siempre alfanuméricas con símbolos. FLUJO OBLIGATORIO: (1) Primero pregunta solo la longitud, de forma breve, ofreciendo exactamente tres opciones: 16, 24 o 32 caracteres. Usa una frase corta como: "¿La quieres de 16, 24 o 32 caracteres?". (2) Espera a que el usuario responda por voz. (3) Solo después de recibir su respuesta, llama generate_password con los parámetros correctos. NUNCA llames generate_password sin antes escuchar la preferencia del usuario. ' +
+            '• generate_password → cuando el usuario necesite una contraseña nueva y segura. Las contraseñas generadas son siempre alfanuméricas con símbolos. FLUJO: Si el usuario no especifica longitud, pregunta brevemente "¿La quieres de 16, 24 o 32 caracteres?" y espera su respuesta antes de llamar la herramienta. Si el usuario ya especificó la longitud en su mensaje (ej: "de 24 caracteres", "larga", etc.), llama generate_password DIRECTAMENTE sin preguntar. Tras llamar generate_password, el sistema mostrará automáticamente el panel con la contraseña. NO llames display_content después. ' +
             '• capture_device_screen → Úsala SOLO cuando el usuario te pida ver lo que está pasando AHORA MISMO en su pantalla de forma interactiva (ej. mientras navega). ' +
             '• open_gallery → Úsala SIEMPRE que el usuario mencione que tiene una "captura", "pantallazo", "foto", "imagen" o "fichero" que quiere enseñarte. ' +
             '  - Usa el argumento { source: "gallery" } para imágenes y capturas. ' +
@@ -159,7 +159,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             'Ante cualquier duda, actúa primero y explica después. ' +
 
             'INTERFAZ GRÁFICA Y DIAGNÓSTICO (MUY IMPORTANTE): ' +
-            '1. Cuando analices URL, dominios, IPs, hashes, ficheros o imágenes, NUNCA uses la herramienta "display_content" después. El sistema móvil de hiBOB mostrará automáticamente el panel de métricas de VirusTotal. Tu único trabajo es dar un diagnóstico PROFESIONAL y calmado por voz. ' +
+            '1. Cuando uses las herramientas analyze_security_url, analyze_domain, analyze_ip, analyze_file_hash, scan_file, check_password_breach o generate_password, NUNCA llames a "display_content" después. El sistema móvil de hiBOB mostrará automáticamente el panel correspondiente. Tu único trabajo tras esas herramientas es dar un comentario de voz breve y profesional. ' +
             '2. El sistema te proporcionará siempre el JSON de VirusTotal junto al fichero/imagen. Explica de forma clara el veredicto técnico y justifica el riesgo detectado.'
         });
 
@@ -406,7 +406,7 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
             }
 
             // Feedback visual de "pensando" para herramientas de red
-            if (['analyze_security_url', 'analyze_domain', 'analyze_ip', 'analyze_file_hash', 'web_search', 'check_password_breach'].includes(fc.name)) {
+            if (['analyze_security_url', 'analyze_domain', 'analyze_ip', 'analyze_file_hash', 'web_search', 'check_password_breach', 'generate_password'].includes(fc.name)) {
               client.emit('thinking_state', { tool: fc.name, message: this._getThinkingMessage(fc.name) });
             }
 
@@ -776,6 +776,7 @@ Instrucción: Da tu diagnóstico profesional por voz en 2-3 frases. NUNCA uses l
       analyze_file_hash: 'Buscando hash en bases de datos de malware...',
       web_search: 'Buscando reportes de amenazas recientes en la web...',
       check_password_breach: 'Verificando filtraciones de seguridad...',
+      generate_password: 'Generando contraseña segura...',
     };
     return messages[toolName] || 'Procesando...';
   }

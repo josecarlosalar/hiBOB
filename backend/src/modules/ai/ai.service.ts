@@ -505,8 +505,7 @@ export class AiService implements OnModuleInit {
 
     if (name === 'generate_password') {
       const requestedLength = Number(args.length);
-      const allowedLengths = [16, 24, 32];
-      const length = allowedLengths.includes(requestedLength) ? requestedLength : 16;
+      const length = (requestedLength >= 12 && requestedLength <= 64) ? requestedLength : 20;
       const result = this.hibpService.generateSecurePassword(length, {
         includeUppercase: true,
         includeLowercase: true,
