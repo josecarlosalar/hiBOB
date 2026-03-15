@@ -264,83 +264,16 @@ export class LiveGateway implements OnGatewayConnection, OnGatewayDisconnect {
               };
             }
 
-            // ── QR Code: flujo bloqueante idéntico a describe_camera_view ──
+            // ── QR Code: flujo NO BLOQUEANTE para evitar timeouts y desconexiones ──
             if (fc.name === 'scan_qr_code') {
+              this.logger.log(`[Herramienta] Solicitando QR para ${client.id}...`);
+              // Abrimos visor en el móvil
               client.emit('frame_request', { source: 'manual_camera' });
-
-              // Esperamos hasta 90s a que el usuario capture el QR manualmente
-              const qrPayload = await this._waitForFrame(client, 90000);
-              const qrFrame = qrPayload?.frameBase64 || qrPayload?.frame;
-
-              if (!qrFrame) {
-                return { name: fc.name, id: fc.id, response: { content: 'El usuario no capturó el QR o canceló. Informa brevemente.' } };
-              }
-
-              // Decodificar QR con jsQR (3 estrategias × 4 rotaciones)
-              let qrData: ReturnType<typeof jsQR> = null;
-              try {
-                const image = await Jimp.fromBuffer(Buffer.from(qrFrame, 'base64'));
-                const getBitmapRgba = (bmp: { data: Buffer; width: number; height: number }) =>
-                  new Uint8ClampedArray(bmp.data.buffer, bmp.data.byteOffset, bmp.data.byteLength);
-                const prep = (src: typeof image) => {
-                  const c = src.clone();
-                  const max = Math.max(c.bitmap.width, c.bitmap.height);
-                  const min = Math.min(c.bitmap.width, c.bitmap.height);
-                  if (max < 400) c.scale(Math.ceil(400 / max));
-                  else if (min > 1200) c.scaleToFit({ w: 1200, h: 1200 });
-                  return c;
-                };
-                const strategies = [prep(image), prep(image).contrast(1.0), prep(image).greyscale().contrast(0.5).threshold({ max: 128 })];
-                outerQr:
-                for (const s of strategies) {
-                  for (const rot of [0, 90, 180, 270]) {
-                    const attempt = rot === 0 ? s.clone() : s.clone().rotate(rot);
-                    qrData = jsQR(getBitmapRgba(attempt.bitmap), attempt.bitmap.width, attempt.bitmap.height);
-                    if (qrData?.data) { this.logger.log(`[QR] Decodificado (rot ${rot}°)`); break outerQr; }
-                  }
-                }
-              } catch (e: any) {
-                this.logger.error(`[QR] Error decodificando imagen: ${e.message}`);
-              }
-
-              if (!qrData?.data) {
-                // No se leyó el QR — pedimos reintento emitiendo otro frame_request
-                // y devolvemos a Gemini para que informe al usuario
-                client.emit('frame_request', { source: 'manual_camera' });
-                return { name: fc.name, id: fc.id, response: { content: 'No pude leer el QR. Pide al usuario que centre mejor el código y capture de nuevo.' } };
-              }
-
-              const url = qrData.data.trim();
-              this.logger.log(`[QR] URL detectada: "${url}". Analizando con VirusTotal...`);
-
-              // Mostrar overlay de progreso en el móvil
-              client.emit('display_content', {
-                type: 'qr_scan',
-                title: 'Analizando URL...',
-                items: [{ id: 'qr_progress', title: url, description: 'Consultando VirusTotal...' }],
-              });
-
-              // Analizar URL con VirusTotal
-              let vtSummary = `URL detectada: "${url}". No se pudo analizar con VirusTotal.`;
-              try {
-                const vtRaw = await this.aiService.executeTool('analyze_security_url', { url }, client.id);
-                const vtData = JSON.parse(vtRaw);
-                if (!vtData.error && !vtData.pending) {
-                  this._emitVtReport(client, vtData, url);
-                  const isSafe = vtData.positives === 0;
-                  if (isSafe) client.emit('command', { action: 'open_url', url });
-                  vtSummary = `URL: "${url}" | VirusTotal: ${vtData.positives}/${vtData.total} amenazas. ${vtData.internet_context ? 'Contexto web: ' + vtData.internet_context : ''} | Estado: ${isSafe ? 'LIMPIO — abierto automáticamente' : 'PELIGROSO — bloqueado'}`;
-                } else {
-                  vtSummary = `URL: "${url}" | VirusTotal: ${vtData.error || vtData.message || 'sin datos'}`;
-                }
-              } catch (e: any) {
-                this.logger.error(`[QR] Error en VT: ${e.message}`);
-              }
 
               return {
                 name: fc.name,
                 id: fc.id,
-                response: { content: `Análisis QR completado. ${vtSummary}. El panel de métricas se muestra en pantalla. Da tu diagnóstico en voz: veredicto claro en 1-2 frases. Si VirusTotal es 0 pero el contexto web menciona estafas, advierte igualmente.` }
+                response: { content: 'Escáner QR abierto en el dispositivo del usuario. Dile al usuario que enfoque el código y pulse el botón de captura para analizarlo. No digas nada más hasta recibir el resultado.' }
               };
             }
 
