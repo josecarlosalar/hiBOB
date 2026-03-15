@@ -855,7 +855,6 @@ class _CameraScreenState extends ConsumerState<CameraScreen>
     String? fileName,
   }) {
     if (_liveSession.state != LiveSessionState.connected) return;
-    _liveSession.sendActivityStart();
     _liveSession.sendAttachmentSelected(type: type, fileName: fileName);
   }
 
